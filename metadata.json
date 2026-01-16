@@ -1,0 +1,7 @@
+{
+  "name": "Teacher Assistant AI",
+  "description": "Một chatbot thông minh hỗ trợ giáo viên soạn giáo án, quản lý lớp học và tư vấn sư phạm sử dụng Gemini 3 Pro.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

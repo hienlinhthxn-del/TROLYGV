@@ -1,0 +1,341 @@
+
+import React, { useState, useRef } from 'react';
+import { geminiService, FilePart } from '../services/geminiService';
+import { Attachment } from '../types';
+
+interface UtilityKitProps {
+  onSendToWorkspace: (content: string) => void;
+}
+
+const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
+  const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts'>('games');
+  const [subject, setSubject] = useState('Toán');
+  const [topic, setTopic] = useState('');
+  const [voiceName, setVoiceName] = useState<'Kore' | 'Puck'>('Kore');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        setPendingAttachments(prev => [...prev, {
+          type: file.type.startsWith('image/') ? 'image' : 'file',
+          name: file.name,
+          data: base64Data,
+          mimeType: file.type
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getFileParts = (): FilePart[] => {
+    return pendingAttachments
+      .filter(at => at.data && at.mimeType)
+      .map(at => ({
+        inlineData: { data: at.data!, mimeType: at.mimeType! }
+      }));
+  };
+
+  const generateGame = async () => {
+    if (!topic.trim()) return;
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    const prompt = `Hãy thiết kế 3 trò chơi khởi động (warm-up games) ngắn gọn, vui nhộn cho học sinh tiểu học.
+    Môn học: ${subject}. Chủ đề bài học: "${topic}".
+    ${pendingAttachments.length > 0 ? "Hãy dựa trên (các) tệp mẫu đính kèm để học phong cách hoặc nội dung tham khảo." : ""}
+    Yêu cầu:
+    - Có tên trò chơi bắt tai.
+    - Cách chơi đơn giản (dưới 5 phút).
+    - Cần ít đạo cụ.
+    - Phù hợp tâm lý trẻ em.
+    Trả về nội dung chi tiết từng trò chơi.`;
+
+    try {
+      let fullContent = '';
+      const stream = geminiService.sendMessageStream(prompt, getFileParts());
+      for await (const chunk of stream) {
+        fullContent += chunk.text;
+      }
+      setResult(fullContent);
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi tạo trò chơi.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateAIVisual = async () => {
+    if (!topic.trim()) return;
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      const imageUrl = await geminiService.generateImage(topic);
+      setResult(imageUrl);
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi tạo hình ảnh.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateTTS = async () => {
+    if (!topic.trim()) return;
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      const base64Data = await geminiService.generateSpeech(topic, voiceName);
+      if (base64Data) {
+        const binaryString = atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        const blob = new Blob([bytes], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        setResult("Đã tạo giọng đọc thành công. Thầy Cô nhấn Phát để nghe thử.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi khi tạo giọng nói.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
+          <p className="text-sm text-slate-500 font-medium">Biến bài giảng trở nên sinh động và cuốn hút hơn.</p>
+        </div>
+      </div>
+
+      <div className="flex border-b border-slate-100 p-1 bg-white rounded-2xl shadow-sm h-fit">
+        <button 
+          onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
+          className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          <i className="fas fa-gamepad"></i>
+          <span>Trò chơi Khởi động</span>
+        </button>
+        <button 
+          onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
+          className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          <i className="fas fa-image"></i>
+          <span>Minh họa AI</span>
+        </button>
+        <button 
+          onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
+          className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          <i className="fas fa-volume-up"></i>
+          <span>Trợ lý Giọng đọc</span>
+        </button>
+      </div>
+
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
+        <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
+          <div className="space-y-4">
+             {activeTab !== 'tts' && (
+               <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
+                  <select 
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option>Toán</option>
+                    <option>Tiếng Việt</option>
+                    <option>Tiếng Anh</option>
+                    <option>Tự nhiên & Xã hội</option>
+                    <option>Khoa học</option>
+                  </select>
+               </div>
+             )}
+
+             {activeTab === 'tts' && (
+               <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                     <button 
+                       onClick={() => setVoiceName('Kore')}
+                       className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                     >
+                       <i className="fas fa-mars mr-2"></i>Kore (Nam)
+                     </button>
+                     <button 
+                       onClick={() => setVoiceName('Puck')}
+                       className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                     >
+                       <i className="fas fa-venus mr-2"></i>Puck (Nữ)
+                     </button>
+                  </div>
+               </div>
+             )}
+
+             <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  {activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : 'Văn bản cần đọc'}
+                </label>
+                <textarea 
+                  value={topic}
+                  onChange={e => setTopic(e.target.value)}
+                  placeholder={activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
+                  className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
+                />
+             </div>
+
+             <div className="pt-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+                   <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
+                   <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 hover:underline">Thêm tệp</button>
+                </label>
+                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+                <div className="mt-2 space-y-2">
+                   {pendingAttachments.map((at, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
+                         <div className="flex items-center space-x-2 truncate">
+                            <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'}`}></i>
+                            <span className="truncate">{at.name}</span>
+                         </div>
+                         <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
+                            <i className="fas fa-times"></i>
+                         </button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+
+          <button 
+            onClick={activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : generateTTS}
+            disabled={isProcessing || !topic.trim()}
+            className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
+            {isProcessing ? 'Đang thực hiện...' : 'Bắt đầu sáng tạo'}
+          </button>
+        </div>
+
+        <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+          <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
+             {result && activeTab === 'games' && (
+               <button 
+                 onClick={() => onSendToWorkspace(result)}
+                 className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
+               >
+                 Đưa vào Soạn thảo
+               </button>
+             )}
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            {isProcessing ? (
+              <div className="h-full flex flex-col items-center justify-center space-y-6">
+                 <div className="relative">
+                    <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
+                    <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                 </div>
+                 <div className="text-center">
+                    <p className="text-xs font-black text-slate-800 uppercase tracking-widest">AI đang làm việc</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">Vui lòng đợi trong giây lát</p>
+                 </div>
+              </div>
+            ) : result ? (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {activeTab === 'images' ? (
+                  <div className="flex flex-col items-center">
+                    <div className="relative group">
+                       <img src={result} alt="AI Visual" className="w-full max-w-lg rounded-[32px] shadow-2xl border-4 border-white" />
+                       <div className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] pointer-events-none"></div>
+                    </div>
+                    <div className="mt-8 flex space-x-3">
+                       <a href={result} download="MinhHoa_AI.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
+                          Tải hình ảnh (.png)
+                       </a>
+                    </div>
+                  </div>
+                ) : activeTab === 'tts' ? (
+                  <div className="flex flex-col items-center justify-center h-full space-y-8">
+                     <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 animate-pulse">
+                        <i className="fas fa-volume-high text-3xl"></i>
+                     </div>
+                     <div className="text-center space-y-4">
+                        <p className="text-lg font-bold text-slate-700">{result}</p>
+                        {audioUrl && (
+                          <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-inner w-full max-w-sm">
+                             <audio ref={audioRef} src={audioUrl} className="hidden" onEnded={() => {}} />
+                             <div className="flex items-center justify-center space-x-4">
+                                <button 
+                                  onClick={() => audioRef.current?.play()}
+                                  className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700 active:scale-90 transition-all"
+                                >
+                                   <i className="fas fa-play text-xl ml-1"></i>
+                                </button>
+                                <button 
+                                  onClick={() => audioRef.current?.pause()}
+                                  className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
+                                >
+                                   <i className="fas fa-pause"></i>
+                                </button>
+                             </div>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">Giọng {voiceName === 'Kore' ? 'Nam' : 'Nữ'}</p>
+                          </div>
+                        )}
+                     </div>
+                  </div>
+                ) : (
+                  <div className="p-4">
+                    <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
+                       {result}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
+                <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
+                   <i className={`fas ${activeTab === 'games' ? 'fa-gamepad' : activeTab === 'images' ? 'fa-image' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                </div>
+                <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UtilityKit;
