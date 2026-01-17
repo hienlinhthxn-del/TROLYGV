@@ -40,6 +40,16 @@ export class GeminiService {
     });
   }
 
+  public async generateText(prompt: string) {
+    try {
+      const result = await this.model.generateContent(prompt);
+      return result.response.text();
+    } catch (error) {
+      console.error("Generate Text Error:", error);
+      throw error;
+    }
+  }
+
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     if (!this.chat) {
       throw new Error("Chat not initialized");
@@ -140,16 +150,18 @@ export class GeminiService {
   }
 
   public async generateImage(prompt: string) {
-    // Placeholder: Gemini 1.5 Flash doesn't support image generation directly in this way usually.
-    // If the user intends to use Imagen, specific model setup is needed.
-    // We will try to send the request but likely it will be text.
-    // However, for code compatibility, we return null if no image data found.
     try {
-      const model = this.genAI.getGenerativeModel({ model: IMAGE_MODEL });
-      const result = await model.generateContent(prompt);
-      // Check for image data in parts (unlikely for Flash)
-      return null;
+      // Vì Gemini Flash không hỗ trợ tạo hình ảnh trực tiếp, 
+      // chúng ta sử dụng Pollinations.ai (miễn phí, chất lượng cao và không cần key).
+      // Chúng ta sẽ tối ưu prompt để có hình ảnh đẹp hơn.
+
+      const enhancedPrompt = encodeURIComponent(`${prompt}, high definition, digital art, educational style, vibrant colors`);
+      const seed = Math.floor(Math.random() * 1000000); // Tạo seed ngẫu nhiên để hình ảnh đa dạng
+      const imageUrl = `https://pollinations.ai/p/${enhancedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
+
+      return imageUrl;
     } catch (e) {
+      console.error("Image generation error:", e);
       return null;
     }
   }

@@ -137,7 +137,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     setAudioUrl(null);
 
     try {
-      const imageUrl = await geminiService.generateImage(topic);
+      // Đầu tiên, dùng Gemini để dịch và tối ưu prompt sang tiếng Anh (để AI vẽ đẹp hơn)
+      const translationPrompt = `Hãy dịch mô tả sau sang tiếng Anh để tạo hình ảnh AI. Chỉ trả về bản dịch ngắn gọn, thêm các từ khóa nghệ thuật như "high quality, educational illustration, 4k": "${topic}"`;
+
+      let optimizedPrompt = topic;
+      try {
+        const translation = await geminiService.generateText(translationPrompt);
+        optimizedPrompt = translation.replace(/["']/g, '').trim();
+      } catch (err) {
+        console.warn("Translation failed, using original topic", err);
+      }
+
+      const imageUrl = await geminiService.generateImage(optimizedPrompt);
       setResult(imageUrl);
     } catch (error) {
       console.error(error);
