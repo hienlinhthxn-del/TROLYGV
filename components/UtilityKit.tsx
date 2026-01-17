@@ -14,6 +14,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [topic, setTopic] = useState('');
   const [voiceName, setVoiceName] = useState<'Kore' | 'Puck'>('Kore');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
@@ -151,54 +152,26 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
+    setIsPlaying(false);
 
     try {
-      const result = await geminiService.generateSpeech(topic, voiceName);
-      if (result) {
-        // Kiểm tra xem kết quả là URL hay Base64
-        if (result.startsWith('http')) {
-          setAudioUrl(result);
-        } else {
-          // Xử lý Base64 (logic cũ)
-          const binaryString = atob(result);
-          const len = binaryString.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const blob = new Blob([bytes], { type: 'audio/wav' });
-          const url = URL.createObjectURL(blob);
-          setAudioUrl(url);
-        }
-        setResult("Đã tạo giọng đọc thành công. Thầy Cô nhấn Phát để nghe thử.");
-      } else {
-        // Thử sử dụng trình duyệt nếu API thất bại
-        if ('speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(topic);
-          utterance.lang = 'vi-VN';
-          // Tìm giọng nam/nữ nếu có thể
-          const voices = window.speechSynthesis.getVoices();
-          const viVoices = voices.filter(v => v.lang.includes('vi'));
-          if (viVoices.length > 0) {
-            // "Kore" -> Nam (thường là voice index 1 hoặc voice có tên Nam/Minh), "Puck" -> Nữ (HoaiMy/An)
-            if (voiceName === 'Kore') {
-              utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam')) || viVoices[0];
-            } else {
-              utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('my')) || viVoices[0];
-            }
-          }
+      // Giả lập AI xử lý
+      await new Promise(resolve => setTimeout(resolve, 600));
 
-          // Vì speechSynthesis không trả về URL, chúng ta chỉ thông báo và sẽ gọi speak() khi nhấn Play
-          setResult("Đã sẵn sàng giọng đọc trình duyệt. Nhấn Phát để nghe.");
-          // Lưu topic vào một ref hoặc state để Play button có thể dùng
-          (audioRef.current as any)._speechUtterance = utterance;
+      if ('speechSynthesis' in window) {
+        setResult("Đã sẵn sàng. Thầy Cô nhấn Phát để nghe.");
+      } else {
+        const url = await geminiService.generateSpeech(topic, voiceName);
+        if (url) {
+          setAudioUrl(url);
+          setResult("Đã chuẩn bị xong. Thầy Cô nhấn Phát để nghe.");
         } else {
           alert("Trình duyệt không hỗ trợ giọng nói.");
         }
       }
     } catch (error) {
       console.error(error);
-      alert("Lỗi khi tạo giọng nói.");
+      alert("Lỗi khi chuẩn bị giọng đọc.");
     } finally {
       setIsProcessing(false);
     }
@@ -243,6 +216,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
           <span>Giọng đọc</span>
         </button>
       </div>
+
+      {/* Helper function to handle speech */}
+      {(() => {
+        // Pre-load voices for the browser
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.getVoices();
+        }
+        return null;
+      })()}
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
         <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
@@ -418,22 +400,41 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                               onClick={() => {
                                 if (audioUrl) {
                                   audioRef.current?.play();
-                                } else if (typeof window !== 'undefined' && (audioRef.current as any)?._speechUtterance) {
+                                  setIsPlaying(true);
+                                } else if ('speechSynthesis' in window) {
                                   window.speechSynthesis.cancel();
-                                  window.speechSynthesis.speak((audioRef.current as any)._speechUtterance);
+                                  const utterance = new SpeechSynthesisUtterance(topic);
+                                  utterance.lang = 'vi-VN';
+                                  utterance.rate = 0.9;
+
+                                  const voices = window.speechSynthesis.getVoices();
+                                  const viVoices = voices.filter(v => v.lang.includes('vi'));
+                                  if (viVoices.length > 0) {
+                                    if (voiceName === 'Kore') {
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam')) || viVoices[0];
+                                    } else {
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female')) || viVoices[0];
+                                    }
+                                  }
+
+                                  utterance.onstart = () => setIsPlaying(true);
+                                  utterance.onend = () => setIsPlaying(false);
+                                  utterance.onerror = () => setIsPlaying(false);
+
+                                  window.speechSynthesis.speak(utterance);
                                 }
                               }}
-                              className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700 active:scale-90 transition-all"
+                              className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                             >
-                              <i className="fas fa-play text-xl ml-1"></i>
+                              <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text-xl ${!isPlaying && 'ml-1'}`}></i>
                             </button>
                             <button
                               onClick={() => {
                                 if (audioUrl) {
                                   audioRef.current?.pause();
-                                } else {
-                                  window.speechSynthesis.cancel();
                                 }
+                                window.speechSynthesis.cancel();
+                                setIsPlaying(false);
                               }}
                               className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
                             >
@@ -441,7 +442,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                             </button>
                           </div>
                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                            Giọng {voiceName === 'Kore' ? 'Nam' : 'Nữ'} {audioUrl ? '(AI Network)' : '(Hệ thống)'}
+                            {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'}`}
                           </p>
                         </div>
                       )}
