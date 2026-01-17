@@ -155,10 +155,19 @@ export class GeminiService {
   }
 
   public async generateSpeech(text: string, voiceName: 'Kore' | 'Puck' = 'Kore') {
-    // Placeholder: Gemini API currently doesn't have a direct TS SDK method for 'generateSpeech' in this structure 
-    // identical to the python one or the previous code which looked proprietary.
-    // We will perform a standard text generation request or return null to avoid breaking.
-    return null;
+    try {
+      // Vì Gemini API hiện chưa hỗ trợ TTS trực tiếp qua SDK này một cách đơn giản,
+      // chúng ta sử dụng Google Translate TTS API (miễn phí và hỗ trợ tiếng Việt rất tốt).
+      // Giới hạn của API này là khoảng 200 ký tự mỗi lần.
+
+      const encodedText = encodeURIComponent(text.slice(0, 200));
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
+
+      return url;
+    } catch (error) {
+      console.error("TTS Error:", error);
+      return null;
+    }
   }
 }
 

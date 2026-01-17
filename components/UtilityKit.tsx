@@ -153,19 +153,48 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     setAudioUrl(null);
 
     try {
-      const base64Data = await geminiService.generateSpeech(topic, voiceName);
-      if (base64Data) {
-        const binaryString = atob(base64Data);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
+      const result = await geminiService.generateSpeech(topic, voiceName);
+      if (result) {
+        // Kiểm tra xem kết quả là URL hay Base64
+        if (result.startsWith('http')) {
+          setAudioUrl(result);
+        } else {
+          // Xử lý Base64 (logic cũ)
+          const binaryString = atob(result);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'audio/wav' });
+          const url = URL.createObjectURL(blob);
+          setAudioUrl(url);
         }
-
-        const blob = new Blob([bytes], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
         setResult("Đã tạo giọng đọc thành công. Thầy Cô nhấn Phát để nghe thử.");
+      } else {
+        // Thử sử dụng trình duyệt nếu API thất bại
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(topic);
+          utterance.lang = 'vi-VN';
+          // Tìm giọng nam/nữ nếu có thể
+          const voices = window.speechSynthesis.getVoices();
+          const viVoices = voices.filter(v => v.lang.includes('vi'));
+          if (viVoices.length > 0) {
+            // "Kore" -> Nam (thường là voice index 1 hoặc voice có tên Nam/Minh), "Puck" -> Nữ (HoaiMy/An)
+            if (voiceName === 'Kore') {
+              utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam')) || viVoices[0];
+            } else {
+              utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('my')) || viVoices[0];
+            }
+          }
+
+          // Vì speechSynthesis không trả về URL, chúng ta chỉ thông báo và sẽ gọi speak() khi nhấn Play
+          setResult("Đã sẵn sàng giọng đọc trình duyệt. Nhấn Phát để nghe.");
+          // Lưu topic vào một ref hoặc state để Play button có thể dùng
+          (audioRef.current as any)._speechUtterance = utterance;
+        } else {
+          alert("Trình duyệt không hỗ trợ giọng nói.");
+        }
       }
     } catch (error) {
       console.error(error);
@@ -381,24 +410,39 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                     </div>
                     <div className="text-center space-y-4">
                       <p className="text-lg font-bold text-slate-700">{result}</p>
-                      {audioUrl && (
+                      {(audioUrl || result) && (
                         <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-inner w-full max-w-sm">
-                          <audio ref={audioRef} src={audioUrl} className="hidden" onEnded={() => { }} />
+                          <audio ref={audioRef} src={audioUrl || ''} className="hidden" />
                           <div className="flex items-center justify-center space-x-4">
                             <button
-                              onClick={() => audioRef.current?.play()}
+                              onClick={() => {
+                                if (audioUrl) {
+                                  audioRef.current?.play();
+                                } else if (typeof window !== 'undefined' && (audioRef.current as any)?._speechUtterance) {
+                                  window.speechSynthesis.cancel();
+                                  window.speechSynthesis.speak((audioRef.current as any)._speechUtterance);
+                                }
+                              }}
                               className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700 active:scale-90 transition-all"
                             >
                               <i className="fas fa-play text-xl ml-1"></i>
                             </button>
                             <button
-                              onClick={() => audioRef.current?.pause()}
+                              onClick={() => {
+                                if (audioUrl) {
+                                  audioRef.current?.pause();
+                                } else {
+                                  window.speechSynthesis.cancel();
+                                }
+                              }}
                               className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
                             >
                               <i className="fas fa-pause"></i>
                             </button>
                           </div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">Giọng {voiceName === 'Kore' ? 'Nam' : 'Nữ'}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
+                            Giọng {voiceName === 'Kore' ? 'Nam' : 'Nữ'} {audioUrl ? '(AI Network)' : '(Hệ thống)'}
+                          </p>
                         </div>
                       )}
                     </div>
