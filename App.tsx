@@ -250,8 +250,9 @@ const App: React.FC = () => {
       const suggestions = await geminiService.generateSuggestions([messageContent, fullContent], currentPersona.name);
       setDynamicSuggestions(suggestions);
       setIsGeneratingSuggestions(false);
-    } catch (error) {
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: "Lỗi kết nối hoặc vấn đề bảo mật. Vui lòng thử lại.", isThinking: false, isStreaming: false } : msg));
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "Errors";
+      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `Lỗi: ${errorMessage}. Vui lòng kiểm tra lại API Key hoặc kết nối mạng.`, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsLoading(false);
     }

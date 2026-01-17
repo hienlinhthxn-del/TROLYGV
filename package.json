@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@google/genai": "^1.36.0",
+    "@google/generative-ai": "^0.21.0",
     "html2pdf.js": "0.10.1",
     "docx": "9.1.0"
   },
