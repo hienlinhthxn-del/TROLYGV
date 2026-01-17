@@ -1,9 +1,9 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
-const MODEL_NAME = 'gemini-1.5-flash';
-const IMAGE_MODEL = 'gemini-1.5-flash';
-const TTS_MODEL = 'gemini-1.5-flash';
+const MODEL_NAME = 'gemini-flash-latest';
+const IMAGE_MODEL = 'gemini-flash-latest';
+const TTS_MODEL = 'gemini-flash-latest';
 
 export interface FilePart {
   inlineData: {
