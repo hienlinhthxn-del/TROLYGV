@@ -29,26 +29,37 @@ if (!apiKey) {
 }
 
 async function listModels() {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    console.log("Checking available models via direct REST API...");
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        // Note: SDK doesn't have a direct listModels method exposed easily in the main class in all versions, 
-        // but we can try a simple generation to see if it works, or check specific known models.
-        // Actually, for listModels we might need to use the REST API manually if the SDK doesn't expose it conveniently in this version.
-        // Let's try to just use a known stable model like 'gemini-pro' or 'gemini-1.0-pro' to test.
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
 
-        console.log("Testing with 'gemini-pro'...");
-        const modelPro = genAI.getGenerativeModel({ model: "gemini-pro" });
-        const resultPro = await modelPro.generateContent("Hello");
-        console.log("gemini-pro works:", resultPro.response.text());
+        if (!response.ok) {
+            console.error(`API Error: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.error("Error details:", errorText);
+            return;
+        }
 
-        console.log("Testing with 'gemini-1.5-flash'...");
-        const modelFlash = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const resultFlash = await modelFlash.generateContent("Hello");
-        console.log("gemini-1.5-flash works:", resultFlash.response.text());
+        const data = await response.json();
+
+        if (data.models) {
+            console.log("\nSuccessfully retrieved model list! Here are the models available to your API Key:");
+            console.log("---------------------------------------------------");
+            data.models.forEach(model => {
+                if (model.supportedGenerationMethods && model.supportedGenerationMethods.includes("generateContent")) {
+                    console.log(`- Name: ${model.name.replace('models/', '')}`);
+                    console.log(`  Display Name: ${model.displayName}`);
+                    console.log(`  Description: ${model.description ? model.description.substring(0, 60) + '...' : ''}`);
+                    console.log("---------------------------------------------------");
+                }
+            });
+        } else {
+            console.log("No models found in the response.");
+            console.log("Raw response:", data);
+        }
 
     } catch (error) {
-        console.error("Error details:", error);
+        console.error("Network or Fetch Error:", error);
     }
 }
 

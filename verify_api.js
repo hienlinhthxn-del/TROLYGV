@@ -33,7 +33,7 @@ console.log(`Testing API Key: ${apiKey.substring(0, 5)}...`);
 async function testConnection() {
     try {
         const ai = new GoogleGenerativeAI(apiKey);
-        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash-001' });
         const result = await model.generateContent("Hello, this is a test.");
 
         console.log("Sending request...");

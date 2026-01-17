@@ -2,7 +2,7 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 const MODEL_NAME = 'gemini-1.5-flash';
-const IMAGE_MODEL = 'gemini-1.5-flash'; // Note: Gemini 1.5 Flash does not typically generate images. This might need update to Imagen if available.
+const IMAGE_MODEL = 'gemini-1.5-flash';
 const TTS_MODEL = 'gemini-1.5-flash';
 
 export interface FilePart {
