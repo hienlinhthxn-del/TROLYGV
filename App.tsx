@@ -154,17 +154,40 @@ const App: React.FC = () => {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+
+      // Kiểm tra các định dạng không hỗ trợ trực tiếp (như Word)
+      if (file.name.endsWith('.doc') || file.name.endsWith('.docx')) {
+        alert(`Tệp "${file.name}" là định dạng Word. Hiện tại AI hỗ trợ tốt nhất qua tệp PDF. Vui lòng chuyển (Save as) tệp Word sang PDF rồi tải lên lại nhé!`);
+        continue;
+      }
+
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Data = (reader.result as string).split(',')[1];
-        setPendingAttachments(prev => [...prev, {
-          type: file.type.startsWith('image/') ? 'image' : 'file',
-          name: file.name,
-          data: base64Data,
-          mimeType: file.type
-        }]);
-      };
-      reader.readAsDataURL(file);
+
+      // Nếu là tệp văn bản, đọc dưới dạng text để nối vào câu hỏi
+      if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv')) {
+        reader.onloadend = () => {
+          const textContent = reader.result as string;
+          setPendingAttachments(prev => [...prev, {
+            type: 'file',
+            name: file.name,
+            data: btoa(unescape(encodeURIComponent(textContent))), // Lưu base64 cho đồng nhất nhưng đánh dấu là text
+            mimeType: 'text/plain'
+          }]);
+        };
+        reader.readAsText(file);
+      } else {
+        // Các tệp đa phương tiện hoặc PDF (đọc as DataURL)
+        reader.onloadend = () => {
+          const base64Data = (reader.result as string).split(',')[1];
+          setPendingAttachments(prev => [...prev, {
+            type: file.type.startsWith('image/') ? 'image' : 'file',
+            name: file.name,
+            data: base64Data,
+            mimeType: file.type
+          }]);
+        };
+        reader.readAsDataURL(file);
+      }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -219,14 +242,32 @@ const App: React.FC = () => {
       currentAttachments.forEach(at => {
         if (at.type === 'file' || at.type === 'image') {
           if (at.data && at.mimeType) {
-            fileParts.push({ inlineData: { data: at.data, mimeType: at.mimeType } });
+            // Chỉ gửi as inlineData nếu là định dạng Gemini hỗ trợ (PDF, Image, Video, Audio)
+            const isSupportedMedia = at.mimeType === 'application/pdf' ||
+              at.mimeType.startsWith('image/') ||
+              at.mimeType.startsWith('video/') ||
+              at.mimeType.startsWith('audio/');
+
+            if (isSupportedMedia) {
+              fileParts.push({ inlineData: { data: at.data, mimeType: at.mimeType } });
+            } else if (at.mimeType === 'text/plain') {
+              // Nếu là text, giải mã và đưa vào prompt
+              try {
+                const decodedText = decodeURIComponent(escape(atob(at.data)));
+                enrichedPrompt = `\n[NỘI DUNG TỆP ${at.name}]:\n${decodedText}\n\n${enrichedPrompt}`;
+              } catch (e) {
+                console.error("Error decoding text file", e);
+              }
+            } else {
+              console.warn(`Bỏ qua tệp không hỗ trợ: ${at.mimeType}`);
+            }
           }
         } else if (at.type === 'link') {
           enrichedPrompt = `[THAM KHẢO LIÊN KẾT: ${at.url}]: \n\n${enrichedPrompt}`;
         }
       });
 
-      if (fileParts.length > 0) {
+      if (fileParts.length > 0 || currentAttachments.some(a => a.mimeType === 'text/plain')) {
         enrichedPrompt = `Dựa trên dữ liệu đính kèm, hãy thực hiện yêu cầu: ${enrichedPrompt}`;
       }
 
