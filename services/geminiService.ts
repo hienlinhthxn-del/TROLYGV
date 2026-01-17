@@ -151,15 +151,14 @@ export class GeminiService {
 
   public async generateImage(prompt: string) {
     try {
-      // Vì Gemini Flash không hỗ trợ tạo hình ảnh trực tiếp, 
-      // chúng ta sử dụng Pollinations.ai (miễn phí, chất lượng cao và không cần key).
-      // Chúng ta sẽ tối ưu prompt để có hình ảnh đẹp hơn.
+      // Sử dụng API trực tiếp của Pollinations để đảm bảo tính ổn định cao nhất
+      const cleanPrompt = prompt.replace(/[^\w\s]/gi, '').slice(0, 500); // Làm sạch prompt
+      const enhancedPrompt = encodeURIComponent(cleanPrompt);
+      const seed = Math.floor(Math.random() * 1000000);
+      const timestamp = Date.now();
 
-      const enhancedPrompt = encodeURIComponent(`${prompt}, high definition, digital art, educational style, vibrant colors`);
-      const seed = Math.floor(Math.random() * 1000000); // Tạo seed ngẫu nhiên để hình ảnh đa dạng
-      const imageUrl = `https://pollinations.ai/p/${enhancedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
-
-      return imageUrl;
+      // Định dạng mới nhất và ổn định nhất của Pollinations
+      return `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&seed=${seed}&timestamp=${timestamp}&nologo=true`;
     } catch (e) {
       console.error("Image generation error:", e);
       return null;

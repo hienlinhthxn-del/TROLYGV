@@ -138,12 +138,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
     try {
       // Đầu tiên, dùng Gemini để dịch và tối ưu prompt sang tiếng Anh (để AI vẽ đẹp hơn)
-      const translationPrompt = `Hãy dịch mô tả sau sang tiếng Anh để tạo hình ảnh AI. Chỉ trả về bản dịch ngắn gọn, thêm các từ khóa nghệ thuật như "high quality, educational illustration, 4k": "${topic}"`;
+      const translationPrompt = `Convert this Vietnamese text into a highly descriptive English image generation prompt. Add artistic styles like "hyper-realistic, educational illustration, digital art, cinematic lighting, 8k resolution": "${topic}"`;
 
       let optimizedPrompt = topic;
       try {
         const translation = await geminiService.generateText(translationPrompt);
-        optimizedPrompt = translation.replace(/["']/g, '').trim();
+        // Làm sạch kết quả trả về từ AI (bỏ ngoặc kép, text thừa)
+        optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
       } catch (err) {
         console.warn("Translation failed, using original topic", err);
       }
