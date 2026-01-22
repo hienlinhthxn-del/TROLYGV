@@ -144,34 +144,29 @@ export class GeminiService {
       const prompt = `Tạo phiếu học tập cho học sinh lớp 1 (6-7 tuổi) với các thông tin sau:
 - Môn học: ${subject}
 - Chủ đề: ${topic}
-- Số lượng câu hỏi: ${questionCount}
-- Định dạng yêu cầu: ${formatInstruction}
+- Số lượng yêu cầu: ĐÚNG ${questionCount} CÂU HỎI.
+- Định dạng: ${formatInstruction}
 
-Yêu cầu QUAN TRỌNG:
-1. Bạn BẮT BUỘC phải tạo ĐÚNG ${questionCount} câu hỏi.
-2. Ngôn ngữ: Tiếng Việt trong sáng, dễ hiểu cho trẻ lớp 1.
-3. Mỗi câu hỏi cần có một 'imagePrompt' cực kỳ chi tiết (viết bằng tiếng Anh) để AI vẽ hình minh họa (phong cách: cartoon, cute, white background).
-4. Các dạng bài gợi ý: tô màu, nối hình, khoanh tròn đáp án đúng, điền số còn thiếu.
+YÊU CẦU BẮT BUỘC:
+1. Bạn phải tạo DANH SÁCH gồm CHÍNH XÁC ${questionCount} câu hỏi. KHÔNG ĐƯỢC THIẾU.
+2. Đánh số id từ q1, q2, q3... đến q${questionCount}.
+3. Mỗi câu hỏi phải có nội dung khác nhau, sáng tạo, phù hợp với trẻ em.
+4. 'imagePrompt' phải là mô tả tiếng Anh chi tiết cho từng câu (ví dụ: "A cute drawing of 3 red apples...").
 
-Cấu trúc trả về JSON duy nhất:
+Cấu trúc JSON yêu cầu:
 {
   "title": "Tên phiếu học tập",
   "subject": "${subject}",
   "questions": [
-    {
-      "id": "q1",
-      "type": "multiple-choice|essay",
-      "question": "Nội dung câu hỏi ngắn gọn",
-      "imagePrompt": "Detailed English description for AI image generation",
-      "options": ["Lựa chọn A", "Lựa chọn B", "Lựa chọn C", "Lựa chọn D"] (CHỈ dùng nếu là multiple-choice),
-      "answer": "Đáp án đúng"
-    }
+    { "id": "q1", "type": "multiple-choice", "question": "...", "imagePrompt": "...", "options": ["..."], "answer": "..." },
+    ... tiếp tục cho đến "q${questionCount}" ...
   ]
 }`;
 
       const model = this.genAI.getGenerativeModel({
         model: MODEL_NAME,
         generationConfig: {
+          temperature: 0.9, // Tăng temperature để đa dạng hơn
           responseMimeType: "application/json",
           responseSchema: {
             type: SchemaType.OBJECT,
@@ -180,6 +175,7 @@ Cấu trúc trả về JSON duy nhất:
               subject: { type: SchemaType.STRING },
               questions: {
                 type: SchemaType.ARRAY,
+                description: `Mảng chứa ĐÚNG ${questionCount} câu hỏi`,
                 items: {
                   type: SchemaType.OBJECT,
                   properties: {
@@ -203,7 +199,12 @@ Cấu trúc trả về JSON duy nhất:
       });
 
       const result = await model.generateContent(prompt);
-      return JSON.parse(result.response.text());
+      const content = JSON.parse(result.response.text());
+
+      // LOGIC KIỂM TRA: Nếu AI trả về thiếu câu hỏi, chúng ta sẽ log lỗi để debug
+      console.log(`AI generated ${content.questions.length}/${questionCount} questions`);
+
+      return content;
     } catch (error) {
       console.error("Worksheet Generation Error:", error);
       throw error;
