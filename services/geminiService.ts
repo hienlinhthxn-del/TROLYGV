@@ -26,6 +26,7 @@ export class GeminiService {
     }
     this.genAI = new GoogleGenerativeAI(apiKey || '');
     this.model = this.genAI.getGenerativeModel({ model: MODEL_NAME });
+    console.log(`[GeminiService] Initialized with model: ${MODEL_NAME}`);
   }
 
   public async initChat(systemInstruction: string) {
