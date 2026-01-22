@@ -66,22 +66,24 @@ const WorksheetCreator: React.FC = () => {
         setIsGeneratingImages(true);
         const updatedQuestions = [...ws.questions];
 
-        for (let i = 0; i < updatedQuestions.length; i++) {
-            const q = updatedQuestions[i];
-            if (q.imagePrompt) {
-                setProgress(`Đang tạo hình ảnh ${i + 1}/${updatedQuestions.length}...`);
-                try {
-                    const imageUrl = await generate_image(q.imagePrompt);
-                    updatedQuestions[i].imageUrl = imageUrl;
-                    setWorksheet({ ...ws, questions: updatedQuestions });
-                } catch (error) {
-                    console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
+        try {
+            for (let i = 0; i < updatedQuestions.length; i++) {
+                const q = updatedQuestions[i];
+                if (q.imagePrompt) {
+                    setProgress(`Đang tạo hình ảnh ${i + 1}/${updatedQuestions.length}...`);
+                    try {
+                        const imageUrl = await generate_image(q.imagePrompt);
+                        updatedQuestions[i].imageUrl = imageUrl;
+                        setWorksheet({ ...ws, questions: [...updatedQuestions] });
+                    } catch (error) {
+                        console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
+                    }
                 }
             }
+            setProgress('Hoàn thành!');
+        } finally {
+            setIsGeneratingImages(false);
         }
-
-        setIsGeneratingImages(false);
-        setProgress('Hoàn thành!');
     };
 
     const handleExportPDF = () => {
@@ -619,11 +621,13 @@ const WorksheetCreator: React.FC = () => {
                                     padding: '20px',
                                     fontSize: '20px',
                                     fontWeight: 'bold',
-                                    background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                                    background: isGeneratingImages
+                                        ? 'linear-gradient(135deg, #BDBDBD 0%, #9E9E9E 100%)'
+                                        : 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
                                     color: 'white',
                                     border: 'none',
                                     borderRadius: '15px',
-                                    cursor: isGeneratingImages ? 'not-allowed' : 'pointer',
+                                    cursor: isGeneratingImages ? 'wait' : 'pointer',
                                     boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
                                     transition: 'all 0.3s ease'
                                 }}
@@ -638,7 +642,7 @@ const WorksheetCreator: React.FC = () => {
                                     }
                                 }}
                             >
-                                🖨️ In Phiếu Học Tập
+                                {isGeneratingImages ? `⏳ Đang tạo ảnh (${progress.split(' ')[2]})...` : '🖨️ Xuất PDF & In Phiếu Học Tập'}
                             </button>
 
                             <button

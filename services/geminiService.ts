@@ -140,26 +140,27 @@ export class GeminiService {
 - Chủ đề: ${topic}
 - Số lượng câu hỏi: ${questionCount}
 
-Yêu cầu:
-1. Tạo ${questionCount} câu hỏi phù hợp với trình độ học sinh lớp 1
-2. Câu hỏi phải đơn giản, dễ hiểu, sử dụng từ ngữ phù hợp với lứa tuổi 6-7 tuổi
-3. Mỗi câu hỏi cần có hình ảnh minh họa sinh động, đáng yêu
-4. Đa dạng các dạng bài: tô màu, nối, khoanh tròn, điền từ, đếm số
-5. Nội dung phải vui nhộn, thu hút sự chú ý của trẻ
+Yêu cầu QUAN TRỌNG:
+1. Bạn BẮT BUỘC phải tạo ĐÚNG ${questionCount} câu hỏi. Không được ít hơn hoặc nhiều hơn.
+2. Mỗi câu hỏi phải phù hợp với trình độ học sinh lớp 1 (đơn giản, dễ hiểu).
+3. Mỗi câu hỏi cần có một 'imagePrompt' chi tiết để AI tạo hình ảnh minh họa (viết bằng tiếng Anh, phong cách cartoon/cute).
+4. Phải đảm bảo đa dạng các dạng bài: tô màu (coloring), nối (matching), khoanh tròn (circle), điền từ (fill-blank), đếm số (counting).
+5. Nội dung phải vui nhộn, hấp dẫn trẻ em.
 
-Trả về JSON với cấu trúc:
+Cấu trúc trả về JSON (BẮT BUỘC):
 {
-  "title": "Tên phiếu học tập",
+  "title": "Tên phiếu học tập sinh động",
   "subject": "${subject}",
   "questions": [
     {
-      "id": "unique_id",
+      "id": "q1",
       "type": "coloring|matching|circle|fill-blank|counting",
-      "question": "Nội dung câu hỏi",
-      "imagePrompt": "Mô tả chi tiết hình ảnh cần tạo (bằng tiếng Anh, phong cách cartoon, colorful, cute, child-friendly)",
-      "options": ["Tùy chọn 1", "Tùy chọn 2", ...] (nếu có),
-      "answer": "Đáp án đúng"
-    }
+      "question": "Câu hỏi số 1...",
+      "imagePrompt": "A cute cartoon illustration of...",
+      "options": ["A", "B", "C"] (nếu cần),
+      "answer": "Đáp án"
+    },
+    ... tạo đủ ${questionCount} câu tương tự ...
   ]
 }`;
 
