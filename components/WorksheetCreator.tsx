@@ -160,7 +160,7 @@ const WorksheetCreator: React.FC = () => {
                 <div style={{ textAlign: 'center', marginBottom: '30px' }}>
                     <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
                     <p>Soạn bài nhanh chóng với hình ảnh minh họa thông minh</p>
-                    <span style={{ fontSize: '10px', background: '#eee', padding: '2px 8px', borderRadius: '10px', color: '#999' }}>v2.0.4-fixed-model</span>
+                    <span style={{ fontSize: '10px', background: '#eee', padding: '2px 8px', borderRadius: '10px', color: '#999' }}>v2.0.5-model-001</span>
                 </div>
 
                 {!worksheet && (
