@@ -146,13 +146,17 @@ const WorksheetCreator: React.FC = () => {
 
     return (
         <div style={{
-            padding: '30px',
+            height: 'calc(100vh - 100px)', // Cố định chiều cao để thanh cuộn xuất hiện
+            width: '100%',
             maxWidth: '1200px',
             margin: '0 auto',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            minHeight: '100vh',
-            overflowY: 'auto'
-        }}>
+            borderRadius: '25px',
+            overflowY: 'auto', // Bật thanh cuộn
+            padding: '20px',
+            boxSizing: 'border-box'
+        }} className="custom-scrollbar">
+
             <div style={{
                 background: 'white',
                 borderRadius: '25px',
