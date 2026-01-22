@@ -157,9 +157,10 @@ const WorksheetCreator: React.FC = () => {
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: 'calc(100vh - 40px)', overflowY: 'auto', borderRadius: '20px' }} className="custom-scrollbar">
             <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-                <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-                    <h1 style={{ color: '#FF6B9D', margin: 0, fontSize: '32px' }}>🧒 Phiếu Học Tập Lớp 1</h1>
-                    <p style={{ color: '#666' }}>Tạo phiếu học tập với hình ảnh minh họa sinh động</p>
+                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
+                    <p>Soạn bài nhanh chóng với hình ảnh minh họa thông minh</p>
+                    <span style={{ fontSize: '10px', background: '#eee', padding: '2px 8px', borderRadius: '10px', color: '#999' }}>v2.0.4-fixed-model</span>
                 </div>
 
                 {!worksheet && (
