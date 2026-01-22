@@ -309,7 +309,9 @@ const WorksheetCreator: React.FC = () => {
             maxWidth: '1200px',
             margin: '0 auto',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            minHeight: '100vh'
+            minHeight: '100vh',
+            overflowY: 'auto', // Thêm thanh cuộn quan trọng ở đây
+            height: '100%'
         }}>
             <div style={{
                 background: 'white',
@@ -615,34 +617,37 @@ const WorksheetCreator: React.FC = () => {
                         }}>
                             <button
                                 onClick={handleExportPDF}
-                                disabled={isGeneratingImages}
+                                disabled={isGeneratingImages || isGenerating}
                                 style={{
                                     flex: 1,
-                                    padding: '20px',
-                                    fontSize: '20px',
+                                    padding: '25px', // Làm nút to hơn
+                                    fontSize: '22px', // Chữ to hơn
                                     fontWeight: 'bold',
-                                    background: isGeneratingImages
+                                    background: (isGeneratingImages || isGenerating)
                                         ? 'linear-gradient(135deg, #BDBDBD 0%, #9E9E9E 100%)'
                                         : 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
                                     color: 'white',
                                     border: 'none',
-                                    borderRadius: '15px',
-                                    cursor: isGeneratingImages ? 'wait' : 'pointer',
-                                    boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
-                                    transition: 'all 0.3s ease'
+                                    borderRadius: '20px',
+                                    cursor: (isGeneratingImages || isGenerating) ? 'wait' : 'pointer',
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                                    transition: 'all 0.3s ease',
+                                    borderBottom: '5px solid #388E3C' // Hiệu ứng 3D
                                 }}
                                 onMouseEnter={(e) => {
-                                    if (!isGeneratingImages) {
-                                        e.currentTarget.style.transform = 'scale(1.05)';
+                                    if (!isGeneratingImages && !isGenerating) {
+                                        e.currentTarget.style.transform = 'translateY(-5px)';
                                     }
                                 }}
                                 onMouseLeave={(e) => {
-                                    if (!isGeneratingImages) {
-                                        e.currentTarget.style.transform = 'scale(1)';
+                                    if (!isGeneratingImages && !isGenerating) {
+                                        e.currentTarget.style.transform = 'translateY(0)';
                                     }
                                 }}
                             >
-                                {isGeneratingImages ? `⏳ Đang tạo ảnh (${progress.split(' ')[2]})...` : '🖨️ Xuất PDF & In Phiếu Học Tập'}
+                                {isGeneratingImages
+                                    ? `⏳ Đang tạo ảnh minh họa... (${progress})`
+                                    : '🖨️ XUẤT FILE PDF & IN NGAY'}
                             </button>
 
                             <button
