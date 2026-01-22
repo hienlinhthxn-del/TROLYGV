@@ -133,34 +133,39 @@ export class GeminiService {
     }
   }
 
-  public async generateWorksheetContent(topic: string, subject: string, questionCount: number) {
+  public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: 'trac-nghiem' | 'tu-luan' | 'hon-hop' = 'hon-hop') {
     try {
-      const prompt = `Tạo phiếu học tập cho học sinh lớp 1 với các thông tin sau:
+      const formatInstruction = {
+        'trac-nghiem': 'Tất cả câu hỏi phải ở dạng trắc nghiệm với 4 lựa chọn A, B, C, D.',
+        'tu-luan': 'Tất cả câu hỏi phải ở dạng tự luận (ví dụ: bé hãy viết, bé hãy vẽ, bé hãy điền...).',
+        'hon-hop': 'Kết hợp cả trắc nghiệm và tự luận để phiếu học tập thêm phong phú.'
+      }[format];
+
+      const prompt = `Tạo phiếu học tập cho học sinh lớp 1 (6-7 tuổi) với các thông tin sau:
 - Môn học: ${subject}
 - Chủ đề: ${topic}
 - Số lượng câu hỏi: ${questionCount}
+- Định dạng yêu cầu: ${formatInstruction}
 
 Yêu cầu QUAN TRỌNG:
-1. Bạn BẮT BUỘC phải tạo ĐÚNG ${questionCount} câu hỏi. Không được ít hơn hoặc nhiều hơn.
-2. Mỗi câu hỏi phải phù hợp với trình độ học sinh lớp 1 (đơn giản, dễ hiểu).
-3. Mỗi câu hỏi cần có một 'imagePrompt' chi tiết để AI tạo hình ảnh minh họa (viết bằng tiếng Anh, phong cách cartoon/cute).
-4. Phải đảm bảo đa dạng các dạng bài: tô màu (coloring), nối (matching), khoanh tròn (circle), điền từ (fill-blank), đếm số (counting).
-5. Nội dung phải vui nhộn, hấp dẫn trẻ em.
+1. Bạn BẮT BUỘC phải tạo ĐÚNG ${questionCount} câu hỏi.
+2. Ngôn ngữ: Tiếng Việt trong sáng, dễ hiểu cho trẻ lớp 1.
+3. Mỗi câu hỏi cần có một 'imagePrompt' cực kỳ chi tiết (viết bằng tiếng Anh) để AI vẽ hình minh họa (phong cách: cartoon, cute, white background).
+4. Các dạng bài gợi ý: tô màu, nối hình, khoanh tròn đáp án đúng, điền số còn thiếu.
 
-Cấu trúc trả về JSON (BẮT BUỘC):
+Cấu trúc trả về JSON duy nhất:
 {
-  "title": "Tên phiếu học tập sinh động",
+  "title": "Tên phiếu học tập",
   "subject": "${subject}",
   "questions": [
     {
       "id": "q1",
-      "type": "coloring|matching|circle|fill-blank|counting",
-      "question": "Câu hỏi số 1...",
-      "imagePrompt": "A cute cartoon illustration of...",
-      "options": ["A", "B", "C"] (nếu cần),
-      "answer": "Đáp án"
-    },
-    ... tạo đủ ${questionCount} câu tương tự ...
+      "type": "multiple-choice|essay",
+      "question": "Nội dung câu hỏi ngắn gọn",
+      "imagePrompt": "Detailed English description for AI image generation",
+      "options": ["Lựa chọn A", "Lựa chọn B", "Lựa chọn C", "Lựa chọn D"] (CHỈ dùng nếu là multiple-choice),
+      "answer": "Đáp án đúng"
+    }
   ]
 }`;
 
