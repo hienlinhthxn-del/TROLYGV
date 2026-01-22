@@ -83,28 +83,38 @@ export class GeminiService {
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.ARRAY,
-            items: {
-              type: SchemaType.OBJECT,
-              properties: {
-                type: { type: SchemaType.STRING, description: "Phải là 'Trắc nghiệm' hoặc 'Tự luận'" },
-                level: { type: SchemaType.STRING, description: "Nhận biết, Thông hiểu, Vận dụng, hoặc Vận dụng cao" },
-                strand: { type: SchemaType.STRING, description: "Mạch kiến thức" },
-                content: { type: SchemaType.STRING, description: "Nội dung câu hỏi văn bản" },
-                image: {
-                  type: SchemaType.STRING,
-                  description: "NẾU câu hỏi gốc có hình vẽ, sơ đồ, đồ thị hoặc bảng biểu quan trọng, hãy cung cấp mô tả trực quan chi tiết hoặc mã SVG đơn giản để tái tạo hình ảnh đó. Nếu không có, để trống."
-                },
-                options: {
-                  type: SchemaType.ARRAY,
-                  items: { type: SchemaType.STRING },
-                  description: "4 phương án A, B, C, D."
-                },
-                answer: { type: SchemaType.STRING, description: "Đáp án đúng" },
-                explanation: { type: SchemaType.STRING, description: "Giải thích chi tiết" }
+            type: SchemaType.OBJECT,
+            properties: {
+              readingPassage: {
+                type: SchemaType.STRING,
+                description: "Văn bản đọc hiểu (Dành cho môn Tiếng Việt/Tiếng Anh hoặc các bài có ngữ liệu dùng chung). Nếu môn Toán hoặc không có ngữ liệu, để trống."
               },
-              required: ["type", "level", "strand", "content", "answer"]
-            }
+              questions: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    type: { type: SchemaType.STRING, description: "Phải là 'Trắc nghiệm' hoặc 'Tự luận'" },
+                    level: { type: SchemaType.STRING, description: "Nhận biết, Thông hiểu, Vận dụng, hoặc Vận dụng cao" },
+                    strand: { type: SchemaType.STRING, description: "Mạch kiến thức" },
+                    content: { type: SchemaType.STRING, description: "Nội dung câu hỏi văn bản" },
+                    image: {
+                      type: SchemaType.STRING,
+                      description: "NẾU câu hỏi gốc có hình vẽ, sơ đồ, đồ thị hoặc bảng biểu quan trọng, hãy cung cấp mô tả trực quan chi tiết hoặc mã SVG đơn giản để tái tạo hình ảnh đó. Nếu không có, để trống."
+                    },
+                    options: {
+                      type: SchemaType.ARRAY,
+                      items: { type: SchemaType.STRING },
+                      description: "4 phương án A, B, C, D."
+                    },
+                    answer: { type: SchemaType.STRING, description: "Đáp án đúng" },
+                    explanation: { type: SchemaType.STRING, description: "Giải thích chi tiết" }
+                  },
+                  required: ["type", "level", "strand", "content", "answer"]
+                }
+              }
+            },
+            required: ["questions"]
           }
         }
       });
@@ -119,6 +129,77 @@ export class GeminiService {
       return JSON.parse(result.response.text());
     } catch (error) {
       console.error("Structured Exam Generation Error:", error);
+      throw error;
+    }
+  }
+
+  public async generateWorksheetContent(topic: string, subject: string, questionCount: number) {
+    try {
+      const prompt = `Tạo phiếu học tập cho học sinh lớp 1 với các thông tin sau:
+- Môn học: ${subject}
+- Chủ đề: ${topic}
+- Số lượng câu hỏi: ${questionCount}
+
+Yêu cầu:
+1. Tạo ${questionCount} câu hỏi phù hợp với trình độ học sinh lớp 1
+2. Câu hỏi phải đơn giản, dễ hiểu, sử dụng từ ngữ phù hợp với lứa tuổi 6-7 tuổi
+3. Mỗi câu hỏi cần có hình ảnh minh họa sinh động, đáng yêu
+4. Đa dạng các dạng bài: tô màu, nối, khoanh tròn, điền từ, đếm số
+5. Nội dung phải vui nhộn, thu hút sự chú ý của trẻ
+
+Trả về JSON với cấu trúc:
+{
+  "title": "Tên phiếu học tập",
+  "subject": "${subject}",
+  "questions": [
+    {
+      "id": "unique_id",
+      "type": "coloring|matching|circle|fill-blank|counting",
+      "question": "Nội dung câu hỏi",
+      "imagePrompt": "Mô tả chi tiết hình ảnh cần tạo (bằng tiếng Anh, phong cách cartoon, colorful, cute, child-friendly)",
+      "options": ["Tùy chọn 1", "Tùy chọn 2", ...] (nếu có),
+      "answer": "Đáp án đúng"
+    }
+  ]
+}`;
+
+      const model = this.genAI.getGenerativeModel({
+        model: MODEL_NAME,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              title: { type: SchemaType.STRING },
+              subject: { type: SchemaType.STRING },
+              questions: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    id: { type: SchemaType.STRING },
+                    type: { type: SchemaType.STRING },
+                    question: { type: SchemaType.STRING },
+                    imagePrompt: { type: SchemaType.STRING },
+                    options: {
+                      type: SchemaType.ARRAY,
+                      items: { type: SchemaType.STRING }
+                    },
+                    answer: { type: SchemaType.STRING }
+                  },
+                  required: ["id", "type", "question", "imagePrompt"]
+                }
+              }
+            },
+            required: ["title", "subject", "questions"]
+          }
+        }
+      });
+
+      const result = await model.generateContent(prompt);
+      return JSON.parse(result.response.text());
+    } catch (error) {
+      console.error("Worksheet Generation Error:", error);
       throw error;
     }
   }
@@ -183,3 +264,7 @@ export class GeminiService {
 }
 
 export const geminiService = new GeminiService();
+
+// Export standalone functions for convenience
+export const generateWorksheetContent = (topic: string, subject: string, questionCount: number) =>
+  geminiService.generateWorksheetContent(topic, subject, questionCount);

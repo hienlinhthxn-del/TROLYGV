@@ -119,7 +119,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
       const newGrades: Grade[] = [];
       lines.forEach(line => {
-        const parts = line.split(',').map(s => s.trim());
+        if (!line.trim()) return;
+        // Tự động nhận diện dấu phân cách , hoặc ;
+        const separator = line.includes(';') ? ';' : ',';
+        const parts = line.split(separator).map(s => s.trim());
+
         if (parts.length >= 2) {
           const [code, score] = parts;
           const student = classroom.students.find(s => s.code === code);
@@ -178,6 +182,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      alert("Hệ thống hiện tại hỗ trợ tệp .csv hoặc .txt. Thầy Cô vui lòng chọn 'Save As' trong Excel và chọn định dạng 'CSV (UTF-8)' để nhập liệu chính xác nhất nhé!");
+      if (studentFileInputRef.current) studentFileInputRef.current.value = '';
+      return;
+    }
+
     setIsImporting(true);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -193,10 +203,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         }
 
         for (let i = startIndex; i < lines.length; i++) {
-          const parts = lines[i].split(',').map(s => s.trim());
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          // Tự động nhận diện dấu phân cách , hoặc ;
+          const separator = line.includes(';') ? ';' : ',';
+          const parts = line.split(separator).map(s => s.trim());
+
           if (parts.length >= 2) {
             const [code, name, genderRaw] = parts;
-            const gender: 'Nam' | 'Nữ' = (genderRaw === 'Nữ' || genderRaw === 'nữ' || genderRaw === 'F') ? 'Nữ' : 'Nam';
+            // Xử lý giới tính linh hoạt hơn
+            const gender: 'Nam' | 'Nữ' = (genderRaw?.toLowerCase() === 'nữ' || genderRaw?.toLowerCase() === 'f' || genderRaw?.toLowerCase() === 'nu') ? 'Nữ' : 'Nam';
 
             newStudents.push({
               id: (Date.now() + i).toString(),
@@ -205,6 +222,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               gender: gender
             });
           } else if (parts.length === 1 && parts[0]) {
+            // Trường hợp chỉ có tên
             newStudents.push({
               id: (Date.now() + i).toString(),
               name: parts[0],

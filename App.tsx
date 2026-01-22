@@ -13,6 +13,7 @@ const CloudDrive = lazy(() => import('./components/CloudDrive'));
 const UtilityKit = lazy(() => import('./components/UtilityKit'));
 const SecurityCenter = lazy(() => import('./components/SecurityCenter'));
 const StudentPractice = lazy(() => import('./components/StudentPractice'));
+const WorksheetCreator = lazy(() => import('./components/WorksheetCreator'));
 
 const LoadingView = () => (
   <div className="h-full flex flex-col items-center justify-center space-y-4 animate-in fade-in duration-500">
@@ -339,6 +340,7 @@ const App: React.FC = () => {
                 { id: 'chat', icon: 'fa-comment-dots', label: 'Hỏi đáp AI' },
                 { id: 'utility', icon: 'fa-wand-magic-sparkles', label: 'Tiện ích Sáng tạo' },
                 { id: 'exam', icon: 'fa-file-lines', label: 'Soạn đề thi AI' },
+                { id: 'worksheet', icon: 'fa-child-reaching', label: 'Phiếu học tập Lớp 1' },
                 { id: 'workspace', icon: 'fa-file-pen', label: 'Soạn thảo tài liệu' },
                 { id: 'classroom', icon: 'fa-users-viewfinder', label: 'Quản lý lớp học' },
                 { id: 'cloud', icon: 'fa-cloud-arrow-up', label: 'Lưu trữ Online' },
@@ -410,6 +412,7 @@ const App: React.FC = () => {
             {view === 'classroom' && <ClassroomManager classroom={classroom} onUpdate={updateClassroom} onAIAssist={(p) => { setInput(p); setView('chat'); }} />}
             {view === 'workspace' && <Workspace initialContent={workspaceContent} onSave={(c) => setWorkspaceContent(c)} onSaveToCloud={handleSaveToCloud} />}
             {view === 'exam' && <ExamCreator onExportToWorkspace={sendToWorkspace} onStartPractice={startPractice} />}
+            {view === 'worksheet' && <WorksheetCreator />}
             {view === 'cloud' && <CloudDrive documents={cloudDocs} onOpen={handleOpenCloudDoc} onDelete={handleDeleteCloudDoc} />}
             {view === 'utility' && <UtilityKit onSendToWorkspace={sendToWorkspace} />}
             {view === 'security' && <SecurityCenter onClearAllData={handleClearAllData} />}

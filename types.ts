@@ -45,7 +45,7 @@ export interface ExamQuestion {
   options?: string[];
   answer: string;
   explanation?: string;
-  image?: string; 
+  image?: string;
 }
 
 export interface ExamPaper {
@@ -116,4 +116,4 @@ export interface CloudDocument {
   isEncrypted?: boolean;
 }
 
-export type ViewType = 'chat' | 'classroom' | 'workspace' | 'exam' | 'cloud' | 'utility' | 'security' | 'practice';
+export type ViewType = 'chat' | 'classroom' | 'workspace' | 'exam' | 'worksheet' | 'cloud' | 'utility' | 'security' | 'practice';
