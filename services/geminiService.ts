@@ -1,9 +1,9 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
-const MODEL_NAME = 'gemini-flash-latest';
-const IMAGE_MODEL = 'gemini-flash-latest';
-const TTS_MODEL = 'gemini-flash-latest';
+const MODEL_NAME = 'gemini-1.5-flash-latest';
+const IMAGE_MODEL = 'gemini-1.5-flash-latest';
+const TTS_MODEL = 'gemini-1.5-flash-latest';
 
 export interface FilePart {
   inlineData: {
@@ -175,7 +175,6 @@ Cấu trúc JSON yêu cầu:
               subject: { type: SchemaType.STRING },
               questions: {
                 type: SchemaType.ARRAY,
-                description: `Mảng chứa ĐÚNG ${questionCount} câu hỏi`,
                 items: {
                   type: SchemaType.OBJECT,
                   properties: {
