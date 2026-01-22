@@ -273,5 +273,5 @@ Cấu trúc JSON yêu cầu:
 export const geminiService = new GeminiService();
 
 // Export standalone functions for convenience
-export const generateWorksheetContent = (topic: string, subject: string, questionCount: number) =>
-  geminiService.generateWorksheetContent(topic, subject, questionCount);
+export const generateWorksheetContent = (topic: string, subject: string, questionCount: number, format?: 'trac-nghiem' | 'tu-luan' | 'hon-hop') =>
+  geminiService.generateWorksheetContent(topic, subject, questionCount, format);
