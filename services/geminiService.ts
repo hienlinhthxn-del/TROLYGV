@@ -2,8 +2,7 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 const MODEL_NAME = 'gemini-1.5-flash';
-const IMAGE_MODEL = 'gemini-1.5-flash';
-const TTS_MODEL = 'gemini-1.5-flash';
+const STABLE_MODEL = 'gemini-1.5-flash';
 
 export interface FilePart {
   inlineData: {
@@ -18,18 +17,33 @@ export class GeminiService {
   private model: any;
 
   constructor() {
-    // Attempt to get API Key from process.env (Vite define) or import.meta.env
-    const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
-
-    if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY' || apiKey.trim() === '') {
-      console.error("CRITICAL ERROR: API Key is missing or invalid.");
+    try {
+      const apiKey = this.getApiKey();
+      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.model = this.genAI.getGenerativeModel({ model: MODEL_NAME });
+      console.log(`[GeminiService] Initialized with model: ${MODEL_NAME}`);
+    } catch (e) {
+      console.error("[GeminiService] Error during basic initialization:", e);
     }
-    this.genAI = new GoogleGenerativeAI(apiKey || '');
-    this.model = this.genAI.getGenerativeModel({ model: MODEL_NAME });
-    console.log(`[GeminiService] Initialized with model: ${MODEL_NAME}`);
+  }
+
+  private getApiKey(): string {
+    const key = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+    if (!key || key === 'PLACEHOLDER_API_KEY' || key.trim() === '') {
+      return '';
+    }
+    return key;
+  }
+
+  public checkApiKey() {
+    const key = this.getApiKey();
+    if (!key) {
+      throw new Error("Chưa cấu hình API Key. Vui lòng kiểm tra lại tệp .env.local hoặc cấu hình Vite.");
+    }
   }
 
   public async initChat(systemInstruction: string) {
+    this.checkApiKey();
     this.model = this.genAI.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: systemInstruction
@@ -42,6 +56,7 @@ export class GeminiService {
   }
 
   public async generateText(prompt: string) {
+    this.checkApiKey();
     try {
       const result = await this.model.generateContent(prompt);
       return result.response.text();
@@ -52,8 +67,10 @@ export class GeminiService {
   }
 
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
+    this.checkApiKey();
     if (!this.chat) {
-      throw new Error("Chat not initialized");
+      console.log("[GeminiService] Chat not initialized, initializing with default persona...");
+      await this.initChat("Bạn là một trợ lý giáo dục chuyên nghiệp.");
     }
 
     try {
@@ -78,6 +95,7 @@ export class GeminiService {
   }
 
   public async generateExamQuestionsStructured(prompt: string, fileParts?: FilePart[]) {
+    this.checkApiKey();
     try {
       const model = this.genAI.getGenerativeModel({
         model: MODEL_NAME,
@@ -129,20 +147,39 @@ export class GeminiService {
       const result = await model.generateContent(parts);
       let text = result.response.text();
 
-      if (text.includes('```json')) {
-        text = text.split('```json')[1].split('```')[0].trim();
-      } else if (text.includes('```')) {
-        text = text.split('```')[1].split('```')[0].trim();
-      }
+      console.log("[GeminiService] Exam Generation Raw Text Length:", text.length);
 
-      return JSON.parse(text);
+      // Clean JSON string
+      text = this.cleanJSON(text);
+
+      try {
+        const parsed = JSON.parse(text);
+        if (!parsed.questions || !Array.isArray(parsed.questions)) {
+          throw new Error("AI trả về định dạng JSON nhưng thiếu danh sách câu hỏi.");
+        }
+        return parsed;
+      } catch (parseError) {
+        console.error("JSON Parse Error. Cleaned text:", text);
+        throw new Error("AI trả về dữ liệu không đúng cấu trúc. Thầy/Cô vui lòng thử lại nhé!");
+      }
     } catch (error) {
       console.error("Structured Exam Generation Error:", error);
       throw error;
     }
   }
 
+  private cleanJSON(text: string): string {
+    let cleaned = text.trim();
+    if (cleaned.includes('```json')) {
+      cleaned = cleaned.split('```json')[1].split('```')[0].trim();
+    } else if (cleaned.includes('```')) {
+      cleaned = cleaned.split('```')[1].split('```')[0].trim();
+    }
+    return cleaned;
+  }
+
   public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: 'trac-nghiem' | 'tu-luan' | 'hon-hop' = 'hon-hop') {
+    this.checkApiKey();
     try {
       const formatInstruction = {
         'trac-nghiem': 'Tất cả câu hỏi phải ở dạng trắc nghiệm với 4 lựa chọn A, B, C, D.',
@@ -209,19 +246,17 @@ Cấu trúc JSON yêu cầu:
       const result = await model.generateContent(prompt);
       let text = result.response.text();
 
-      // Clean JSON string in case AI wraps it in markdown blocks
-      if (text.includes('```json')) {
-        text = text.split('```json')[1].split('```')[0].trim();
-      } else if (text.includes('```')) {
-        text = text.split('```')[1].split('```')[0].trim();
+      text = this.cleanJSON(text);
+
+      try {
+        const content = JSON.parse(text);
+        // LOGIC KIỂM TRA: Nếu AI trả về thiếu câu hỏi, chúng ta sẽ log lỗi để debug
+        console.log(`AI generated ${content.questions?.length || 0}/${questionCount} questions`);
+        return content;
+      } catch (e) {
+        console.error("Worksheet JSON Parse Error:", text);
+        throw new Error("AI trả về dữ liệu không đúng cấu trúc phiếu học tập. Thầy/Cô vui lòng thử lại nhé!");
       }
-
-      const content = JSON.parse(text);
-
-      // LOGIC KIỂM TRA: Nếu AI trả về thiếu câu hỏi, chúng ta sẽ log lỗi để debug
-      console.log(`AI generated ${content.questions?.length || 0}/${questionCount} questions`);
-
-      return content;
     } catch (error) {
       console.error("Worksheet Generation Error:", error);
       throw error;

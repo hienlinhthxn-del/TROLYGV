@@ -293,8 +293,9 @@ const App: React.FC = () => {
       setDynamicSuggestions(suggestions);
       setIsGeneratingSuggestions(false);
     } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : "Errors";
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `Lỗi: ${errorMessage}. Vui lòng kiểm tra lại API Key hoặc kết nối mạng.`, isThinking: false, isStreaming: false } : msg));
+      console.error("Chat Stream Error Details:", error);
+      const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra trong quá trình trao đổi.";
+      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi kết nối hoặc vấn đề bảo mật: ${errorMessage}. Thầy/Cô hãy tải lại trang (F5) hoặc kiểm tra lại mạng nhé!`, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsLoading(false);
     }

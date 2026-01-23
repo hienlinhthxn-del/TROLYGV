@@ -110,17 +110,23 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     try {
       const result = await geminiService.generateExamQuestionsStructured(prompt);
+
+      if (!result || !result.questions || !Array.isArray(result.questions)) {
+        throw new Error("AI không trả về đúng định dạng câu hỏi.");
+      }
+
       const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => ({
         id: 'gen-' + Date.now().toString() + i,
         ...q,
-        options: q.type === 'Trắc nghiệm' ? q.options : undefined
+        options: q.type === 'Trắc nghiệm' ? (Array.isArray(q.options) ? q.options : []) : undefined
       }));
       setQuestions(formatted);
       setReadingPassage(result.readingPassage || '');
       if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${stats.total * 3} phút`);
       setViewMode('config');
-    } catch (error) {
-      alert("Lỗi khi AI đang soạn đề. Vui lòng thử lại.");
+    } catch (error: any) {
+      console.error("Exam Generation Error:", error);
+      alert(`Lỗi khi AI đang soạn đề: ${error.message || 'Lỗi không xác định'}. Thầy/Cô vui lòng thử lại nhé!`);
     } finally {
       setIsGenerating(false);
     }

@@ -44,11 +44,11 @@ const WorksheetCreator: React.FC = () => {
             // Sử dụng hàm đã import
             const content = await generateWorksheetContent(topic, subject, questionCount, questionFormat);
             setWorksheet(content);
-            setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa (Delay 5s để tránh lỗi)...');
+            setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa (Đợi 2 giây/câu để tránh quá tải)...');
             await generateImages(content);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Lỗi khi tạo phiếu học tập:', error);
-            alert('Có lỗi xảy ra. Thầy Cô vui lòng thử lại nhé!');
+            alert(`Có lỗi xảy ra: ${error.message || 'Lỗi không xác định'}. Thầy Cô vui lòng thử lại nhé!`);
         } finally {
             setIsGenerating(false);
         }
@@ -62,9 +62,9 @@ const WorksheetCreator: React.FC = () => {
             for (let i = 0; i < updatedQuestions.length; i++) {
                 const q = updatedQuestions[i];
                 if (q.imagePrompt) {
-                    setProgress(`Đang vẽ hình minh họa ${i + 1}/${updatedQuestions.length} (Đợi 5 giây)...`);
+                    setProgress(`Đang vẽ hình minh họa ${i + 1}/${updatedQuestions.length} (Đợi 2 giây)...`);
 
-                    if (i > 0) await new Promise(resolve => setTimeout(resolve, 5000));
+                    if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000));
 
                     try {
                         const randomId = Math.floor(Math.random() * 999999);

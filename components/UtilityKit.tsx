@@ -89,8 +89,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       const stream = geminiService.sendMessageStream(prompt, getFileParts());
       for await (const chunk of stream) {
         fullContent += chunk.text;
+        setResult(fullContent);
       }
-      setResult(fullContent);
     } catch (error) {
       console.error(error);
       alert("Lỗi khi soạn giáo án.");
@@ -120,8 +120,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       const stream = geminiService.sendMessageStream(prompt, getFileParts());
       for await (const chunk of stream) {
         fullContent += chunk.text;
+        setResult(fullContent);
       }
-      setResult(fullContent);
     } catch (error) {
       console.error(error);
       alert("Lỗi khi tạo trò chơi.");
