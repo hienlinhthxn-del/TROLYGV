@@ -1,9 +1,9 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
-const MODEL_NAME = 'gemini-1.5-flash-001';
-const IMAGE_MODEL = 'gemini-1.5-flash-001';
-const TTS_MODEL = 'gemini-1.5-flash-001';
+const MODEL_NAME = 'gemini-1.5-flash';
+const IMAGE_MODEL = 'gemini-1.5-flash';
+const TTS_MODEL = 'gemini-1.5-flash';
 
 export interface FilePart {
   inlineData: {
@@ -127,7 +127,15 @@ export class GeminiService {
       parts.push({ text: prompt });
 
       const result = await model.generateContent(parts);
-      return JSON.parse(result.response.text());
+      let text = result.response.text();
+
+      if (text.includes('```json')) {
+        text = text.split('```json')[1].split('```')[0].trim();
+      } else if (text.includes('```')) {
+        text = text.split('```')[1].split('```')[0].trim();
+      }
+
+      return JSON.parse(text);
     } catch (error) {
       console.error("Structured Exam Generation Error:", error);
       throw error;
@@ -167,7 +175,7 @@ Cấu trúc JSON yêu cầu:
       const model = this.genAI.getGenerativeModel({
         model: MODEL_NAME,
         generationConfig: {
-          temperature: 0.9, // Tăng temperature để đa dạng hơn
+          temperature: 0.7, // Giảm temperature để cấu trúc JSON ổn định hơn
           responseMimeType: "application/json",
           responseSchema: {
             type: SchemaType.OBJECT,
@@ -199,10 +207,19 @@ Cấu trúc JSON yêu cầu:
       });
 
       const result = await model.generateContent(prompt);
-      const content = JSON.parse(result.response.text());
+      let text = result.response.text();
+
+      // Clean JSON string in case AI wraps it in markdown blocks
+      if (text.includes('```json')) {
+        text = text.split('```json')[1].split('```')[0].trim();
+      } else if (text.includes('```')) {
+        text = text.split('```')[1].split('```')[0].trim();
+      }
+
+      const content = JSON.parse(text);
 
       // LOGIC KIỂM TRA: Nếu AI trả về thiếu câu hỏi, chúng ta sẽ log lỗi để debug
-      console.log(`AI generated ${content.questions.length}/${questionCount} questions`);
+      console.log(`AI generated ${content.questions?.length || 0}/${questionCount} questions`);
 
       return content;
     } catch (error) {

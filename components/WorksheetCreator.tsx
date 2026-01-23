@@ -208,7 +208,7 @@ const WorksheetCreator: React.FC = () => {
                             <button onClick={() => setWorksheet(null)} style={{ padding: '8px 15px', background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '5px', cursor: 'pointer' }}>Quay lại</button>
                         </div>
 
-                        {worksheet.questions.map((q, index) => (
+                        {worksheet.questions && worksheet.questions.map((q, index) => (
                             <div key={index} style={{ padding: '20px', background: '#f9f9f9', borderRadius: '15px', marginBottom: '20px', border: '1px solid #eee' }}>
                                 <p style={{ fontSize: '18px', fontWeight: 'bold' }}>Câu {index + 1}: {q.question}</p>
                                 <div style={{ textAlign: 'center', margin: '15px 0' }}>
