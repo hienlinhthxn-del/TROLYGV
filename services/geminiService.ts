@@ -18,21 +18,26 @@ export class GeminiService {
   private model: any;
 
   constructor() {
+    const key = this.getApiKey();
+    console.log("[GeminiService] API Key check:", key ? "Key found (starting with " + key.substring(0, 5) + ")" : "Key NOT found");
     this.refreshConfig();
   }
 
   private getApiKey(): string {
-    const env = (import.meta as any).env || {};
-    // Kiểm tra tất cả các nguồn có thể có của API Key
-    let key = env.VITE_GEMINI_API_KEY ||
-      env.GEMINI_API_KEY ||
-      (typeof process !== 'undefined' ? (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
-      '';
+    // 1. Ưu tiên lấy từ import.meta.env (Cách chuẩn của Vite)
+    if ((import.meta as any).env?.VITE_GEMINI_API_KEY) {
+      return (import.meta as any).env.VITE_GEMINI_API_KEY;
+    }
 
-    // Xử lý trường hợp Vite define process.env thành chuỗi "undefined"
-    if (key === 'undefined' || !key) return '';
+    // 2. Kiểm tra các biến process.env (Dành cho môi trường Node hoặc nếu Vite inject vào)
+    const pEnv = (typeof process !== 'undefined') ? process.env : {};
+    const processEnvKey = pEnv.VITE_GEMINI_API_KEY || pEnv.GEMINI_API_KEY || pEnv.API_KEY || '';
 
-    return key.trim();
+    if (processEnvKey && processEnvKey !== 'undefined' && processEnvKey !== 'PLACEHOLDER_API_KEY') {
+      return processEnvKey;
+    }
+
+    return '';
   }
 
   private refreshConfig(systemInstruction?: string) {
