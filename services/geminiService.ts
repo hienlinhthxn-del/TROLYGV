@@ -33,7 +33,8 @@ export class GeminiService {
   private getApiKey(): string {
     return localStorage.getItem('manually_entered_api_key') ||
       (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-      (window as any).VITE_GEMINI_API_KEY || '';
+      (window as any).VITE_GEMINI_API_KEY ||
+      (window as any).process?.env?.VITE_GEMINI_API_KEY || '';
   }
 
   private initialize() {
@@ -147,7 +148,8 @@ export class GeminiService {
                     content: { type: SchemaType.STRING },
                     answer: { type: SchemaType.STRING },
                     options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-                    explanation: { type: SchemaType.STRING }
+                    explanation: { type: SchemaType.STRING },
+                    imagePrompt: { type: SchemaType.STRING }
                   },
                   required: ["type", "content", "answer"]
                 }
@@ -155,7 +157,7 @@ export class GeminiService {
             }
           }
         }
-      });
+      }, { apiVersion: 'v1beta' });
 
       const parts: any[] = [];
       if (fileParts) parts.push(...fileParts);
@@ -171,8 +173,16 @@ export class GeminiService {
     }
   }
 
-  public async generateWorksheetContent(topic: string, subject: string, questionCount: number) {
-    const prompt = `Tạo phiếu học tập: Môn ${subject}, ${topic}, ${questionCount} câu. Trả về JSON.`;
+  public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
+    const prompt = `Bạn là trợ lý soạn bài cho giáo viên lớp 1. Hãy tạo phiếu học tập mới:
+    - Môn: ${subject}
+    - Chủ đề: ${topic}
+    - Số lượng: ${questionCount} câu
+    - Định dạng: ${format === 'trac-nghiem' ? 'Trắc nghiệm' : format === 'tu-luan' ? 'Tự luận' : 'Hỗn hợp'}
+    - YÊU CẦU ĐẶC BIỆT:
+      1. Nội dung cực kỳ đơn giản, phù hợp học sinh 6 tuổi.
+      2. Với mỗi câu hỏi, hãy cung cấp một đoạn mô tả hình ảnh minh họa ngắn chọn vào trường "imagePrompt" (ví dụ: "con mèo đang ngủ", "5 quả táo đỏ").
+      3. Trả về JSON chuẩn.`;
     return this.generateExamQuestionsStructured(prompt);
   }
 
@@ -203,4 +213,4 @@ export class GeminiService {
 
 export const geminiService = new GeminiService();
 export const generateWorksheetContent = (topic: string, subject: string, questionCount: number, format?: string) =>
-  geminiService.generateWorksheetContent(topic, subject, questionCount);
+  geminiService.generateWorksheetContent(topic, subject, questionCount, format);
