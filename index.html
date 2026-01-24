@@ -1,33 +1,51 @@
-
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trợ lý Giáo viên AI</title>
+    <title>EduAssist AI - Trợ lý Giáo viên 4.0</title>
+
+    <!-- Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap');
-        body { font-family: 'Be Vietnam Pro', sans-serif; }
-        
+
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            height: 100vh;
+            margin: 0;
+        }
+
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-track {
             background: transparent;
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb {
             background: #e2e8f0;
             border-radius: 10px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #cbd5e1;
         }
 
         @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
         }
 
         .typing-cursor::after {
@@ -45,31 +63,31 @@
         }
 
         @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
 
-        .citation-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
-    "html2pdf.js": "https://esm.sh/html2pdf.js@0.10.1",
-    "docx": "https://esm.sh/docx@9.1.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+
+    <script>
+        // Diagnostic check
+        console.log("%c EduAssist AI Diagnostic ", "background: #4f46e5; color: white; font-weight: bold; padding: 4px; border-radius: 4px;");
+        window.addEventListener('load', () => {
+            const apiKey = window.process?.env?.VITE_GEMINI_API_KEY || "Chưa thấy";
+            console.log("API Key Status:", apiKey !== "Chưa thấy" ? "FOUND (First 5: " + apiKey.substring(0, 5) + ")" : "NOT FOUND in process.env");
+        });
+    </script>
 </head>
+
 <body class="bg-slate-50 text-slate-900 overflow-hidden">
     <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>
