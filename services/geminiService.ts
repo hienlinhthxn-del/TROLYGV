@@ -1,10 +1,9 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
-// Dựa trên kết quả ListModels, gemini-1.5-flash không có sẵn trong tài khoản này.
-// Thay vào đó, tài khoản có quyền truy cập vào các model thế hệ mới hơn.
-// Chúng ta sẽ ưu tiên sử dụng gemini-2.0-flash (bản ổn định trên v1).
-const MODEL_NAME = 'gemini-2.0-flash';
+// Dựa trên kết quả ListModels từ tài khoản của bạn, chúng ta sẽ sử dụng các model khả dụng nhất.
+const PRIMARY_MODEL = 'gemini-2.0-flash';
+const FALLBACK_MODEL = 'gemini-1.5-flash-latest';
 
 export interface FilePart {
   inlineData: {
@@ -19,51 +18,59 @@ export class GeminiService {
   private model: any;
 
   constructor() {
-    try {
-      const apiKey = this.getApiKey();
-      this.genAI = new GoogleGenerativeAI(apiKey);
-      this.initModel();
-    } catch (e) {
-      console.error("[GeminiService] Initialization error:", e);
-    }
+    this.refreshConfig();
   }
 
   private getApiKey(): string {
-    const env = (import.meta as any).env;
-    const key = env?.VITE_GEMINI_API_KEY ||
-      env?.GEMINI_API_KEY ||
-      process.env.VITE_GEMINI_API_KEY ||
-      process.env.GEMINI_API_KEY || '';
-    return key;
+    const env = (import.meta as any).env || {};
+    // Kiểm tra tất cả các nguồn có thể có của API Key
+    let key = env.VITE_GEMINI_API_KEY ||
+      env.GEMINI_API_KEY ||
+      (typeof process !== 'undefined' ? (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
+      '';
+
+    // Xử lý trường hợp Vite define process.env thành chuỗi "undefined"
+    if (key === 'undefined' || !key) return '';
+
+    return key.trim();
   }
 
-  private initModel(systemInstruction?: string) {
-    const safetySettings = [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    ];
+  private refreshConfig(systemInstruction?: string) {
+    try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) return;
 
-    const modelParams: any = { model: MODEL_NAME, safetySettings };
-    if (systemInstruction) {
-      modelParams.systemInstruction = systemInstruction;
+      this.genAI = new GoogleGenerativeAI(apiKey);
+
+      const safetySettings = [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ];
+
+      const modelName = PRIMARY_MODEL;
+      this.model = this.genAI.getGenerativeModel({
+        model: modelName,
+        safetySettings,
+        systemInstruction
+      }, { apiVersion: 'v1' });
+
+      console.log(`[GeminiService] Configured with ${modelName}`);
+    } catch (e) {
+      console.error("[GeminiService] Settings error:", e);
     }
-
-    // Luôn sử dụng v1 cho các model 2.0/2.5
-    this.model = this.genAI.getGenerativeModel(modelParams, { apiVersion: 'v1' });
-    console.log(`[GeminiService] Model initialized: ${MODEL_NAME}`);
   }
 
   public checkApiKey() {
     if (!this.getApiKey()) {
-      throw new Error("Chưa cấu hình API Key. Thầy Cô vui lòng kiểm tra tệp .env.local.");
+      throw new Error("Chưa cấu hình API Key. Thầy Cô vui lòng kiểm tra tệp .env.local và đảm bảo VITE_GEMINI_API_KEY đã được thiết lập.");
     }
   }
 
   public async initChat(systemInstruction: string) {
     this.checkApiKey();
-    this.initModel(systemInstruction);
+    this.refreshConfig(systemInstruction);
     this.chat = this.model.startChat({
       generationConfig: { temperature: 0.7 },
     });
@@ -71,18 +78,13 @@ export class GeminiService {
 
   public async generateText(prompt: string) {
     this.checkApiKey();
+    if (!this.model) this.refreshConfig();
     try {
       const result = await this.model.generateContent(prompt);
       return result.response.text();
     } catch (error: any) {
-      console.error("Generate Text Error:", error);
-      // Nếu gemini-2.0-flash chưa khả dụng (hiếm), thử dùng 2.5 flash
-      if (error.message?.includes("404")) {
-        console.log("Falling back to gemini-2.5-flash...");
-        const fallbackModel = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
-        const result = await fallbackModel.generateContent(prompt);
-        return result.response.text();
-      }
+      console.error("Text Gen Error:", error);
+      if (error.message?.includes("404")) throw new Error("Mô hình AI không khả dụng (404). Vui lòng kiểm tra lại Key.");
       throw error;
     }
   }
@@ -110,9 +112,9 @@ export class GeminiService {
           grounding: (chunk as any).candidates?.[0]?.groundingMetadata
         };
       }
-    } catch (error) {
-      console.error("Gemini Stream Error:", error);
-      throw error;
+    } catch (error: any) {
+      console.error("Stream Error:", error);
+      throw new Error(`Lỗi kết nối AI: ${error.message}`);
     }
   }
 
@@ -120,7 +122,7 @@ export class GeminiService {
     this.checkApiKey();
     try {
       const structuredModel = this.genAI.getGenerativeModel({
-        model: MODEL_NAME,
+        model: PRIMARY_MODEL,
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -156,9 +158,9 @@ export class GeminiService {
 
       const result = await structuredModel.generateContent(parts);
       return JSON.parse(this.cleanJSON(result.response.text()));
-    } catch (error) {
-      console.error("Structured Exam Error:", error);
-      throw error;
+    } catch (error: any) {
+      console.error("Structured Gen Error:", error);
+      throw new Error(`AI không thể tạo cấu trúc: ${error.message}`);
     }
   }
 
@@ -174,11 +176,11 @@ export class GeminiService {
 
   public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
     this.checkApiKey();
-    const prompt = `Tạo phiếu học tập môn ${subject}, chủ đề ${topic}, ${questionCount} câu, dạng ${format}. Trả về JSON phù hợp.`;
+    const prompt = `Tạo phiếu học tập: ${subject}, ${topic}, ${questionCount} câu, ${format}. Trả về JSON.`;
 
     try {
       const model = this.genAI.getGenerativeModel({
-        model: MODEL_NAME,
+        model: PRIMARY_MODEL,
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -207,15 +209,15 @@ export class GeminiService {
 
       const result = await model.generateContent(prompt);
       return JSON.parse(this.cleanJSON(result.response.text()));
-    } catch (e) {
+    } catch (e: any) {
       console.error("Worksheet Error:", e);
-      throw e;
+      throw new Error(`Lỗi tạo phiếu: ${e.message}`);
     }
   }
 
   public async generateSuggestions(history: string[], persona: string) {
     try {
-      const prompt = `Lịch sử: ${history.join(' | ')}. Đề xuất 3 hành động tiếp theo dạng JSON { "suggestions": string[] }`;
+      const prompt = `Lịch sử: ${history.join(' | ')}. Suggest 3 actions in JSON { "suggestions": [] }`;
       const result = await this.model.generateContent(prompt);
       const data = JSON.parse(this.cleanJSON(result.response.text()));
       return data.suggestions || [];
