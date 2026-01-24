@@ -91,9 +91,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
         fullContent += chunk.text;
         setResult(fullContent);
       }
-    } catch (error) {
-      console.error(error);
-      alert("Lỗi khi soạn giáo án.");
+    } catch (error: any) {
+      console.error("Lesson Plan Error:", error);
+      alert(`Lỗi khi soạn giáo án: ${error.message || "Không thể kết nối với AI"}`);
     } finally {
       setIsProcessing(false);
     }
@@ -122,68 +122,73 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
         fullContent += chunk.text;
         setResult(fullContent);
       }
-    } catch (error) {
-      console.error(error);
-      alert("Lỗi khi tạo trò chơi.");
+    } catch (error: any) {
+      console.error("Game Generation Error:", error);
+      alert(`Lỗi khi tạo trò chơi: ${error.message || "Không thể kết nối với AI"}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const generateAIVisual = async () => {
-    if (!topic.trim()) return;
+    if (!topic.trim()) {
+      alert("Vui lòng nhập mô tả hình ảnh!");
+      return;
+    }
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
 
     try {
-      // Đầu tiên, dùng Gemini để dịch và tối ưu prompt sang tiếng Anh (để AI vẽ đẹp hơn)
-      const translationPrompt = `Convert this Vietnamese text into a highly descriptive English image generation prompt. Add artistic styles like "hyper-realistic, educational illustration, digital art, cinematic lighting, 8k resolution": "${topic}"`;
+      // Dịch và tối ưu prompt sang tiếng Anh để AI vẽ đẹp hơn
+      const translationPrompt = `Convert this Vietnamese educational concept into a descriptive English image prompt. Style: educational illustration, clear, high quality, white background. Concept: "${topic}"`;
 
       let optimizedPrompt = topic;
       try {
         const translation = await geminiService.generateText(translationPrompt);
-        // Làm sạch kết quả trả về từ AI (bỏ ngoặc kép, text thừa)
+        // Làm sạch kết quả trả về
         optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
       } catch (err) {
         console.warn("Translation failed, using original topic", err);
       }
 
+      console.log("[UtilityKit] Generating image with prompt:", optimizedPrompt);
       const imageUrl = await geminiService.generateImage(optimizedPrompt);
       setResult(imageUrl);
-    } catch (error) {
-      console.error(error);
-      alert("Lỗi khi tạo hình ảnh.");
+    } catch (error: any) {
+      console.error("Image generation error:", error);
+      alert(`Không thể tạo hình ảnh: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const generateTTS = async () => {
-    if (!topic.trim()) return;
+    if (!topic.trim()) {
+      alert("Vui lòng nhập văn bản cần đọc!");
+      return;
+    }
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
     setIsPlaying(false);
 
     try {
-      // Giả lập AI xử lý
-      await new Promise(resolve => setTimeout(resolve, 600));
-
+      // Kiểm tra tính khả dụng của SpeechSynthesis
       if ('speechSynthesis' in window) {
-        setResult("Đã sẵn sàng. Thầy Cô nhấn Phát để nghe.");
+        setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
       } else {
         const url = await geminiService.generateSpeech(topic, voiceName);
         if (url) {
           setAudioUrl(url);
-          setResult("Đã chuẩn bị xong. Thầy Cô nhấn Phát để nghe.");
+          setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");
         } else {
-          alert("Trình duyệt không hỗ trợ giọng nói.");
+          alert("Trình duyệt và máy chủ hiện không hỗ trợ giọng nói.");
         }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Lỗi khi chuẩn bị giọng đọc.");
+    } catch (error: any) {
+      console.error("TTS error:", error);
+      alert("Lỗi khi chuẩn bị giọng đọc: " + (error.message || "Lỗi không xác định"));
     } finally {
       setIsProcessing(false);
     }
