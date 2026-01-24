@@ -1,8 +1,10 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
-// Sử dụng 'latest' để đảm bảo luôn dùng bản cập nhật nhất, tránh lỗi 404 phiên bản cũ
-const MODEL_NAME = 'gemini-1.5-flash-latest';
+// Dựa trên kết quả ListModels, gemini-1.5-flash không có sẵn trong tài khoản này.
+// Thay vào đó, tài khoản có quyền truy cập vào các model thế hệ mới hơn.
+// Chúng ta sẽ ưu tiên sử dụng gemini-2.0-flash (bản ổn định trên v1).
+const MODEL_NAME = 'gemini-2.0-flash';
 
 export interface FilePart {
   inlineData: {
@@ -20,34 +22,37 @@ export class GeminiService {
     try {
       const apiKey = this.getApiKey();
       this.genAI = new GoogleGenerativeAI(apiKey);
-      // Ép hoàn toàn sang v1 cho tất cả các request
-      this.model = this.genAI.getGenerativeModel({
-        model: MODEL_NAME,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ]
-      }, { apiVersion: 'v1' });
-      console.log(`[GeminiService] Initialized with ${MODEL_NAME} (v1)`);
+      this.initModel();
     } catch (e) {
       console.error("[GeminiService] Initialization error:", e);
     }
   }
 
   private getApiKey(): string {
-    // Ưu tiên chuẩn VITE cho môi trường browser
     const env = (import.meta as any).env;
     const key = env?.VITE_GEMINI_API_KEY ||
       env?.GEMINI_API_KEY ||
       process.env.VITE_GEMINI_API_KEY ||
       process.env.GEMINI_API_KEY || '';
-
-    if (key.length < 10) {
-      console.warn("[GeminiService] API Key có vẻ không hợp lệ hoặc chưa được cấu hình.");
-    }
     return key;
+  }
+
+  private initModel(systemInstruction?: string) {
+    const safetySettings = [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    ];
+
+    const modelParams: any = { model: MODEL_NAME, safetySettings };
+    if (systemInstruction) {
+      modelParams.systemInstruction = systemInstruction;
+    }
+
+    // Luôn sử dụng v1 cho các model 2.0/2.5
+    this.model = this.genAI.getGenerativeModel(modelParams, { apiVersion: 'v1' });
+    console.log(`[GeminiService] Model initialized: ${MODEL_NAME}`);
   }
 
   public checkApiKey() {
@@ -58,17 +63,7 @@ export class GeminiService {
 
   public async initChat(systemInstruction: string) {
     this.checkApiKey();
-    this.model = this.genAI.getGenerativeModel({
-      model: MODEL_NAME,
-      systemInstruction: systemInstruction,
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ]
-    }, { apiVersion: 'v1' });
-
+    this.initModel(systemInstruction);
     this.chat = this.model.startChat({
       generationConfig: { temperature: 0.7 },
     });
@@ -79,8 +74,15 @@ export class GeminiService {
     try {
       const result = await this.model.generateContent(prompt);
       return result.response.text();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Generate Text Error:", error);
+      // Nếu gemini-2.0-flash chưa khả dụng (hiếm), thử dùng 2.5 flash
+      if (error.message?.includes("404")) {
+        console.log("Falling back to gemini-2.5-flash...");
+        const fallbackModel = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
+        const result = await fallbackModel.generateContent(prompt);
+        return result.response.text();
+      }
       throw error;
     }
   }
@@ -88,17 +90,14 @@ export class GeminiService {
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     this.checkApiKey();
     if (!this.chat) {
-      await this.initChat("Bạn là một trợ lý giáo dục chuyên nghiệp, luôn sẵn lòng hỗ trợ giáo viên Việt Nam.");
+      await this.initChat("Bạn là một trợ lý giáo dục chuyên nghiệp.");
     }
 
     try {
       const parts: any[] = [];
-      // Lọc các fileParts để đảm bảo dữ liệu hợp lệ trước khi gửi
-      if (fileParts && fileParts.length > 0) {
+      if (fileParts) {
         fileParts.forEach(part => {
-          if (part.inlineData && part.inlineData.data) {
-            parts.push(part);
-          }
+          if (part.inlineData?.data) parts.push(part);
         });
       }
       parts.push({ text: message });
@@ -111,12 +110,8 @@ export class GeminiService {
           grounding: (chunk as any).candidates?.[0]?.groundingMetadata
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Gemini Stream Error:", error);
-      // Nếu lỗi 404 lại xảy ra, thử khởi tạo lại chat
-      if (error.message?.includes("404")) {
-        throw new Error("Lỗi phiên bản AI (404). Vui lòng F5 trang web.");
-      }
       throw error;
     }
   }
@@ -160,14 +155,10 @@ export class GeminiService {
       parts.push({ text: prompt });
 
       const result = await structuredModel.generateContent(parts);
-      let text = result.response.text();
-      text = this.cleanJSON(text);
-
-      const parsed = JSON.parse(text);
-      return parsed;
-    } catch (error: any) {
+      return JSON.parse(this.cleanJSON(result.response.text()));
+    } catch (error) {
       console.error("Structured Exam Error:", error);
-      throw new Error(`AI không thể tạo cấu trúc đề: ${error.message}`);
+      throw error;
     }
   }
 
@@ -183,7 +174,7 @@ export class GeminiService {
 
   public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
     this.checkApiKey();
-    const prompt = `Tạo phiếu học tập môn ${subject}, chủ đề ${topic}, ${questionCount} câu, dạng ${format}. Trả về JSON phù hợp Schema.`;
+    const prompt = `Tạo phiếu học tập môn ${subject}, chủ đề ${topic}, ${questionCount} câu, dạng ${format}. Trả về JSON phù hợp.`;
 
     try {
       const model = this.genAI.getGenerativeModel({
@@ -224,7 +215,7 @@ export class GeminiService {
 
   public async generateSuggestions(history: string[], persona: string) {
     try {
-      const prompt = `History: ${history.join(' | ')}. Persona: ${persona}. Suggest 3 next actions in JSON: { "suggestions": string[] }`;
+      const prompt = `Lịch sử: ${history.join(' | ')}. Đề xuất 3 hành động tiếp theo dạng JSON { "suggestions": string[] }`;
       const result = await this.model.generateContent(prompt);
       const data = JSON.parse(this.cleanJSON(result.response.text()));
       return data.suggestions || [];
@@ -234,20 +225,12 @@ export class GeminiService {
   }
 
   public async generateImage(prompt: string) {
-    try {
-      const cleanPrompt = encodeURIComponent(prompt.replace(/[^\w\s]/gi, '').slice(0, 500));
-      return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${Math.random()}`;
-    } catch (e) {
-      return null;
-    }
+    const cleanPrompt = encodeURIComponent(prompt.replace(/[^\w\s]/gi, '').slice(0, 500));
+    return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${Math.random()}`;
   }
 
   public async generateSpeech(text: string) {
-    try {
-      return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.slice(0, 200))}&tl=vi&client=tw-ob`;
-    } catch (e) {
-      return null;
-    }
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.slice(0, 200))}&tl=vi&client=tw-ob`;
   }
 }
 
