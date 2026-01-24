@@ -2,12 +2,9 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 /**
- * GEMINI SERVICE - VERSION 4.2 (FIXED)
- * Đã sửa lỗi cú pháp và tích hợp Diagnostic Panel chân trang.
+ * GEMINI SERVICE - VERSION 4.3 (PROMPT FALLBACK)
+ * Giải quyết lỗi "Unknown name systemInstruction" bằng cách gộp chỉ dẫn vào Prompt nếu v1 không hỗ trợ.
  */
-
-const FLASH_MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001'];
-const PRO_MODELS = ['gemini-1.5-pro', 'gemini-1.5-pro-latest', 'gemini-pro'];
 
 export interface FilePart {
   inlineData: {
@@ -16,137 +13,97 @@ export interface FilePart {
   }
 }
 
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro'];
+
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private chat: any | null = null;
   private model: any | null = null;
-  private currentModelName: string = FLASH_MODELS[0];
-  private currentApiVersion: 'v1' | 'v1beta' = 'v1';
-  private currentSystemInstruction: string = "Bạn là một trợ lý giáo dục chuyên nghiệp tại Việt Nam.";
+  private currentModelName: string = MODELS[0];
+  private systemInstruction: string = "Bạn là một trợ lý giáo dục chuyên nghiệp tại Việt Nam.";
 
   constructor() {
     this.initialize();
   }
 
   private setStatus(status: string) {
-    if (typeof window !== 'undefined') {
-      (window as any).ai_status = status;
-    }
+    if (typeof window !== 'undefined') (window as any).ai_status = status;
   }
 
   private getApiKey(): string {
-    let key = '';
-    try {
-      // 1. Kiểm tra trong localStorage (Key thủ công)
-      key = localStorage.getItem('manually_entered_api_key') || '';
-
-      // 2. Kiểm tra các nguồn khác nếu không có key thủ công
-      if (!key) {
-        key = (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-          (window as any).VITE_GEMINI_API_KEY ||
-          (process as any).env?.VITE_GEMINI_API_KEY || '';
-      }
-    } catch (e) { }
-    return (key && key !== 'undefined') ? key.trim() : '';
+    return localStorage.getItem('manually_entered_api_key') ||
+      (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+      (window as any).VITE_GEMINI_API_KEY || '';
   }
 
   private initialize() {
-    const apiKey = this.getApiKey();
-    if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-      this.setupModel();
+    const key = this.getApiKey();
+    if (key) {
+      this.genAI = new GoogleGenerativeAI(key);
+      this.setupModel(MODELS[0]);
       this.setStatus("Sẵn sàng");
     } else {
-      this.setStatus("LỖI: Chưa có API Key");
+      this.setStatus("LỖI: Thiếu API Key");
     }
   }
 
-  private setupModel(name: string = FLASH_MODELS[0], version: 'v1' | 'v1beta' = 'v1') {
+  private setupModel(modelName: string) {
     if (!this.genAI) return;
-    this.currentModelName = name;
-    this.currentApiVersion = version;
+    this.currentModelName = modelName;
 
-    const safetySettings = [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    ];
-
+    // Sử dụng v1beta cho tính năng cao nhất, v1 làm dự phòng
     this.model = this.genAI.getGenerativeModel({
-      model: name,
-      safetySettings,
-      systemInstruction: this.currentSystemInstruction,
-    }, { apiVersion: version });
+      model: modelName,
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ]
+    }, { apiVersion: 'v1beta' });
   }
 
   private async ensureInitialized() {
-    if (!this.getApiKey()) {
-      this.setStatus("LỖI: Thầy Cô hãy kiểm tra .env.local");
-      throw new Error("Chưa tìm thấy API Key");
-    }
-    if (!this.genAI || !this.model) this.initialize();
+    if (!this.genAI) this.initialize();
+    if (!this.genAI) throw new Error("Chưa có API Key");
   }
 
-  private async retryWithNextModel(error: any): Promise<boolean> {
-    if (!this.genAI) return false;
-
-    const isNotFoundError = error.message?.includes("404") || error.message?.includes("not found") || error.message?.includes("500");
-    if (!isNotFoundError) return false;
-
-    this.setStatus(`Đang k.tra Model mới...`);
-
-    const attempts = [
-      { name: FLASH_MODELS[0], version: 'v1beta' as const },
-      { name: FLASH_MODELS[1], version: 'v1' as const },
-      { name: PRO_MODELS[0], version: 'v1' as const },
-      { name: 'gemini-pro', version: 'v1' as const },
-    ];
-
-    for (const attempt of attempts) {
-      try {
-        this.setupModel(attempt.name, attempt.version);
-        const testResult = await this.model.generateContent("ping");
-        if (testResult) {
-          this.setStatus(`Đã chuyển sang ${attempt.name}`);
-          return true;
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    this.setStatus("LỖI: Toàn bộ Model thất bại");
-    return false;
+  // Tăng cường Prompt với System Instruction để tránh lỗi API Version
+  private enrichPrompt(prompt: string): string {
+    return `[System Instruction: ${this.systemInstruction}]\n\nUser Request: ${prompt}`;
   }
 
-  public async initChat(systemInstruction: string) {
+  public async initChat(instruction: string) {
     await this.ensureInitialized();
-    if (systemInstruction) this.currentSystemInstruction = systemInstruction;
-    this.setupModel(this.currentModelName, this.currentApiVersion);
+    this.systemInstruction = instruction;
     this.chat = this.model.startChat({
-      generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 8192 },
+      history: [
+        { role: 'user', parts: [{ text: `Quy tắc làm việc của bạn: ${instruction}` }] },
+        { role: 'model', parts: [{ text: "Tôi đã hiểu. Tôi sẵn sàng hỗ trợ Thầy Cô." }] }
+      ]
     });
   }
 
   public async generateText(prompt: string): Promise<string> {
     await this.ensureInitialized();
-    this.setStatus("Đang xử lý...");
+    this.setStatus("Đang phản hồi...");
     try {
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent(this.enrichPrompt(prompt));
       this.setStatus("Hoàn tất");
       return result.response.text();
     } catch (error: any) {
-      if (await this.retryWithNextModel(error)) {
+      console.error("Text Error:", error);
+      if (error.message?.includes("404")) {
+        this.setStatus("Thử model dự phòng...");
+        this.setupModel(MODELS[1]);
         return this.generateText(prompt);
       }
-      this.setStatus(`LỖI: ${error.message.substring(0, 20)}`);
+      this.setStatus("LỖI KẾT NỐI");
       throw error;
     }
   }
 
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
-    if (!this.chat) await this.initChat(this.currentSystemInstruction);
+    if (!this.chat) await this.initChat(this.systemInstruction);
     this.setStatus("Đang phản hồi...");
 
     try {
@@ -162,15 +119,9 @@ export class GeminiService {
       }
       this.setStatus("Hoàn tất");
     } catch (error: any) {
-      if (await this.retryWithNextModel(error)) {
-        this.chat = null;
-        const stream = this.sendMessageStream(message, fileParts);
-        for await (const chunk of stream) yield chunk;
-        return;
-      }
       this.chat = null;
       this.setStatus("LỖI KẾT NỐI");
-      throw new Error(`Lỗi: ${error.message}`);
+      throw error;
     }
   }
 
@@ -204,22 +155,19 @@ export class GeminiService {
             }
           }
         }
-      }, { apiVersion: this.currentApiVersion });
+      });
 
       const parts: any[] = [];
       if (fileParts) parts.push(...fileParts);
-      parts.push({ text: prompt });
+      parts.push({ text: this.enrichPrompt(prompt) });
 
       const result = await structuredModel.generateContent(parts);
-      this.setStatus("Đã soạn xong");
+      this.setStatus("Hoàn tất");
       return JSON.parse(this.cleanJSON(result.response.text()));
     } catch (error: any) {
-      if (await this.retryWithNextModel(error)) {
-        return this.generateExamQuestionsStructured(prompt, fileParts);
-      }
-      this.setStatus("LỖI CẤU TRÚC");
-      const backupResult = await this.model.generateContent(prompt + "\nTrả về JSON.");
-      return JSON.parse(this.cleanJSON(backupResult.response.text()));
+      console.warn("Structured Error, trying non-structured...", error);
+      const result = await this.model.generateContent(this.enrichPrompt(prompt) + "\nTrả về JSON.");
+      return JSON.parse(this.cleanJSON(result.response.text()));
     }
   }
 
@@ -237,7 +185,7 @@ export class GeminiService {
 
   public async generateSuggestions(history: string[], persona: string) {
     try {
-      const prompt = `Gợi ý 3 hành động ngắn gọn cho ${persona}. Lịch sử: ${history.join('|')}. Trả về JSON { "suggestions": [] }`;
+      const prompt = `Gợi ý 3 hành động tiếp theo cho ${persona}. Lịch sử: ${history.join('|')}. Trả về JSON { "suggestions": [] }`;
       const result = await this.model.generateContent(prompt);
       return JSON.parse(this.cleanJSON(result.response.text())).suggestions || [];
     } catch (e) { return []; }
