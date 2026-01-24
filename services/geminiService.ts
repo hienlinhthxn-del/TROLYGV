@@ -2,12 +2,13 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 /**
- * GEMINI SERVICE - VERSION 3.0 (STABLE)
- * Sử dụng API v1beta để đảm bảo tính năng Structured Output và Grounding hoạt động tốt nhất.
+ * GEMINI SERVICE - VERSION 3.1 (STABLE)
+ * Điều chỉnh sang v1 để tránh lỗi 404 trên một số API Key mới.
  */
 
 const PRIMARY_MODEL = 'gemini-1.5-flash';
-const FALLBACK_MODEL = 'gemini-1.5-flash-8b';
+const FALLBACK_MODEL = 'gemini-1.5-flash-latest';
+const LITE_MODEL = 'gemini-1.5-flash-8b';
 
 export interface FilePart {
   inlineData: {
@@ -43,39 +44,32 @@ export class GeminiService {
       } catch (e) { }
     }
 
-    // 3. Kiểm tra window object (Dự phòng)
+    // 3. Kiểm tra window object
     if (!key) {
       key = (window as any).VITE_GEMINI_API_KEY || (window as any).GEMINI_API_KEY;
     }
 
-    if (key && key !== 'undefined' && key !== 'PLACEHOLDER_API_KEY') {
-      return key.trim();
-    }
-    return '';
+    return key ? key.trim() : '';
   }
 
   private initialize() {
     try {
       const apiKey = this.getApiKey();
       if (!apiKey) {
-        console.error("[GeminiService] CRITICAL: API Key not found!");
+        console.error("[GeminiService] API Key not found");
         return;
       }
 
       this.genAI = new GoogleGenerativeAI(apiKey);
-      console.log("[GeminiService] Initialized with Key starting with:", apiKey.substring(0, 5));
       this.setupModel();
     } catch (error) {
-      console.error("[GeminiService] Error during initialization:", error);
+      console.error("[GeminiService] Init Error:", error);
     }
   }
 
   private setupModel(systemInstruction?: string) {
     if (!this.genAI) return;
-
-    if (systemInstruction) {
-      this.currentSystemInstruction = systemInstruction;
-    }
+    if (systemInstruction) this.currentSystemInstruction = systemInstruction;
 
     const safetySettings = [
       { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -85,43 +79,30 @@ export class GeminiService {
     ];
 
     try {
-      // Sử dụng API v1beta cho tính ổn định cao nhất với các model mới
+      // Chuyển sang v1 để tương thích rộng hơn
       this.model = this.genAI.getGenerativeModel({
         model: PRIMARY_MODEL,
         safetySettings,
         systemInstruction: this.currentSystemInstruction,
-      }, { apiVersion: 'v1beta' });
+      }, { apiVersion: 'v1' });
 
-      console.log(`[GeminiService] Model ${PRIMARY_MODEL} configured on v1beta.`);
+      console.log(`[GeminiService] Configured ${PRIMARY_MODEL} on v1`);
     } catch (error) {
-      console.error("[GeminiService] Setup Model Error:", error);
+      console.error("[GeminiService] Setup Error:", error);
     }
   }
 
   private async ensureInitialized() {
-    if (!this.genAI || !this.model) {
-      this.initialize();
-    }
-
-    if (!this.getApiKey()) {
-      throw new Error("Chưa tìm thấy API Key. Thầy Cô vui lòng kiểm tra tệp .env.local và khởi động lại ứng dụng.");
-    }
-
-    if (!this.model) {
-      throw new Error("Không thể khởi tạo mô hình AI. Thầy Cô vui lòng kiểm tra kết nối mạng.");
-    }
+    if (!this.genAI || !this.model) this.initialize();
+    if (!this.getApiKey()) throw new Error("Vui lòng cấu hình VITE_GEMINI_API_KEY trong tệp .env.local");
+    if (!this.model) throw new Error("Chưa khởi tạo được Model AI");
   }
 
   public async initChat(systemInstruction: string) {
     await this.ensureInitialized();
     this.setupModel(systemInstruction);
     this.chat = this.model.startChat({
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 8192,
-      },
+      generationConfig: { temperature: 0.7, topP: 0.95, topK: 40, maxOutputTokens: 8192 },
     });
   }
 
@@ -129,66 +110,50 @@ export class GeminiService {
     await this.ensureInitialized();
     try {
       const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+      return result.response.text();
     } catch (error: any) {
-      console.error("GenerateText Error:", error);
-      if (error.message?.includes("404") || error.message?.includes("500") || error.message?.includes("fetch")) {
-        console.warn("Attempting fallback to 1.5-flash-8b...");
-        const altModel = this.genAI!.getGenerativeModel({ model: FALLBACK_MODEL }, { apiVersion: 'v1beta' });
+      console.warn("Retrying with fallback model because of:", error.message);
+      try {
+        const altModel = this.genAI!.getGenerativeModel({ model: FALLBACK_MODEL }, { apiVersion: 'v1' });
         const result = await altModel.generateContent(prompt);
-        return (await result.response).text();
+        return result.response.text();
+      } catch (innerError: any) {
+        throw new Error(`Lỗi kết nối AI: ${innerError.message}`);
       }
-      throw error;
     }
   }
 
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
-    if (!this.chat) {
-      await this.initChat(this.currentSystemInstruction);
-    }
+    if (!this.chat) await this.initChat(this.currentSystemInstruction);
 
     try {
       const parts: any[] = [];
-      if (fileParts && fileParts.length > 0) {
+      if (fileParts) {
         fileParts.forEach(part => {
-          if (part.inlineData?.data && part.inlineData?.mimeType) {
-            parts.push(part);
-          }
+          if (part.inlineData?.data && part.inlineData?.mimeType) parts.push(part);
         });
       }
       parts.push({ text: message });
 
       const result = await this.chat.sendMessageStream(parts);
-
       for await (const chunk of result.stream) {
-        try {
-          const chunkText = chunk.text();
-          yield {
-            text: chunkText,
-            grounding: (chunk as any).candidates?.[0]?.groundingMetadata
-          };
-        } catch (e) {
-          console.warn("[GeminiService] Chunk processing error:", e);
-        }
+        yield {
+          text: chunk.text(),
+          grounding: (chunk as any).candidates?.[0]?.groundingMetadata
+        };
       }
     } catch (error: any) {
       console.error("Stream Error:", error);
-      this.chat = null; // Reset chat if broken
-
-      const readableError = error.message || "";
-      if (readableError.includes("429")) throw new Error("Yêu cầu quá nhanh. Thầy Cô vui lòng đợi 1 phút.");
-      if (readableError.includes("API_KEY_INVALID")) throw new Error("API Key không hợp lệ. Vui lòng kiểm tra lại tệp .env.local.");
-      if (readableError.includes("SAFETY")) throw new Error("Nội dung bị chặn bởi bộ lọc an toàn. Thầy Cô thử diễn đạt lại nhé.");
-
-      throw new Error(`AI không phản hồi: ${error.message || "Lỗi kết nối"}`);
+      this.chat = null;
+      throw new Error(`AI không phản hồi (404/500). Thầy Cô vui lòng thử lại hoặc đổi API Key.`);
     }
   }
 
   public async generateExamQuestionsStructured(prompt: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
     try {
+      // Structured Output cũng khả dụng trên v1 cho 1.5-flash
       const structuredModel = this.genAI!.getGenerativeModel({
         model: PRIMARY_MODEL,
         generationConfig: {
@@ -218,24 +183,26 @@ export class GeminiService {
             required: ["questions"]
           }
         }
-      }, { apiVersion: 'v1beta' });
+      }, { apiVersion: 'v1' });
 
       const parts: any[] = [];
       if (fileParts) parts.push(...fileParts);
       parts.push({ text: prompt });
 
       const result = await structuredModel.generateContent(parts);
-      const response = await result.response;
-      return JSON.parse(this.cleanJSON(response.text()));
+      return JSON.parse(this.cleanJSON(result.response.text()));
     } catch (error: any) {
-      console.error("Structured Gen Error:", error);
-      throw new Error(`Lỗi cấu trúc đề thi: ${error.message}`);
+      console.error("Structured Gen Error:", error.message);
+      // Fallback cho model 8b nếu 1.5-flash gốc từ chối
+      const liteModel = this.genAI!.getGenerativeModel({ model: LITE_MODEL }, { apiVersion: 'v1' });
+      const result = await liteModel.generateContent(prompt + "\nTrả về JSON.");
+      return JSON.parse(this.cleanJSON(result.response.text()));
     }
   }
 
   public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
     await this.ensureInitialized();
-    const prompt = `Tạo phiếu học tập cho học sinh tiểu học (Lớp 1). Môn: ${subject}. Chủ đề: ${topic}. Số lượng: ${questionCount} câu. Dạng: ${format}. Định dạng trả về: JSON.`;
+    const prompt = `Tạo phiếu học tập cho học sinh tiểu học (Lớp 1). Môn: ${subject}. Chủ đề: ${topic}. Số lượng: ${questionCount} câu. Dạng: ${format}. Trả về JSON.`;
 
     try {
       const schemaModel = this.genAI!.getGenerativeModel({
@@ -266,44 +233,37 @@ export class GeminiService {
             required: ["title", "subject", "questions"]
           }
         }
-      }, { apiVersion: 'v1beta' });
+      }, { apiVersion: 'v1' });
 
       const result = await schemaModel.generateContent(prompt);
-      const response = await result.response;
-      return JSON.parse(this.cleanJSON(response.text()));
+      return JSON.parse(this.cleanJSON(result.response.text()));
     } catch (e: any) {
-      console.error("Worksheet JSON error:", e);
-      throw new Error(`Lỗi tạo phiếu học tập: ${e.message}`);
+      throw new Error(`Lỗi tạo phiếu: ${e.message}`);
     }
   }
 
   private cleanJSON(text: string): string {
     let cleaned = text.trim();
-    if (cleaned.includes('```json')) {
-      cleaned = cleaned.split('```json')[1].split('```')[0].trim();
-    } else if (cleaned.includes('```')) {
-      cleaned = cleaned.split('```')[1].split('```')[0].trim();
-    }
+    if (cleaned.includes('```json')) cleaned = cleaned.split('```json')[1].split('```')[0].trim();
+    else if (cleaned.includes('```')) cleaned = cleaned.split('```')[1].split('```')[0].trim();
     return cleaned;
   }
 
   public async generateSuggestions(history: string[], persona: string) {
     try {
       await this.ensureInitialized();
-      const prompt = `Lịch sử chat: ${history.join(' | ')}. Bạn là ${persona}. Hãy gợi ý 3 câu hỏi/hành động tiếp theo ngắn gọn dưới dạng JSON: { "suggestions": ["...", "...", "..."] }`;
+      const prompt = `Gợi ý 3 câu hỏi tiếp theo cho ${persona} dựa trên: ${history.join(' | ')}. Trả về JSON: { "suggestions": [] }`;
       const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const data = JSON.parse(this.cleanJSON(response.text()));
+      const data = JSON.parse(this.cleanJSON(result.response.text()));
       return data.suggestions || [];
     } catch (e) {
-      console.warn("Could not generate suggestions:", e);
       return [];
     }
   }
 
   public async generateImage(prompt: string) {
     const randomSeed = Math.floor(Math.random() * 1000000);
-    const cleanPrompt = encodeURIComponent(prompt.replace(/[^\w\s]/gi, ' ').trim().slice(0, 500));
+    const cleanPrompt = encodeURIComponent(prompt.replace(/[^\w\s]/gi, ' ').slice(0, 500));
     return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}`;
   }
 
