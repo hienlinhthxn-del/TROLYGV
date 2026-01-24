@@ -3,6 +3,7 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from
 
 const MODEL_NAME = 'gemini-1.5-flash';
 const STABLE_MODEL = 'gemini-1.5-flash';
+const FALLBACK_MODEL = 'gemini-1.5-flash-8b';
 
 export interface FilePart {
   inlineData: {
@@ -20,15 +21,20 @@ export class GeminiService {
     try {
       const apiKey = this.getApiKey();
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: MODEL_NAME });
-      console.log(`[GeminiService] Initialized with model: ${MODEL_NAME}`);
+      this.model = this.genAI.getGenerativeModel({ model: MODEL_NAME }, { apiVersion: 'v1' });
+      console.log(`[GeminiService] Initialized with model: ${MODEL_NAME} (v1)`);
     } catch (e) {
       console.error("[GeminiService] Error during basic initialization:", e);
     }
   }
 
   private getApiKey(): string {
-    const key = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+    const key = (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+      (import.meta as any).env?.GEMINI_API_KEY ||
+      process.env.VITE_GEMINI_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.API_KEY || '';
+
     if (!key || key === 'PLACEHOLDER_API_KEY' || key.trim() === '') {
       return '';
     }
@@ -47,7 +53,7 @@ export class GeminiService {
     this.model = this.genAI.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: systemInstruction
-    });
+    }, { apiVersion: 'v1' });
     this.chat = this.model.startChat({
       generationConfig: {
         temperature: 0.7,
@@ -136,7 +142,7 @@ export class GeminiService {
             required: ["questions"]
           }
         }
-      });
+      }, { apiVersion: 'v1' });
 
       const parts: any[] = [];
       if (fileParts && fileParts.length > 0) {
@@ -241,7 +247,7 @@ Cấu trúc JSON yêu cầu:
             required: ["title", "subject", "questions"]
           }
         }
-      });
+      }, { apiVersion: 'v1' });
 
       const result = await model.generateContent(prompt);
       let text = result.response.text();
@@ -278,7 +284,7 @@ Cấu trúc JSON yêu cầu:
             }
           }
         }
-      });
+      }, { apiVersion: 'v1' });
 
       const result = await model.generateContent(prompt);
       const data = JSON.parse(result.response.text());

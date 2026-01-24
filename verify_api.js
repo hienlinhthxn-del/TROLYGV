@@ -10,7 +10,7 @@ let apiKey = '';
 try {
     if (fs.existsSync(envPath)) {
         const envContent = fs.readFileSync(envPath, 'utf-8');
-        const match = envContent.match(/GEMINI_API_KEY=(.+)/);
+        const match = envContent.match(/(?:VITE_)?GEMINI_API_KEY=(.+)/);
         if (match) {
             apiKey = match[1].trim();
             // Remove quotes if present
