@@ -178,7 +178,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       if ('speechSynthesis' in window) {
         setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
       } else {
-        const url = await geminiService.generateSpeech(topic, voiceName);
+        const url = await geminiService.generateSpeech(topic);
         if (url) {
           setAudioUrl(url);
           setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");

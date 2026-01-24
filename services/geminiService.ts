@@ -1,12 +1,13 @@
+
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 /**
- * GEMINI SERVICE - VERSION 4.0 (TURBO STABLE)
- * Cơ chế "Phòng thủ đa tầng": Tự động thử lại với nhiều Model và Version nếu bị lỗi 404.
+ * GEMINI SERVICE - VERSION 4.2 (FIXED)
+ * Đã sửa lỗi cú pháp và tích hợp Diagnostic Panel chân trang.
  */
 
-const FLASH_MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-002'];
-const PRO_MODELS = ['gemini-1.5-pro', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-002'];
+const FLASH_MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001'];
+const PRO_MODELS = ['gemini-1.5-pro', 'gemini-1.5-pro-latest', 'gemini-pro'];
 
 export interface FilePart {
   inlineData: {
@@ -27,12 +28,24 @@ export class GeminiService {
     this.initialize();
   }
 
+  private setStatus(status: string) {
+    if (typeof window !== 'undefined') {
+      (window as any).ai_status = status;
+    }
+  }
+
   private getApiKey(): string {
     let key = '';
     try {
-      key = (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-        (window as any).VITE_GEMINI_API_KEY ||
-        (process as any).env?.VITE_GEMINI_API_KEY || '';
+      // 1. Kiểm tra trong localStorage (Key thủ công)
+      key = localStorage.getItem('manually_entered_api_key') || '';
+
+      // 2. Kiểm tra các nguồn khác nếu không có key thủ công
+      if (!key) {
+        key = (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+          (window as any).VITE_GEMINI_API_KEY ||
+          (process as any).env?.VITE_GEMINI_API_KEY || '';
+      }
     } catch (e) { }
     return (key && key !== 'undefined') ? key.trim() : '';
   }
@@ -42,6 +55,9 @@ export class GeminiService {
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
       this.setupModel();
+      this.setStatus("Sẵn sàng");
+    } else {
+      this.setStatus("LỖI: Chưa có API Key");
     }
   }
 
@@ -62,47 +78,44 @@ export class GeminiService {
       safetySettings,
       systemInstruction: this.currentSystemInstruction,
     }, { apiVersion: version });
-
-    console.log(`[GeminiService] Initialized: ${name} (${version})`);
   }
 
   private async ensureInitialized() {
-    if (!this.getApiKey()) throw new Error("Thầy Cô chưa cấu hình API Key trong .env.local");
+    if (!this.getApiKey()) {
+      this.setStatus("LỖI: Thầy Cô hãy kiểm tra .env.local");
+      throw new Error("Chưa tìm thấy API Key");
+    }
     if (!this.genAI || !this.model) this.initialize();
   }
 
-  // Hàm quan trọng: Tự động đổi model khi lỗi 404
   private async retryWithNextModel(error: any): Promise<boolean> {
     if (!this.genAI) return false;
 
-    const isNotFoundError = error.message?.includes("404") || error.message?.includes("not found");
+    const isNotFoundError = error.message?.includes("404") || error.message?.includes("not found") || error.message?.includes("500");
     if (!isNotFoundError) return false;
 
-    console.warn(`[GeminiService] Model ${this.currentModelName} (${this.currentApiVersion}) bị lỗi 404. Đang thử model khác...`);
+    this.setStatus(`Đang k.tra Model mới...`);
 
-    // Danh sách thử nghiệm lần lượt
     const attempts = [
-      { name: FLASH_MODELS[0], version: 'v1' as const },
-      { name: FLASH_MODELS[1], version: 'v1' as const },
       { name: FLASH_MODELS[0], version: 'v1beta' as const },
+      { name: FLASH_MODELS[1], version: 'v1' as const },
       { name: PRO_MODELS[0], version: 'v1' as const },
-      { name: PRO_MODELS[0], version: 'v1beta' as const },
+      { name: 'gemini-pro', version: 'v1' as const },
     ];
 
     for (const attempt of attempts) {
-      if (attempt.name === this.currentModelName && attempt.version === this.currentApiVersion) continue;
-
       try {
-        console.log(`[GeminiService] Thử nghiệm: ${attempt.name} (${attempt.version})`);
         this.setupModel(attempt.name, attempt.version);
-        // Kiểm tra nhanh bằng một câu hỏi ngắn
-        await this.model.generateContent("ping");
-        console.log(`[GeminiService] Đổi Model thành công sang: ${attempt.name}`);
-        return true;
+        const testResult = await this.model.generateContent("ping");
+        if (testResult) {
+          this.setStatus(`Đã chuyển sang ${attempt.name}`);
+          return true;
+        }
       } catch (e) {
         continue;
       }
     }
+    this.setStatus("LỖI: Toàn bộ Model thất bại");
     return false;
   }
 
@@ -117,13 +130,16 @@ export class GeminiService {
 
   public async generateText(prompt: string): Promise<string> {
     await this.ensureInitialized();
+    this.setStatus("Đang xử lý...");
     try {
       const result = await this.model.generateContent(prompt);
+      this.setStatus("Hoàn tất");
       return result.response.text();
     } catch (error: any) {
       if (await this.retryWithNextModel(error)) {
         return this.generateText(prompt);
       }
+      this.setStatus(`LỖI: ${error.message.substring(0, 20)}`);
       throw error;
     }
   }
@@ -131,6 +147,7 @@ export class GeminiService {
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
     if (!this.chat) await this.initChat(this.currentSystemInstruction);
+    this.setStatus("Đang phản hồi...");
 
     try {
       const parts: any[] = [];
@@ -143,6 +160,7 @@ export class GeminiService {
       for await (const chunk of result.stream) {
         yield { text: chunk.text(), grounding: (chunk as any).candidates?.[0]?.groundingMetadata };
       }
+      this.setStatus("Hoàn tất");
     } catch (error: any) {
       if (await this.retryWithNextModel(error)) {
         this.chat = null;
@@ -151,14 +169,16 @@ export class GeminiService {
         return;
       }
       this.chat = null;
-      throw new Error(`Lỗi AI: ${error.message}. Thầy Cô hãy thử đổi API Key mới.`);
+      this.setStatus("LỖI KẾT NỐI");
+      throw new Error(`Lỗi: ${error.message}`);
     }
   }
 
   public async generateExamQuestionsStructured(prompt: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
+    this.setStatus("Đang soạn đề...");
     try {
-      const config = {
+      const structuredModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
         generationConfig: {
           responseMimeType: "application/json",
@@ -173,41 +193,38 @@ export class GeminiService {
                   properties: {
                     type: { type: SchemaType.STRING },
                     level: { type: SchemaType.STRING },
-                    strand: { type: SchemaType.STRING },
                     content: { type: SchemaType.STRING },
-                    image: { type: SchemaType.STRING },
-                    options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                     answer: { type: SchemaType.STRING },
+                    options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                     explanation: { type: SchemaType.STRING }
                   },
-                  required: ["type", "level", "content", "answer"]
+                  required: ["type", "content", "answer"]
                 }
               }
-            },
-            required: ["questions"]
+            }
           }
         }
-      };
+      }, { apiVersion: this.currentApiVersion });
 
-      const structuredModel = this.genAI!.getGenerativeModel(config, { apiVersion: this.currentApiVersion });
       const parts: any[] = [];
       if (fileParts) parts.push(...fileParts);
       parts.push({ text: prompt });
 
       const result = await structuredModel.generateContent(parts);
+      this.setStatus("Đã soạn xong");
       return JSON.parse(this.cleanJSON(result.response.text()));
     } catch (error: any) {
       if (await this.retryWithNextModel(error)) {
         return this.generateExamQuestionsStructured(prompt, fileParts);
       }
-      // Nếu không tạo được cấu trúc JSON, dùng prompt thủ công
-      const result = await this.model.generateContent(prompt + "\nTrả về JSON chuẩn.");
-      return JSON.parse(this.cleanJSON(result.response.text()));
+      this.setStatus("LỖI CẤU TRÚC");
+      const backupResult = await this.model.generateContent(prompt + "\nTrả về JSON.");
+      return JSON.parse(this.cleanJSON(backupResult.response.text()));
     }
   }
 
-  public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
-    const prompt = `Tạo phiếu học tập tiểu học: Môn ${subject}, Chủ đề ${topic}, ${questionCount} câu. Trả về JSON.`;
+  public async generateWorksheetContent(topic: string, subject: string, questionCount: number) {
+    const prompt = `Tạo phiếu học tập: Môn ${subject}, ${topic}, ${questionCount} câu. Trả về JSON.`;
     return this.generateExamQuestionsStructured(prompt);
   }
 
@@ -220,14 +237,10 @@ export class GeminiService {
 
   public async generateSuggestions(history: string[], persona: string) {
     try {
-      await this.ensureInitialized();
-      const prompt = `Gợi ý 3 hành động tiếp theo cho ${persona} từ: ${history.join(' | ')}. Trả về JSON { "suggestions": [] }`;
+      const prompt = `Gợi ý 3 hành động ngắn gọn cho ${persona}. Lịch sử: ${history.join('|')}. Trả về JSON { "suggestions": [] }`;
       const result = await this.model.generateContent(prompt);
-      const data = JSON.parse(this.cleanJSON(result.response.text()));
-      return data.suggestions || [];
-    } catch (e) {
-      return [];
-    }
+      return JSON.parse(this.cleanJSON(result.response.text())).suggestions || [];
+    } catch (e) { return []; }
   }
 
   public async generateImage(prompt: string) {
@@ -242,4 +255,4 @@ export class GeminiService {
 
 export const geminiService = new GeminiService();
 export const generateWorksheetContent = (topic: string, subject: string, questionCount: number, format?: string) =>
-  geminiService.generateWorksheetContent(topic, subject, questionCount, format);
+  geminiService.generateWorksheetContent(topic, subject, questionCount);
