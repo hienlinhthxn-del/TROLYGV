@@ -225,21 +225,35 @@ export class GeminiService {
     }
   }
 
-  public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
+  public async generateWorksheetContentDetailed(topic: string, subject: string, config: { mcq: number, tf: number, fill: number, match: number, essay: number }) {
+    const total = config.mcq + config.tf + config.fill + config.match + config.essay;
     const prompt = `Bạn là trợ lý soạn bài cho giáo viên lớp 1. Hãy tạo phiếu học tập mới:
     - Môn: ${subject}
     - Chủ đề: ${topic}
-    - Số lượng: ${questionCount} câu
-    - Định dạng: ${format === 'trac-nghiem' ? 'Trắc nghiệm' : format === 'tu-luan' ? 'Tự luận' : 'Hỗn hợp'}
+    - CƠ CẤU CÂU HỎI (Tổng ${total} câu):
+      + ${config.mcq} câu Trắc nghiệm (nhiều lựa chọn: A, B, C, D)
+      + ${config.tf} câu Đúng/Sai (Học sinh chọn ý Đúng hoặc Sai)
+      + ${config.fill} câu Điền khuyết (Điền từ còn thiếu vào chỗ trống)
+      + ${config.match} câu Nối (Nối ý ở cột A với cột B)
+      + ${config.essay} câu Tự luận (Học sinh tự trả lời/viết)
+    
     - YÊU CẦU ĐẶC BIỆT:
-      1. Nội dung cực kỳ đơn giản, phù hợp học sinh 6 tuổi.
+      1. Nội dung cực kỳ đơn giản, ngôn ngữ trong sáng phù hợp học sinh 6 tuổi.
       2. Với mỗi câu hỏi, hãy cung cấp một đoạn mô tả hình ảnh minh họa ngắn chọn vào trường "imagePrompt" (ví dụ: "con mèo đang ngủ", "5 quả táo đỏ").
       3. Hãy đặt cho phiếu học tập một tiêu đề sáng tạo trong trường "title".
-      4. Trả về JSON chuẩn.`;
+      4. TRẢ VỀ JSON chuẩn theo đúng cấu trúc.`;
+
     const result = await this.generateExamQuestionsStructured(prompt);
     if (!result.title) result.title = `Phiếu học tập ${subject}: ${topic}`;
     if (!result.subject) result.subject = subject;
     return result;
+  }
+
+  public async generateWorksheetContent(topic: string, subject: string, questionCount: number, format: string = 'hon-hop') {
+    // Để tương thích ngược, chúng ta tính toán cơ cấu mặc định
+    const mcq = format === 'tu-luan' ? 0 : format === 'trac-nghiem' ? questionCount : Math.ceil(questionCount / 2);
+    const essay = questionCount - mcq;
+    return this.generateWorksheetContentDetailed(topic, subject, { mcq, tf: 0, fill: 0, match: 0, essay });
   }
 
   private cleanJSON(text: string): string {
@@ -274,3 +288,5 @@ export class GeminiService {
 export const geminiService = new GeminiService();
 export const generateWorksheetContent = (topic: string, subject: string, questionCount: number, format?: string) =>
   geminiService.generateWorksheetContent(topic, subject, questionCount, format);
+export const generateWorksheetContentDetailed = (topic: string, subject: string, config: any) =>
+  geminiService.generateWorksheetContentDetailed(topic, subject, config);

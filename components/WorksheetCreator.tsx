@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { generateWorksheetContent } from '../services/geminiService';
+import { generateWorksheetContentDetailed } from '../services/geminiService';
 import { generate_image } from '../services/imageService';
 
 interface WorksheetQuestion {
     id: string;
-    type: 'multiple-choice' | 'essay';
+    type: string;
     question: string;
     imagePrompt?: string;
     imageUrl?: string;
@@ -21,8 +21,16 @@ interface Worksheet {
 const WorksheetCreator: React.FC = () => {
     const [topic, setTopic] = useState('');
     const [subject, setSubject] = useState('Toán');
-    const [questionCount, setQuestionCount] = useState(5);
-    const [questionFormat, setQuestionFormat] = useState<'trac-nghiem' | 'tu-luan' | 'hon-hop'>('hon-hop');
+
+    // Hạng mục cấu trúc câu hỏi chi tiết
+    const [config, setConfig] = useState({
+        mcq: 3,
+        tf: 2,
+        fill: 1,
+        match: 1,
+        essay: 2
+    });
+
     const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isGeneratingImages, setIsGeneratingImages] = useState(false);
@@ -36,15 +44,20 @@ const WorksheetCreator: React.FC = () => {
             return;
         }
 
+        const total = Object.values(config).reduce((a, b) => a + b, 0);
+        if (total === 0) {
+            alert('Vui lòng chọn ít nhất 1 câu hỏi!');
+            return;
+        }
+
         setIsGenerating(true);
         setProgress('Đang tạo nội dung câu hỏi...');
         setWorksheet(null);
 
         try {
-            // Sử dụng hàm đã import
-            const content = await generateWorksheetContent(topic, subject, questionCount, questionFormat);
+            const content = await generateWorksheetContentDetailed(topic, subject, config);
             setWorksheet(content);
-            setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa (Đợi 2 giây/câu để tránh quá tải)...');
+            setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
             await generateImages(content);
         } catch (error: any) {
             console.error('Lỗi khi tạo phiếu học tập:', error);
@@ -64,19 +77,16 @@ const WorksheetCreator: React.FC = () => {
                 if (q.imagePrompt || q.question) {
                     const promptToUse = q.imagePrompt || q.question;
 
-                    // Tăng thời gian chờ để tránh bị khóa (Rate Limit) bởi nhà cung cấp ảnh miễn phí
                     if (i > 0) {
-                        setProgress(`Đang nghỉ 3 giây để chuẩn bị vẽ câu ${i + 1}...`);
+                        setProgress(`Nghỉ chút để chuẩn bị vẽ câu ${i + 1}...`);
                         await new Promise(resolve => setTimeout(resolve, 3500));
                     }
 
-                    setProgress(`Đang vẽ hình minh họa cho câu ${i + 1}/${updatedQuestions.length}...`);
+                    setProgress(`Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
 
                     try {
                         const imageUrl = await generate_image(promptToUse);
                         updatedQuestions[i].imageUrl = imageUrl;
-
-                        // Cập nhật từng ảnh một để giáo viên thấy ngay
                         setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
                     } catch (error) {
                         console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
@@ -86,7 +96,6 @@ const WorksheetCreator: React.FC = () => {
             setProgress('Hoàn thành toàn bộ phiếu học tập!');
         } finally {
             setIsGeneratingImages(false);
-            // Sau 5 giây thì ẩn dòng tiến trình
             setTimeout(() => setProgress(''), 5000);
         }
     };
@@ -103,11 +112,11 @@ const WorksheetCreator: React.FC = () => {
             const imageUrl = await generate_image(promptToRetry);
             updatedQuestions[index].imageUrl = imageUrl;
             setWorksheet({ ...worksheet, questions: updatedQuestions });
-            setProgress('Câu hỏi đã được vẽ lại ảnh mới!');
+            setProgress('Đã vẽ lại ảnh mới!');
             setTimeout(() => setProgress(''), 3000);
         } catch (error) {
-            alert('Máy chủ ảnh đang quá tải. Thầy Cô vui lòng đợi khoảng 1 phút rồi nhấn thử lại nhé!');
-            setProgress('Vẽ lại ảnh thất bại.');
+            alert('Máy chủ ảnh đang bận. Thầy Cô thử lại sau 1 lát nhé!');
+            setProgress('Lỗi vẽ ảnh.');
         }
     };
 
@@ -164,12 +173,11 @@ const WorksheetCreator: React.FC = () => {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: 'calc(100vh - 40px)', overflowY: 'auto', borderRadius: '20px' }} className="custom-scrollbar">
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', minHeight: 'calc(100vh - 40px)', overflowY: 'auto', borderRadius: '20px' }}>
             <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
                 <div style={{ textAlign: 'center', marginBottom: '30px' }}>
                     <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
-                    <p>Soạn bài nhanh chóng với hình ảnh minh họa thông minh</p>
-                    <span style={{ fontSize: '10px', background: '#eee', padding: '2px 8px', borderRadius: '10px', color: '#999' }}>v2.0.5-model-001</span>
+                    <p>Thiết kế phiếu bài tập đa dạng với sự hỗ trợ của AI</p>
                 </div>
 
                 {!worksheet && (
@@ -181,31 +189,45 @@ const WorksheetCreator: React.FC = () => {
                                     {subjects.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
-                            <div>
-                                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>📝 Dạng bài:</label>
-                                <select value={questionFormat} onChange={(e) => setQuestionFormat(e.target.value as any)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #FF9800' }}>
-                                    <option value="hon-hop">Hỗn hợp</option>
-                                    <option value="trac-nghiem">Trắc nghiệm</option>
-                                    <option value="tu-luan">Tự luận</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>🔢 Số câu ({questionCount}):</label>
-                                <input type="range" min="1" max="10" value={questionCount} onChange={(e) => setQuestionCount(parseInt(e.target.value))} style={{ width: '100%', accentColor: '#FF6B9D' }} />
+                            <div style={{ gridColumn: 'span 1 md:span 2' }}>
+                                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>� Chủ đề bài học:</label>
+                                <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="VD: Bé học đếm, Nhận biết chữ cái..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
                             </div>
                         </div>
-                        <div style={{ marginBottom: '25px' }}>
-                            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>💡 Chủ đề:</label>
-                            <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="VD: Bé nhận biết màu sắc, Đếm các loài vật..." style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #FFE082', marginBottom: '20px' }}>
+                            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '15px' }}>📝 Chọn cơ cấu câu hỏi:</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+                                {[
+                                    { id: 'mcq', label: 'Trắc nghiệm (lựa chọn)', color: '#4CAF50' },
+                                    { id: 'tf', label: 'Đúng / Sai', color: '#2196F3' },
+                                    { id: 'fill', label: 'Điền khuyết', color: '#FF9800' },
+                                    { id: 'match', label: 'Bài nối cột', color: '#9C27B0' },
+                                    { id: 'essay', label: 'Tự luận / Viết', color: '#F44336' }
+                                ].map(type => (
+                                    <div key={type.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#F5F5F5', borderRadius: '8px' }}>
+                                        <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{type.label}</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="10"
+                                            value={config[type.id as keyof typeof config]}
+                                            onChange={(e) => setConfig({ ...config, [type.id]: parseInt(e.target.value) || 0 })}
+                                            style={{ width: '50px', padding: '5px', borderRadius: '4px', border: `2px solid ${type.color}`, textAlign: 'center' }}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <button onClick={handleGenerate} disabled={isGenerating || !topic.trim()} style={{ width: '100%', padding: '15px', background: '#FF6B9D', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                            {isGenerating ? '⏳ ĐANG TẠO PHIẾU...' : '✨ BẮT ĐẦU TẠO PHIẾU'}
+
+                        <button onClick={handleGenerate} disabled={isGenerating || !topic.trim()} style={{ width: '100%', padding: '15px', background: '#FF6B9D', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 15px rgba(255,107,157,0.4)' }}>
+                            {isGenerating ? '⏳ AI ĐANG SOẠN PHIẾU...' : '✨ BẮT ĐẦU TẠO PHIẾU NGAY'}
                         </button>
                     </div>
                 )}
 
                 {progress && (
-                    <div style={{ margin: '20px 0', padding: '12px', background: '#E3F2FD', borderRadius: '10px', textAlign: 'center', color: '#1976D2', fontWeight: 'bold' }}>
+                    <div style={{ margin: '20px 0', padding: '15px', background: '#E3F2FD', borderRadius: '10px', textAlign: 'center', color: '#1976D2', fontWeight: 'bold', border: '1px solid #BBDEFB' }}>
                         {progress}
                     </div>
                 )}
@@ -229,9 +251,10 @@ const WorksheetCreator: React.FC = () => {
                                         const newQ: WorksheetQuestion = {
                                             id: Date.now().toString(),
                                             type: 'essay',
-                                            question: 'Câu hỏi mới...',
+                                            question: 'Nội dung câu hỏi mới...',
                                         };
-                                        setWorksheet({ ...worksheet, questions: [...worksheet.questions, newQ] });
+                                        const updatedQuestions = [...worksheet.questions, newQ];
+                                        setWorksheet({ ...worksheet, questions: updatedQuestions });
                                     }}
                                     style={{ padding: '8px 15px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
                                 >
@@ -265,7 +288,7 @@ const WorksheetCreator: React.FC = () => {
                                             updated[index].question = e.target.value;
                                             setWorksheet({ ...worksheet, questions: updated });
                                         }}
-                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', minHeight: '40px' }}
+                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', minHeight: '50px' }}
                                     />
                                 </div>
 
@@ -297,12 +320,12 @@ const WorksheetCreator: React.FC = () => {
                                                     title="Tải ảnh từ máy tính"
                                                     style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
                                                 >
-                                                    �
+                                                    📁
                                                 </button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ height: '150px', background: '#eee', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#888', gap: '10px' }}>
+                                        <div style={{ height: '140px', background: '#eee', border: '2px dashed #ccc', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#888', gap: '10px' }}>
                                             <span>{isGeneratingImages ? '⏳ Đang vẽ ảnh...' : 'Chưa có ảnh'}</span>
                                             <button
                                                 onClick={() => {
@@ -323,9 +346,9 @@ const WorksheetCreator: React.FC = () => {
                                                     };
                                                     input.click();
                                                 }}
-                                                style={{ padding: '5px 12px', background: 'white', border: '1px solid #ccc', borderRadius: '5px', fontSize: '12px', cursor: 'pointer' }}
+                                                style={{ padding: '6px 15px', background: 'white', border: '1px solid #ccc', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
                                             >
-                                                Tải ảnh lên
+                                                📁 Tải ảnh lên
                                             </button>
                                         </div>
                                     )}
@@ -357,7 +380,7 @@ const WorksheetCreator: React.FC = () => {
                                 )}
 
                                 <div style={{ background: '#E8F5E9', padding: '12px', borderRadius: '10px', border: '1px solid #C8E6C9' }}>
-                                    <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: '#2E7D32' }}>Đáp án / Hướng dẫn:</label>
+                                    <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: '#2E7D32' }}>Đáp án / Hướng dẫn trả lời:</label>
                                     <input
                                         type="text"
                                         value={q.answer || ''}
@@ -399,3 +422,4 @@ const WorksheetCreator: React.FC = () => {
 };
 
 export default WorksheetCreator;
+
