@@ -8,8 +8,8 @@ export interface FilePart {
   }
 }
 
-// Danh sách các model mà API Key này ĐƯỢC PHÉP sử dụng (Cập nhật theo thực tế tài khoản)
-const MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-pro'];
+// Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
+const MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -194,30 +194,30 @@ export class GeminiService {
       if (nextIdx < MODELS.length) {
         this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
         this.setupModel(MODELS[nextIdx], 'v1');
+        this.retryAttempt = 0; // Reset retry attempt when changing model
         return retryFn();
       }
     }
 
-    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại thông minh
+    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại
     if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
-      if (this.retryAttempt < 3) {
+      if (this.retryAttempt < 2) {
         this.retryAttempt++;
-        const waitTime = this.retryAttempt * 5000; // Tăng dần thời gian chờ: 5s, 10s, 15s
-        this.setStatus(`AI đang nghì ngơi ${waitTime / 1000}s để hồi phục... (Lần ${this.retryAttempt})`);
-        await new Promise(r => setTimeout(r, waitTime));
+        this.setStatus(`Máy chủ bận, đang kết nối lại... (Lần ${this.retryAttempt})`);
+        await new Promise(r => setTimeout(r, 3000)); // Chờ 3s cố định
         return retryFn();
       } else {
-        // Nếu thử lại cùng model không được, thử đổi model
-        this.retryAttempt = 0; // Reset cho model mới
+        // Đổi model ngay nếu thử lại 2 lần không được
+        this.retryAttempt = 0;
         const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIdx < MODELS.length) {
-          this.setStatus(`Đang đổi sang model dự phòng...`);
+          this.setStatus(`Chuyển sang đường truyền dự phòng...`);
           this.setupModel(MODELS[nextIdx], 'v1');
-          await new Promise(r => setTimeout(r, 2000));
+          this.retryAttempt = 0; // Reset retry attempt when changing model
           return retryFn();
         } else {
-          this.setStatus("Tạm thời hết lượt dùng.");
-          throw new Error("Tài khoản miễn phí đã đạt giới hạn dùng trong 1 phút. Thầy Cô vui lòng tạm nghỉ khoảng 45 giây rồi nhấn nút làm lại nhé, AI sẽ sớm quay lại phục vụ ạ!");
+          this.setStatus("Tạm thời hết lượt.");
+          throw new Error("Google đã tạm khóa lượt dùng miễn phí của Thầy Cô trong 1 phút này. Thầy Cô vui lòng đợi khoảng 45 giây rồi hãy bấm nút Soạn bài lại nhé.");
         }
       }
     }
