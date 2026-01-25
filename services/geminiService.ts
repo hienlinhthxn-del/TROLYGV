@@ -13,7 +13,7 @@ export interface FilePart {
   }
 }
 
-const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-pro-latest'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -60,6 +60,7 @@ export class GeminiService {
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     }, { apiVersion: 'v1beta' });
+    this.setStatus(`Sẵn sàng (${modelName})`);
   }
 
   private async ensureInitialized() {
@@ -85,15 +86,15 @@ export class GeminiService {
 
   public async generateText(prompt: string): Promise<string> {
     await this.ensureInitialized();
-    this.setStatus("Đang phản hồi...");
+    this.setStatus(`Đang xử lý (${this.currentModelName})...`);
     try {
       const result = await this.model.generateContent(this.enrichPrompt(prompt));
       this.setStatus("Hoàn tất");
       return result.response.text();
     } catch (error: any) {
       console.error("Text Error:", error);
-      if (error.message?.includes("404")) {
-        this.setStatus("Thử model dự phòng...");
+      if (error.message?.includes("404") || error.message?.includes("429")) {
+        this.setStatus(error.message?.includes("429") ? "Hết hạn mức, chuyển model..." : "Thử model dự phòng...");
         const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIndex < MODELS.length) {
           this.setupModel(MODELS[nextIndex]);
@@ -112,7 +113,7 @@ export class GeminiService {
   public async* sendMessageStream(message: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
     if (!this.chat) await this.initChat(this.systemInstruction);
-    this.setStatus("Đang phản hồi...");
+    this.setStatus(`Đang phản hồi (${this.currentModelName})...`);
 
     try {
       const parts: any[] = [];
@@ -128,6 +129,17 @@ export class GeminiService {
       this.setStatus("Hoàn tất");
     } catch (error: any) {
       this.chat = null;
+      if (error.message?.includes("429")) {
+        const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
+        if (nextIndex < MODELS.length) {
+          this.setupModel(MODELS[nextIndex]);
+          // Re-initialize chat with new model and try once more
+          this.chat = null;
+          const retryStream = this.sendMessageStream(message, fileParts);
+          for await (const chunk of retryStream) { yield chunk; }
+          return;
+        }
+      }
       if (error.message?.includes("leaked")) {
         this.setStatus("LỖI: API Key bị lộ");
         throw new Error("API Key đã bị chặn (leaked). Vui lòng dùng Key mới.");
@@ -139,7 +151,7 @@ export class GeminiService {
 
   public async generateExamQuestionsStructured(prompt: string, fileParts?: FilePart[]) {
     await this.ensureInitialized();
-    this.setStatus("Đang soạn đề...");
+    this.setStatus(`Đang soạn đề (${this.currentModelName})...`);
     try {
       const structuredModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
@@ -193,6 +205,13 @@ export class GeminiService {
       return json;
     } catch (error: any) {
       console.warn("Structured Error, trying non-structured...", error);
+      if (error.message?.includes("429")) {
+        const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
+        if (nextIndex < MODELS.length) {
+          this.setupModel(MODELS[nextIndex]);
+          return this.generateExamQuestionsStructured(prompt, fileParts);
+        }
+      }
       if (error.message?.includes("leaked")) {
         throw new Error("API Key đã bị chặn (leaked). Vui lòng dùng Key mới.");
       }
