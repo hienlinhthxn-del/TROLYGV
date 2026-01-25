@@ -173,7 +173,7 @@ const WorksheetCreator: React.FC = () => {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', minHeight: 'calc(100vh - 40px)', overflowY: 'auto', borderRadius: '20px' }}>
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: '100%', overflowY: 'auto', borderRadius: '20px' }}>
             <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
                 <div style={{ textAlign: 'center', marginBottom: '30px' }}>
                     <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
