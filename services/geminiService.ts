@@ -13,7 +13,7 @@ export interface FilePart {
   }
 }
 
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro'];
+const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -94,8 +94,15 @@ export class GeminiService {
       console.error("Text Error:", error);
       if (error.message?.includes("404")) {
         this.setStatus("Thử model dự phòng...");
-        this.setupModel(MODELS[1]);
-        return this.generateText(prompt);
+        const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
+        if (nextIndex < MODELS.length) {
+          this.setupModel(MODELS[nextIndex]);
+          return this.generateText(prompt);
+        }
+      }
+      if (error.message?.includes("leaked")) {
+        this.setStatus("LỖI: API Key bị lộ");
+        throw new Error("API Key của Thầy Cô đã bị Google chặn do bị lộ (leaked). Vui lòng tạo API Key mới tại Google AI Studio và cập nhật trong phần Bảo mật.");
       }
       this.setStatus("LỖI KẾT NỐI");
       throw error;
@@ -121,6 +128,10 @@ export class GeminiService {
       this.setStatus("Hoàn tất");
     } catch (error: any) {
       this.chat = null;
+      if (error.message?.includes("leaked")) {
+        this.setStatus("LỖI: API Key bị lộ");
+        throw new Error("API Key đã bị chặn (leaked). Vui lòng dùng Key mới.");
+      }
       this.setStatus("LỖI KẾT NỐI");
       throw error;
     }
@@ -137,6 +148,8 @@ export class GeminiService {
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
+              title: { type: SchemaType.STRING },
+              subject: { type: SchemaType.STRING },
               readingPassage: { type: SchemaType.STRING },
               questions: {
                 type: SchemaType.ARRAY,
@@ -146,15 +159,17 @@ export class GeminiService {
                     type: { type: SchemaType.STRING },
                     level: { type: SchemaType.STRING },
                     content: { type: SchemaType.STRING },
+                    question: { type: SchemaType.STRING }, // Alias cho WorksheetCreator
                     answer: { type: SchemaType.STRING },
                     options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                     explanation: { type: SchemaType.STRING },
                     imagePrompt: { type: SchemaType.STRING }
                   },
-                  required: ["type", "content", "answer"]
+                  required: ["type", "answer"]
                 }
               }
-            }
+            },
+            required: ["questions"]
           }
         }
       }, { apiVersion: 'v1beta' });
@@ -165,9 +180,22 @@ export class GeminiService {
 
       const result = await structuredModel.generateContent(parts);
       this.setStatus("Hoàn tất");
-      return JSON.parse(this.cleanJSON(result.response.text()));
+      const json = JSON.parse(this.cleanJSON(result.response.text()));
+
+      // Đảm bảo tính tương thích giữa 'content' và 'question'
+      if (json.questions) {
+        json.questions = json.questions.map((q: any) => ({
+          ...q,
+          content: q.content || q.question || '',
+          question: q.question || q.content || ''
+        }));
+      }
+      return json;
     } catch (error: any) {
       console.warn("Structured Error, trying non-structured...", error);
+      if (error.message?.includes("leaked")) {
+        throw new Error("API Key đã bị chặn (leaked). Vui lòng dùng Key mới.");
+      }
       const result = await this.model.generateContent(this.enrichPrompt(prompt) + "\nTrả về JSON.");
       return JSON.parse(this.cleanJSON(result.response.text()));
     }
@@ -182,8 +210,12 @@ export class GeminiService {
     - YÊU CẦU ĐẶC BIỆT:
       1. Nội dung cực kỳ đơn giản, phù hợp học sinh 6 tuổi.
       2. Với mỗi câu hỏi, hãy cung cấp một đoạn mô tả hình ảnh minh họa ngắn chọn vào trường "imagePrompt" (ví dụ: "con mèo đang ngủ", "5 quả táo đỏ").
-      3. Trả về JSON chuẩn.`;
-    return this.generateExamQuestionsStructured(prompt);
+      3. Hãy đặt cho phiếu học tập một tiêu đề sáng tạo trong trường "title".
+      4. Trả về JSON chuẩn.`;
+    const result = await this.generateExamQuestionsStructured(prompt);
+    if (!result.title) result.title = `Phiếu học tập ${subject}: ${topic}`;
+    if (!result.subject) result.subject = subject;
+    return result;
   }
 
   private cleanJSON(text: string): string {
