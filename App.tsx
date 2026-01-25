@@ -104,6 +104,23 @@ const App: React.FC = () => {
 
     const savedCloud = localStorage.getItem('edu_cloud_docs');
     if (savedCloud) setCloudDocs(JSON.parse(savedCloud));
+
+    // Kiểm tra đề thi được chia sẻ qua Link
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedExam = urlParams.get('exam');
+    if (sharedExam) {
+      try {
+        const data = JSON.parse(atob(sharedExam));
+        if (data.questions && data.questions.length > 0) {
+          setPracticeData(data);
+          setView('practice');
+          // Xóa param trên URL để tránh load lại khi F5
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } catch (e) {
+        console.error("Lỗi giải mã đề thi:", e);
+      }
+    }
   }, [currentPersona]);
 
   const updateClassroom = (updated: Classroom) => {

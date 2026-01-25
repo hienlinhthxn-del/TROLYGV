@@ -247,6 +247,40 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     );
   };
 
+  const handleShareLink = () => {
+    if (questions.length === 0) return;
+    const data = {
+      subject: config.subject,
+      grade: config.grade,
+      questions: questions
+    };
+    // Encode sang base64 để đưa vào URL
+    try {
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+      const url = `${window.location.origin}${window.location.pathname}?exam=${encoded}`;
+      navigator.clipboard.writeText(url).then(() => {
+        alert("🚀 Đã sao chép liên kết luyện tập!\n\nThầy Cô hãy gửi link này cho học sinh để các em bắt đầu làm bài nhé.");
+      });
+    } catch (e) {
+      alert("Có lỗi khi tạo link chia sẻ.");
+    }
+  };
+
+  const updateQuestionField = (id: string, field: keyof ExamQuestion, value: any) => {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+  };
+
+  const updateOption = (qId: string, optIdx: number, value: string) => {
+    setQuestions(prev => prev.map(q => {
+      if (q.id === qId && q.options) {
+        const newOpts = [...q.options];
+        newOpts[optIdx] = value;
+        return { ...q, options: newOpts };
+      }
+      return q;
+    }));
+  };
+
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6 animate-in fade-in duration-500 overflow-hidden relative">
       <div className="lg:w-[400px] flex-shrink-0 flex flex-col space-y-4 overflow-y-auto custom-scrollbar pb-6 pr-2">
@@ -261,10 +295,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <select value={config.subject} onChange={e => setConfig({ ...config, subject: e.target.value })} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold outline-none">
-                {Object.keys(SUBJECT_STRANDS).map(sub => <option key={sub}>{sub}</option>)}
+                {Object.keys(SUBJECT_STRANDS).map(sub => <option key={sub} value={sub}>{sub}</option>)}
               </select>
               <select value={config.grade} onChange={e => setConfig({ ...config, grade: e.target.value })} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold outline-none">
-                {[1, 2, 3, 4, 5].map(g => <option key={g} value={g}>Lớp {g}</option>)}
+                {[1, 2, 3, 4, 5].map(g => <option key={g} value={g.toString()}>Lớp {g}</option>)}
               </select>
             </div>
 
@@ -304,16 +338,23 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       </div>
 
       <div className="flex-1 flex flex-col bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden min-h-0">
-        <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-8 py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
           <div className="flex space-x-2">
-            <button onClick={() => setViewMode('config')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem câu hỏi</button>
-            <button onClick={() => setViewMode('matrix')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'matrix' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem ma trận</button>
+            <button onClick={() => setViewMode('config')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem câu hỏi</button>
+            <button onClick={() => setViewMode('matrix')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'matrix' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem ma trận</button>
           </div>
           <div className="flex items-center space-x-2">
-            {questions.length > 0 && onStartPractice && (
-              <button onClick={() => onStartPractice(config.subject, config.grade, questions)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
-                <i className="fas fa-play mr-2"></i>Luyện tập Online
-              </button>
+            {questions.length > 0 && (
+              <>
+                <button onClick={handleShareLink} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase border border-rose-100 hover:bg-rose-100 transition-all">
+                  <i className="fas fa-share-nodes mr-2"></i>Chia sẻ Link
+                </button>
+                {onStartPractice && (
+                  <button onClick={() => onStartPractice(config.subject, config.grade, questions)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
+                    <i className="fas fa-play mr-2"></i>Luyện tập ngay
+                  </button>
+                )}
+              </>
             )}
             <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition-all">
               <i className="fas fa-file-import mr-2"></i>Nhập đề cũ
@@ -365,11 +406,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               {readingPassage && (
                 <div className="p-8 bg-amber-50/30 border border-amber-100 rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
                   <h5 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center">
-                    <i className="fas fa-book-open mr-2"></i> Văn bản đọc hiểu
+                    <i className="fas fa-book-open mr-2"></i> Văn bản đọc hiểu (Có thể chỉnh sửa)
                   </h5>
-                  <div className="text-[15px] leading-relaxed text-slate-700 font-medium whitespace-pre-wrap italic">
-                    {readingPassage}
-                  </div>
+                  <textarea
+                    value={readingPassage}
+                    onChange={(e) => setReadingPassage(e.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 text-[15px] leading-relaxed text-slate-700 font-medium italic min-h-[150px] resize-none"
+                  />
                 </div>
               )}
               {questions.length > 0 ? (
@@ -381,11 +424,29 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                     <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
                     <div className="flex-1 space-y-4">
                       <div className="flex items-center space-x-2">
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase ${q.type === 'Tự luận' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{q.type}</span>
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white border border-slate-100 px-2.5 py-1 rounded-lg">{q.level}</span>
-                        {q.strand && <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest px-2.5 py-1">{q.strand}</span>}
+                        <select
+                          value={q.type}
+                          onChange={(e) => updateQuestionField(q.id, 'type', e.target.value)}
+                          className="text-[9px] font-black px-2 py-1 rounded-lg border border-slate-200 uppercase bg-white outline-none"
+                        >
+                          <option value="Trắc nghiệm">Trắc nghiệm</option>
+                          <option value="Tự luận">Tự luận</option>
+                        </select>
+                        <select
+                          value={q.level}
+                          onChange={(e) => updateQuestionField(q.id, 'level', e.target.value)}
+                          className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-white border border-slate-100 px-2 py-1 rounded-lg outline-none"
+                        >
+                          {COGNITIVE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
                       </div>
-                      <p className="text-[15px] font-bold text-slate-800 leading-relaxed">{q.content}</p>
+
+                      <textarea
+                        value={q.content}
+                        onChange={(e) => updateQuestionField(q.id, 'content', e.target.value)}
+                        className="w-full bg-transparent border-none focus:ring-0 text-[15px] font-bold text-slate-800 leading-relaxed resize-none p-0"
+                        rows={2}
+                      />
 
                       {renderImage(q.image)}
 
@@ -394,14 +455,33 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                           {q.options.map((opt, i) => (
                             <div key={i} className="p-3 rounded-2xl border bg-white border-slate-100 text-slate-600 text-[13px] font-medium flex items-center space-x-3">
                               <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black">{['A', 'B', 'C', 'D'][i]}</span>
-                              <span>{opt}</span>
+                              <input
+                                value={opt}
+                                onChange={(e) => updateOption(q.id, i, e.target.value)}
+                                className="flex-1 border-none focus:ring-0 p-0 text-[13px] bg-transparent"
+                              />
                             </div>
                           ))}
                         </div>
                       )}
+
                       <div className={`p-4 rounded-2xl border ${q.type === 'Tự luận' ? 'bg-indigo-100/50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'}`}>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{q.type === 'Tự luận' ? 'Hướng dẫn trả lời / Thang điểm' : 'Đáp án đúng'}</p>
-                        <p className="text-[13px] font-bold text-slate-700">{q.answer}</p>
+                        <input
+                          value={q.answer}
+                          onChange={(e) => updateQuestionField(q.id, 'answer', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-bold text-slate-700 p-0"
+                        />
+                        {q.explanation !== undefined && (
+                          <div className="mt-2 pt-2 border-t border-slate-200/50">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Giải thích</p>
+                            <textarea
+                              value={q.explanation || ''}
+                              onChange={(e) => updateQuestionField(q.id, 'explanation', e.target.value)}
+                              className="w-full bg-transparent border-none focus:ring-0 text-[12px] text-slate-500 resize-none p-0"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
