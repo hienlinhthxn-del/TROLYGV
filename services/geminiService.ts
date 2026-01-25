@@ -9,7 +9,7 @@ export interface FilePart {
 }
 
 // Danh sách các model chính và dự phòng
-const MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-pro'];
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -46,6 +46,9 @@ export class GeminiService {
   private setupModel(modelName: string) {
     if (!this.genAI) return;
     this.currentModelName = modelName;
+    // QUAN TRỌNG: Phải reset chat về null để khi đổi model, phiên chat mới được tạo đúng model đó
+    this.chat = null;
+
     this.model = this.genAI.getGenerativeModel({
       model: modelName,
       safetySettings: [
