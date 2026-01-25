@@ -273,36 +273,103 @@ const WorksheetCreator: React.FC = () => {
                                     {q.imageUrl ? (
                                         <div style={{ position: 'relative', display: 'inline-block' }}>
                                             <img src={q.imageUrl} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} alt="Hình minh họa" />
-                                            <button onClick={() => handleRetryImage(index)} title="Vẽ lại ảnh" style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>🔄</button>
+                                            <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '5px' }}>
+                                                <button onClick={() => handleRetryImage(index)} title="Vẽ lại ảnh AI" style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>🔄</button>
+                                                <button
+                                                    onClick={() => {
+                                                        const input = document.createElement('input');
+                                                        input.type = 'file';
+                                                        input.accept = 'image/*';
+                                                        input.onchange = (e: any) => {
+                                                            const file = e.target.files[0];
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onload = (re) => {
+                                                                    const updated = [...worksheet.questions];
+                                                                    updated[index].imageUrl = re.target?.result as string;
+                                                                    setWorksheet({ ...worksheet, questions: updated });
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        };
+                                                        input.click();
+                                                    }}
+                                                    title="Tải ảnh từ máy tính"
+                                                    style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                                                >
+                                                    �
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
-                                        <div style={{ height: '150px', background: '#eee', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                                            {isGeneratingImages ? '⏳ Đang vẽ ảnh...' : 'Chưa có ảnh (Bấm vẽ lại để tạo)'}
+                                        <div style={{ height: '150px', background: '#eee', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#888', gap: '10px' }}>
+                                            <span>{isGeneratingImages ? '⏳ Đang vẽ ảnh...' : 'Chưa có ảnh'}</span>
+                                            <button
+                                                onClick={() => {
+                                                    const input = document.createElement('input');
+                                                    input.type = 'file';
+                                                    input.accept = 'image/*';
+                                                    input.onchange = (e: any) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (re) => {
+                                                                const updated = [...worksheet.questions];
+                                                                updated[index].imageUrl = re.target?.result as string;
+                                                                setWorksheet({ ...worksheet, questions: updated });
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    };
+                                                    input.click();
+                                                }}
+                                                style={{ padding: '5px 12px', background: 'white', border: '1px solid #ccc', borderRadius: '5px', fontSize: '12px', cursor: 'pointer' }}
+                                            >
+                                                Tải ảnh lên
+                                            </button>
                                         </div>
                                     )}
                                 </div>
 
                                 {q.options && q.options.length > 0 && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                                        {q.options.map((opt, i) => (
-                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                <span style={{ fontWeight: 'bold' }}>{String.fromCharCode(65 + i)}.</span>
-                                                <input
-                                                    type="text"
-                                                    value={opt}
-                                                    onChange={(e) => {
-                                                        const updated = [...worksheet.questions];
-                                                        if (updated[index].options) {
-                                                            updated[index].options![i] = e.target.value;
-                                                            setWorksheet({ ...worksheet, questions: updated });
-                                                        }
-                                                    }}
-                                                    style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #ddd' }}
-                                                />
-                                            </div>
-                                        ))}
+                                    <div style={{ marginBottom: '15px' }}>
+                                        <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '8px', color: '#666' }}>Các phương án trả lời:</label>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                                            {q.options.map((opt, i) => (
+                                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                    <span style={{ fontWeight: 'bold', color: '#1976D2' }}>{String.fromCharCode(65 + i)}.</span>
+                                                    <input
+                                                        type="text"
+                                                        value={opt}
+                                                        onChange={(e) => {
+                                                            const updated = [...worksheet.questions];
+                                                            if (updated[index].options) {
+                                                                updated[index].options![i] = e.target.value;
+                                                                setWorksheet({ ...worksheet, questions: updated });
+                                                            }
+                                                        }}
+                                                        style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #ddd' }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
+
+                                <div style={{ background: '#E8F5E9', padding: '12px', borderRadius: '10px', border: '1px solid #C8E6C9' }}>
+                                    <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '5px', color: '#2E7D32' }}>Đáp án / Hướng dẫn:</label>
+                                    <input
+                                        type="text"
+                                        value={q.answer || ''}
+                                        onChange={(e) => {
+                                            const updated = [...worksheet.questions];
+                                            updated[index].answer = e.target.value;
+                                            setWorksheet({ ...worksheet, questions: updated });
+                                        }}
+                                        placeholder="Nhập đáp án đúng hoặc gợi ý..."
+                                        style={{ width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #A5D6A7', boxSizing: 'border-box' }}
+                                    />
+                                </div>
                             </div>
                         ))}
 
