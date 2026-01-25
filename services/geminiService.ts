@@ -176,43 +176,53 @@ export class GeminiService {
     return text.replace(/```json/g, '').replace(/```/g, '').trim();
   }
 
+  private retryAttempt: number = 0;
+
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = error.message || "";
     console.warn("AI Encountered Error:", msg);
 
     // Xử lý lỗi 404 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found")) {
-      // Đầu tiên thử đổi Version từ v1 sang v1beta cho cùng model đó trước khi đổi hẳn sang model khác
       if (this.currentVersion === 'v1') {
-        console.warn(`Thử lại ${this.currentModelName} với v1beta...`);
+        this.setStatus(`Dò tìm kênh dự phòng cho ${this.currentModelName}...`);
         this.setupModel(this.currentModelName, 'v1beta');
         return retryFn();
       }
 
-      // Nếu cả v1 và v1beta đều lỗi 404 thì mới chuyển sang model tiếp theo
       const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
       if (nextIdx < MODELS.length) {
-        this.setStatus(`Thử model ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx], 'v1'); // Bắt đầu lại với v1 cho model mới
+        this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
+        this.setupModel(MODELS[nextIdx], 'v1');
         return retryFn();
       }
     }
 
-    // Xử lý lỗi 429 (Rate Limit) - Thử đổi model hoặc đợi 2s rồi thử lại 1 lần
-    if (msg.includes("429") || msg.includes("quota")) {
-      const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
-      if (nextIdx < MODELS.length) {
-        this.setStatus("Chuyển model dự phòng...");
-        this.setupModel(MODELS[nextIdx], 'v1');
-        // Đợi 2 giây trước khi thử model mới để tránh bị "dính chùm" quota
-        await new Promise(r => setTimeout(r, 2000));
+    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại thông minh
+    if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
+      if (this.retryAttempt < 3) {
+        this.retryAttempt++;
+        const waitTime = this.retryAttempt * 5000; // Tăng dần thời gian chờ: 5s, 10s, 15s
+        this.setStatus(`AI đang nghì ngơi ${waitTime / 1000}s để hồi phục... (Lần ${this.retryAttempt})`);
+        await new Promise(r => setTimeout(r, waitTime));
         return retryFn();
       } else {
-        this.setStatus("Hết hạn mức toàn bộ model.");
-        throw new Error("Tài khoản miễn phí đã chạm giới hạn tốc độ. Thầy Cô vui lòng chờ khoảng 30-60 giây để Google 'thả' quota rồi nhấn lại nhé!");
+        // Nếu thử lại cùng model không được, thử đổi model
+        this.retryAttempt = 0; // Reset cho model mới
+        const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
+        if (nextIdx < MODELS.length) {
+          this.setStatus(`Đang đổi sang model dự phòng...`);
+          this.setupModel(MODELS[nextIdx], 'v1');
+          await new Promise(r => setTimeout(r, 2000));
+          return retryFn();
+        } else {
+          this.setStatus("Tạm thời hết lượt dùng.");
+          throw new Error("Tài khoản miễn phí đã đạt giới hạn dùng trong 1 phút. Thầy Cô vui lòng tạm nghỉ khoảng 45 giây rồi nhấn nút làm lại nhé, AI sẽ sớm quay lại phục vụ ạ!");
+        }
       }
     }
 
+    this.retryAttempt = 0; // Reset nếu là lỗi khác
     throw error;
   }
 }
