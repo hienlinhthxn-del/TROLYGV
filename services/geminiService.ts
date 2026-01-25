@@ -259,7 +259,9 @@ export class GeminiService {
 
   public async generateImage(prompt: string) {
     const seed = Math.floor(Math.random() * 1000000);
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+    // Tối ưu hóa prompt cho kết quả giáo dục tốt nhấn: Nền trắng, phong cách hoạt hình sạch sẽ
+    const optimizedPrompt = `${prompt}, educational cartoon, white background, clear lines, high quality`;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(optimizedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   }
 
   public async generateSpeech(text: string) {

@@ -61,25 +61,29 @@ const WorksheetCreator: React.FC = () => {
         try {
             for (let i = 0; i < updatedQuestions.length; i++) {
                 const q = updatedQuestions[i];
-                if (q.imagePrompt) {
-                    setProgress(`Đang vẽ hình minh họa ${i + 1}/${updatedQuestions.length} (Đợi 2 giây)...`);
+                if (q.imagePrompt || q.question) {
+                    const promptToUse = q.imagePrompt || q.question;
+                    setProgress(`Đang vẽ hình minh họa cho câu ${i + 1}/${updatedQuestions.length}...`);
 
-                    if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+                    // Giãn cách một chút để tránh spam API
+                    if (i > 0) await new Promise(resolve => setTimeout(resolve, 800));
 
                     try {
-                        const randomId = Math.floor(Math.random() * 999999);
-                        const enhancedPrompt = `${q.imagePrompt}, cute educational cartoon, white background, high quality --seed ${randomId}`;
-                        const imageUrl = await generate_image(enhancedPrompt);
+                        const imageUrl = await generate_image(promptToUse);
                         updatedQuestions[i].imageUrl = imageUrl;
-                        setWorksheet({ ...ws, questions: [...updatedQuestions] });
+
+                        // Cập nhật từng ảnh một để giáo viên thấy ngay
+                        setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
                     } catch (error) {
                         console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
                     }
                 }
             }
-            setProgress('Hoàn thành! Bạn có thể xuất PDF ngay bây giờ.');
+            setProgress('Hoàn thành toàn bộ phiếu học tập!');
         } finally {
             setIsGeneratingImages(false);
+            // Sau 3 giây thì ẩn dòng tiến trình
+            setTimeout(() => setProgress(''), 3000);
         }
     };
 
