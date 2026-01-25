@@ -259,8 +259,10 @@ export class GeminiService {
 
   public async generateImage(prompt: string) {
     const seed = Math.floor(Math.random() * 1000000);
-    // Tối ưu hóa prompt cho kết quả giáo dục tốt nhấn: Nền trắng, phong cách hoạt hình sạch sẽ
-    const optimizedPrompt = `${prompt}, educational cartoon, white background, clear lines, high quality`;
+    // Thêm một chút biến ngẫu nhiên vào prompt để tránh bị trùng lặp cache và lỗi Rate Limit
+    const styles = ["clean", "soft colors", "gentle", "bright", "vibrant"];
+    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    const optimizedPrompt = `${prompt}, educational cartoon, ${randomStyle}, white background, high quality`;
     return `https://image.pollinations.ai/prompt/${encodeURIComponent(optimizedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   }
 

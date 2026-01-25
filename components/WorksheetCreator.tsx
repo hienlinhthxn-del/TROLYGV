@@ -63,10 +63,14 @@ const WorksheetCreator: React.FC = () => {
                 const q = updatedQuestions[i];
                 if (q.imagePrompt || q.question) {
                     const promptToUse = q.imagePrompt || q.question;
-                    setProgress(`Đang vẽ hình minh họa cho câu ${i + 1}/${updatedQuestions.length}...`);
 
-                    // Giãn cách một chút để tránh spam API
-                    if (i > 0) await new Promise(resolve => setTimeout(resolve, 800));
+                    // Tăng thời gian chờ để tránh bị khóa (Rate Limit) bởi nhà cung cấp ảnh miễn phí
+                    if (i > 0) {
+                        setProgress(`Đang nghỉ 3 giây để chuẩn bị vẽ câu ${i + 1}...`);
+                        await new Promise(resolve => setTimeout(resolve, 3500));
+                    }
+
+                    setProgress(`Đang vẽ hình minh họa cho câu ${i + 1}/${updatedQuestions.length}...`);
 
                     try {
                         const imageUrl = await generate_image(promptToUse);
@@ -82,8 +86,8 @@ const WorksheetCreator: React.FC = () => {
             setProgress('Hoàn thành toàn bộ phiếu học tập!');
         } finally {
             setIsGeneratingImages(false);
-            // Sau 3 giây thì ẩn dòng tiến trình
-            setTimeout(() => setProgress(''), 3000);
+            // Sau 5 giây thì ẩn dòng tiến trình
+            setTimeout(() => setProgress(''), 5000);
         }
     };
 
@@ -92,17 +96,18 @@ const WorksheetCreator: React.FC = () => {
 
         const updatedQuestions = [...worksheet.questions];
         const q = updatedQuestions[index];
+        const promptToRetry = q.imagePrompt || q.question;
 
         setProgress(`Đang thử vẽ lại hình minh họa câu ${index + 1}...`);
         try {
-            const randomSeed = Math.floor(Math.random() * 999999);
-            const enhancedPrompt = `${q.imagePrompt}, educational cartoon style --seed ${randomSeed}`;
-            const imageUrl = await generate_image(enhancedPrompt);
+            const imageUrl = await generate_image(promptToRetry);
             updatedQuestions[index].imageUrl = imageUrl;
             setWorksheet({ ...worksheet, questions: updatedQuestions });
-            setProgress('Đã vẽ lại ảnh thành công!');
+            setProgress('Câu hỏi đã được vẽ lại ảnh mới!');
+            setTimeout(() => setProgress(''), 3000);
         } catch (error) {
-            alert('Vẫn bị giới hạn lượt tạo. Thầy Cô vui lòng đợi 1 phút nhé!');
+            alert('Máy chủ ảnh đang quá tải. Thầy Cô vui lòng đợi khoảng 1 phút rồi nhấn thử lại nhé!');
+            setProgress('Vẽ lại ảnh thất bại.');
         }
     };
 
