@@ -8,8 +8,8 @@ export interface FilePart {
   }
 }
 
-// Danh sách các model ổn định trên API v1
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+// Danh sách các model mà API Key này hỗ trợ (Ưu tiên cập nhật bản 2.0 và 2.5)
+const MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
