@@ -13,7 +13,7 @@ export interface FilePart {
   }
 }
 
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-pro-latest'];
+const MODELS = ['gemini-flash-latest', 'gemini-2.0-flash', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-1.5-flash'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -48,9 +48,10 @@ export class GeminiService {
     }
   }
 
-  private setupModel(modelName: string) {
+  private setupModel(modelName: string, apiVersion: 'v1' | 'v1beta' = 'v1beta') {
     if (!this.genAI) return;
     this.currentModelName = modelName;
+    console.log(`Setting up model ${modelName} with version ${apiVersion}`);
 
     // Sử dụng v1beta cho tính năng cao nhất, v1 làm dự phòng
     this.model = this.genAI.getGenerativeModel({
@@ -59,7 +60,7 @@ export class GeminiService {
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
-    }, { apiVersion: 'v1beta' });
+    }, { apiVersion });
     this.setStatus(`Sẵn sàng (${modelName})`);
   }
 
@@ -98,6 +99,10 @@ export class GeminiService {
         const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIndex < MODELS.length) {
           this.setupModel(MODELS[nextIndex]);
+          return this.generateText(prompt);
+        } else if (error.message?.includes("404")) {
+          // Last resort: try v1 instead of v1beta
+          this.setupModel(MODELS[0], 'v1');
           return this.generateText(prompt);
         }
       }
