@@ -213,36 +213,115 @@ const WorksheetCreator: React.FC = () => {
                 {worksheet && (
                     <div style={{ marginTop: '20px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-                            <h2 style={{ color: '#1976D2', margin: 0 }}>{worksheet.title}</h2>
-                            <button onClick={() => setWorksheet(null)} style={{ padding: '8px 15px', background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '5px', cursor: 'pointer' }}>Quay lại</button>
+                            <div style={{ flex: 1 }}>
+                                <input
+                                    type="text"
+                                    value={worksheet.title}
+                                    onChange={(e) => setWorksheet({ ...worksheet, title: e.target.value })}
+                                    style={{ fontSize: '24px', fontWeight: 'bold', color: '#1976D2', border: '1px solid transparent', width: '100%', padding: '5px', borderRadius: '5px' }}
+                                    onFocus={(e) => e.target.style.border = '1px solid #ddd'}
+                                    onBlur={(e) => e.target.style.border = '1px solid transparent'}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button
+                                    onClick={() => {
+                                        const newQ: WorksheetQuestion = {
+                                            id: Date.now().toString(),
+                                            type: 'essay',
+                                            question: 'Câu hỏi mới...',
+                                        };
+                                        setWorksheet({ ...worksheet, questions: [...worksheet.questions, newQ] });
+                                    }}
+                                    style={{ padding: '8px 15px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+                                >
+                                    ➕ Thêm câu hỏi
+                                </button>
+                                <button onClick={() => setWorksheet(null)} style={{ padding: '8px 15px', background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '5px', cursor: 'pointer' }}>Quay lại</button>
+                            </div>
                         </div>
 
                         {worksheet.questions && worksheet.questions.map((q, index) => (
-                            <div key={index} style={{ padding: '20px', background: '#f9f9f9', borderRadius: '15px', marginBottom: '20px', border: '1px solid #eee' }}>
-                                <p style={{ fontSize: '18px', fontWeight: 'bold' }}>Câu {index + 1}: {q.question}</p>
+                            <div key={index} style={{ padding: '20px', background: '#f9f9f9', borderRadius: '15px', marginBottom: '20px', border: '1px solid #eee', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '5px' }}>
+                                    <button
+                                        onClick={() => {
+                                            const updated = worksheet.questions.filter((_, i) => i !== index);
+                                            setWorksheet({ ...worksheet, questions: updated });
+                                        }}
+                                        style={{ background: '#FF5252', color: 'white', border: 'none', borderRadius: '5px', width: '30px', height: '30px', cursor: 'pointer' }}
+                                        title="Xóa câu này"
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                    <span style={{ fontWeight: 'bold', minWidth: '60px' }}>Câu {index + 1}:</span>
+                                    <textarea
+                                        value={q.question}
+                                        onChange={(e) => {
+                                            const updated = [...worksheet.questions];
+                                            updated[index].question = e.target.value;
+                                            setWorksheet({ ...worksheet, questions: updated });
+                                        }}
+                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', minHeight: '40px' }}
+                                    />
+                                </div>
+
                                 <div style={{ textAlign: 'center', margin: '15px 0' }}>
                                     {q.imageUrl ? (
                                         <div style={{ position: 'relative', display: 'inline-block' }}>
-                                            <img src={q.imageUrl} style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }} alt="Hình minh họa" />
-                                            <button onClick={() => handleRetryImage(index)} title="Vẽ lại ảnh" style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center' }}>🔄</button>
+                                            <img src={q.imageUrl} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} alt="Hình minh họa" />
+                                            <button onClick={() => handleRetryImage(index)} title="Vẽ lại ảnh" style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>🔄</button>
                                         </div>
                                     ) : (
-                                        <div style={{ height: '200px', background: '#eee', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                                            {isGeneratingImages ? '⏳ Đang vẽ ảnh...' : 'Ảnh bị lỗi'}
+                                        <div style={{ height: '150px', background: '#eee', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+                                            {isGeneratingImages ? '⏳ Đang vẽ ảnh...' : 'Chưa có ảnh (Bấm vẽ lại để tạo)'}
                                         </div>
                                     )}
                                 </div>
+
                                 {q.options && q.options.length > 0 && (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                                        {q.options.map((opt, i) => <div key={i} style={{ padding: '12px', background: 'white', border: '1px solid #ddd', borderRadius: '8px' }}>{opt}</div>)}
+                                        {q.options.map((opt, i) => (
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span style={{ fontWeight: 'bold' }}>{String.fromCharCode(65 + i)}.</span>
+                                                <input
+                                                    type="text"
+                                                    value={opt}
+                                                    onChange={(e) => {
+                                                        const updated = [...worksheet.questions];
+                                                        if (updated[index].options) {
+                                                            updated[index].options![i] = e.target.value;
+                                                            setWorksheet({ ...worksheet, questions: updated });
+                                                        }
+                                                    }}
+                                                    style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #ddd' }}
+                                                />
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
                         ))}
 
-                        <div style={{ position: 'sticky', bottom: '20px', display: 'flex', gap: '15px', padding: '15px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', borderRadius: '15px', boxShadow: '0 -5px 20px rgba(0,0,0,0.1)', border: '2px solid #FF6B9D' }}>
-                            <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ flex: 2, padding: '18px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '20px', cursor: isGeneratingImages ? 'wait' : 'pointer' }}>
+                        <div style={{ position: 'sticky', bottom: '20px', zIndex: 100, display: 'flex', gap: '15px', padding: '15px', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderRadius: '20px', boxShadow: '0 -5px 25px rgba(0,0,0,0.15)', border: '2px solid #FF6B9D' }}>
+                            <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ flex: 2, padding: '15px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '18px', cursor: isGeneratingImages ? 'wait' : 'pointer', boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)' }}>
                                 {isGeneratingImages ? '⏳ ĐANG VẼ ẢNH...' : '🖨️ XUẤT FILE PDF & IN'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('Thầy Cô muốn vẽ lại TOÀN BỘ ảnh bị lỗi?')) {
+                                        const missing = worksheet.questions.filter(q => !q.imageUrl || q.imageUrl.includes('rate-limit'));
+                                        if (missing.length > 0) generateImages(worksheet);
+                                        else alert('Các câu đều đã có ảnh rồi ạ!');
+                                    }
+                                }}
+                                disabled={isGeneratingImages}
+                                style={{ flex: 1, padding: '15px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+                            >
+                                🔄 Vẽ lại các ảnh lỗi
                             </button>
                         </div>
                     </div>
