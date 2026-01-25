@@ -61,7 +61,7 @@ const WorksheetCreator: React.FC = () => {
             return;
         }
 
-        const total = Object.values(config).reduce((a, b) => a + b, 0);
+        const total = Object.values(config).reduce((a: number, b: number) => a + b, 0);
         if (total === 0) {
             alert('Vui lòng chọn ít nhất 1 câu hỏi!');
             return;
@@ -311,8 +311,8 @@ const WorksheetCreator: React.FC = () => {
                                         <div style={{ position: 'relative', display: 'inline-block' }}>
                                             <img src={q.imageUrl} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '10px' }} />
                                             <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '5px' }}>
-                                                <button onClick={() => handleRetryImage(index)} style={{ background: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>🔄</button>
-                                                <label style={{ background: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <button onClick={() => handleRetryImage(index)} title="Vẽ lại ảnh AI" style={{ background: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>🔄</button>
+                                                <label title="Tải ảnh từ máy tính" style={{ background: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     📁 <input type="file" hidden accept="image/*" onChange={(e: any) => {
                                                         const file = e.target.files[0];
                                                         if (file) {
@@ -326,6 +326,19 @@ const WorksheetCreator: React.FC = () => {
                                                         }
                                                     }} />
                                                 </label>
+                                                <button
+                                                    onClick={() => {
+                                                        if (window.confirm('Thầy Cô muốn xóa ảnh của câu này?')) {
+                                                            const updated = [...worksheet.questions];
+                                                            updated[index].imageUrl = undefined;
+                                                            setWorksheet({ ...worksheet, questions: updated });
+                                                        }
+                                                    }}
+                                                    title="Xóa ảnh"
+                                                    style={{ background: '#FF5252', color: 'white', border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                                                >
+                                                    ❌
+                                                </button>
                                             </div>
                                         </div>
                                     ) : (
