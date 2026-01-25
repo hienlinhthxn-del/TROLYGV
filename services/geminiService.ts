@@ -8,14 +8,15 @@ export interface FilePart {
   }
 }
 
-// Danh sách các model chính và dự phòng
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+// Danh sách các model ổn định trên API v1
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private chat: any | null = null;
   private model: any | null = null;
   private currentModelName: string = MODELS[0];
+  private currentVersion: 'v1' | 'v1beta' = 'v1';
   private currentInstruction: string = "Bạn là một trợ lý giáo dục chuyên nghiệp tại Việt Nam.";
 
   constructor() {
@@ -37,15 +38,16 @@ export class GeminiService {
     const key = this.getApiKey();
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      this.setupModel(MODELS[0]);
+      this.setupModel(MODELS[0], 'v1');
     } else {
       this.setStatus("LỖI: Thiếu API Key");
     }
   }
 
-  private setupModel(modelName: string) {
+  private setupModel(modelName: string, version: 'v1' | 'v1beta' = 'v1') {
     if (!this.genAI) return;
     this.currentModelName = modelName;
+    this.currentVersion = version;
     // QUAN TRỌNG: Phải reset chat về null để khi đổi model, phiên chat mới được tạo đúng model đó
     this.chat = null;
 
@@ -57,8 +59,8 @@ export class GeminiService {
         { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
-    }, { apiVersion: 'v1' });
-    this.setStatus(`AI Sẵn sàng (${modelName})`);
+    }, { apiVersion: version });
+    this.setStatus(`AI Sẵn sàng (${modelName} ${version})`);
   }
 
   private async ensureInitialized() {
@@ -180,10 +182,18 @@ export class GeminiService {
 
     // Xử lý lỗi 404 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found")) {
+      // Đầu tiên thử đổi Version từ v1 sang v1beta cho cùng model đó trước khi đổi hẳn sang model khác
+      if (this.currentVersion === 'v1') {
+        console.warn(`Thử lại ${this.currentModelName} với v1beta...`);
+        this.setupModel(this.currentModelName, 'v1beta');
+        return retryFn();
+      }
+
+      // Nếu cả v1 và v1beta đều lỗi 404 thì mới chuyển sang model tiếp theo
       const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
       if (nextIdx < MODELS.length) {
-        this.setStatus(`Chuyển sang ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx]);
+        this.setStatus(`Thử model ${MODELS[nextIdx]}...`);
+        this.setupModel(MODELS[nextIdx], 'v1'); // Bắt đầu lại với v1 cho model mới
         return retryFn();
       }
     }
@@ -193,7 +203,7 @@ export class GeminiService {
       const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
       if (nextIdx < MODELS.length) {
         this.setStatus("Chuyển model dự phòng...");
-        this.setupModel(MODELS[nextIdx]);
+        this.setupModel(MODELS[nextIdx], 'v1');
         // Đợi 2 giây trước khi thử model mới để tránh bị "dính chùm" quota
         await new Promise(r => setTimeout(r, 2000));
         return retryFn();
