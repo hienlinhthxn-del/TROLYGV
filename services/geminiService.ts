@@ -225,9 +225,9 @@ export class GeminiService {
     }
   }
 
-  public async generateWorksheetContentDetailed(topic: string, subject: string, config: { mcq: number, tf: number, fill: number, match: number, essay: number }) {
+  public async generateWorksheetContentDetailed(topic: string, subject: string, config: { mcq: number, tf: number, fill: number, match: number, essay: number }, fileParts?: FilePart[]) {
     const total = config.mcq + config.tf + config.fill + config.match + config.essay;
-    const prompt = `Bạn là trợ lý soạn bài cho giáo viên lớp 1. Hãy tạo phiếu học tập mới:
+    const prompt = `Bạn là trợ lý soạn bài cho giáo viên lớp 1. ${fileParts ? 'Hãy dựa vào ảnh đính kèm để tạo một phiếu học tập có phong cách và nội dung tương tự.' : 'Hãy tạo phiếu học tập mới:'}
     - Môn: ${subject}
     - Chủ đề: ${topic}
     - CƠ CẤU CÂU HỎI (Tổng ${total} câu):
@@ -243,7 +243,7 @@ export class GeminiService {
       3. Hãy đặt cho phiếu học tập một tiêu đề sáng tạo trong trường "title".
       4. TRẢ VỀ JSON chuẩn theo đúng cấu trúc.`;
 
-    const result = await this.generateExamQuestionsStructured(prompt);
+    const result = await this.generateExamQuestionsStructured(prompt, fileParts);
     if (!result.title) result.title = `Phiếu học tập ${subject}: ${topic}`;
     if (!result.subject) result.subject = subject;
     return result;
@@ -288,5 +288,5 @@ export class GeminiService {
 export const geminiService = new GeminiService();
 export const generateWorksheetContent = (topic: string, subject: string, questionCount: number, format?: string) =>
   geminiService.generateWorksheetContent(topic, subject, questionCount, format);
-export const generateWorksheetContentDetailed = (topic: string, subject: string, config: any) =>
-  geminiService.generateWorksheetContentDetailed(topic, subject, config);
+export const generateWorksheetContentDetailed = (topic: string, subject: string, config: any, fileParts?: FilePart[]) =>
+  geminiService.generateWorksheetContentDetailed(topic, subject, config, fileParts);
