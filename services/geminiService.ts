@@ -173,19 +173,31 @@ export class GeminiService {
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = error.message || "";
-    this.setStatus("Đang thử lại...");
+    console.warn("AI Encountered Error:", msg);
 
+    // Xử lý lỗi 404 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found")) {
       const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
       if (nextIdx < MODELS.length) {
+        this.setStatus(`Chuyển sang ${MODELS[nextIdx]}...`);
         this.setupModel(MODELS[nextIdx]);
         return retryFn();
       }
     }
 
-    if (msg.includes("429")) {
-      this.setStatus("Hết hạn mức, đợi 1 chút...");
-      throw new Error("Tài khoản miễn phí đã hết lượt dùng trong phút này. Thầy Cô vui lòng đợi 1 phút rồi nhấn thử lại nhé!");
+    // Xử lý lỗi 429 (Rate Limit) - Thử đổi model hoặc đợi 2s rồi thử lại 1 lần
+    if (msg.includes("429") || msg.includes("quota")) {
+      const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
+      if (nextIdx < MODELS.length) {
+        this.setStatus("Chuyển model dự phòng...");
+        this.setupModel(MODELS[nextIdx]);
+        // Đợi 2 giây trước khi thử model mới để tránh bị "dính chùm" quota
+        await new Promise(r => setTimeout(r, 2000));
+        return retryFn();
+      } else {
+        this.setStatus("Hết hạn mức toàn bộ model.");
+        throw new Error("Tài khoản miễn phí đã chạm giới hạn tốc độ. Thầy Cô vui lòng chờ khoảng 30-60 giây để Google 'thả' quota rồi nhấn lại nhé!");
+      }
     }
 
     throw error;
