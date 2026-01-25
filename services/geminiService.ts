@@ -13,7 +13,7 @@ export interface FilePart {
   }
 }
 
-const MODELS = ['gemini-flash-latest', 'gemini-2.0-flash', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.5-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -94,15 +94,17 @@ export class GeminiService {
       return result.response.text();
     } catch (error: any) {
       console.error("Text Error:", error);
-      if (error.message?.includes("404") || error.message?.includes("429")) {
-        this.setStatus(error.message?.includes("429") ? "Hết hạn mức, chuyển model..." : "Thử model dự phòng...");
+      if (error.title?.includes("Model not found") || error.message?.includes("404")) {
+        // Nếu v1beta lỗi 404, thử lại bằng v1
+        console.warn("Chuyển sang v1 API cho model:", this.currentModelName);
+        this.setupModel(this.currentModelName, 'v1');
+        return this.generateText(prompt);
+      }
+      if (error.message?.includes("429")) {
+        this.setStatus("Hết hạn mức, chuyển model...");
         const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIndex < MODELS.length) {
           this.setupModel(MODELS[nextIndex]);
-          return this.generateText(prompt);
-        } else if (error.message?.includes("404")) {
-          // Last resort: try v1 instead of v1beta
-          this.setupModel(MODELS[0], 'v1');
           return this.generateText(prompt);
         }
       }
@@ -210,6 +212,12 @@ export class GeminiService {
       return json;
     } catch (error: any) {
       console.warn("Structured Error, trying non-structured...", error);
+      if (error.message?.includes("404")) {
+        console.warn("Chuyển sang v1 API (Non-Structured) cho model:", this.currentModelName);
+        this.setupModel(this.currentModelName, 'v1');
+        const result = await this.model.generateContent(this.enrichPrompt(prompt) + "\nTrả về JSON chuẩn.");
+        return JSON.parse(this.cleanJSON(result.response.text()));
+      }
       if (error.message?.includes("429")) {
         const nextIndex = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIndex < MODELS.length) {
