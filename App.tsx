@@ -89,6 +89,29 @@ const App: React.FC = () => {
     if (view === 'chat' && !debouncedSearchQuery) scrollToBottom();
   }, [messages, view, debouncedSearchQuery]);
 
+  // Tách riêng logic xử lý Link chia sẻ để đảm bảo ổn định (Chỉ chạy 1 lần khi mount)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedExam = urlParams.get('exam');
+
+    if (sharedExam) {
+      try {
+        const decoded = decodeURIComponent(escape(atob(sharedExam)));
+        const data = JSON.parse(decoded);
+
+        if (data && data.questions && data.questions.length > 0) {
+          setPracticeData(data);
+          setView('practice');
+          const newUrl = window.location.href.split('?')[0];
+          window.history.replaceState({}, document.title, newUrl);
+        }
+      } catch (e) {
+        console.error("Lỗi giải mã đề thi:", e);
+      }
+    }
+  }, []);
+
+  // Logic chạy khi đổi Persona hoặc khi ứng dụng khởi tạo
   useEffect(() => {
     geminiService.initChat(currentPersona.instruction);
     setDynamicSuggestions([]);
@@ -104,23 +127,6 @@ const App: React.FC = () => {
 
     const savedCloud = localStorage.getItem('edu_cloud_docs');
     if (savedCloud) setCloudDocs(JSON.parse(savedCloud));
-
-    // Kiểm tra đề thi được chia sẻ qua Link
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedExam = urlParams.get('exam');
-    if (sharedExam) {
-      try {
-        const data = JSON.parse(decodeURIComponent(escape(atob(sharedExam))));
-        if (data.questions && data.questions.length > 0) {
-          setPracticeData(data);
-          setView('practice');
-          // Xóa param trên URL để tránh load lại khi F5
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      } catch (e) {
-        console.error("Lỗi giải mã đề thi:", e);
-      }
-    }
   }, [currentPersona]);
 
   const updateClassroom = (updated: Classroom) => {

@@ -254,15 +254,25 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       grade: config.grade,
       questions: questions
     };
-    // Encode sang base64 để đưa vào URL
+
     try {
-      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-      const url = `${window.location.origin}${window.location.pathname}?exam=${encoded}`;
+      const jsonStr = JSON.stringify(data);
+      const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+
+      // Đảm bảo URL cơ sở chính xác
+      const baseUrl = window.location.href.split('?')[0];
+      const url = `${baseUrl}?exam=${encoded}`;
+
       navigator.clipboard.writeText(url).then(() => {
-        alert("🚀 Đã sao chép liên kết luyện tập!\n\nThầy Cô hãy gửi link này cho học sinh để các em bắt đầu làm bài nhé.");
+        alert(`🚀 Thành công!\n\nLink luyện tập đã được sao chép. Thầy Cô có thể dán (Ctrl+V) để gửi cho học sinh nhé.`);
+      }).catch(err => {
+        console.error("Clipboard error:", err);
+        // Hiển thị link để copy thủ công nếu clipboard lỗi
+        prompt("Thầy Cô hãy copy link dưới đây:", url);
       });
     } catch (e) {
-      alert("Có lỗi khi tạo link chia sẻ.");
+      console.error("Encoding error:", e);
+      alert("Có lỗi khi tạo link chia sẻ. Thầy Cô hãy thử lại nhé.");
     }
   };
 
