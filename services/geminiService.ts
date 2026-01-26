@@ -215,7 +215,7 @@ export class GeminiService {
       const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
       if (nextIdx < MODELS.length) {
         this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx], 'v1');
+        this.setupModel(MODELS[nextIdx], 'v1beta');
         this.retryAttempt = 0; // Reset retry attempt when changing model
         return retryFn();
       }
@@ -234,7 +234,7 @@ export class GeminiService {
         const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIdx < MODELS.length) {
           this.setStatus(`Chuyển sang đường truyền dự phòng...`);
-          this.setupModel(MODELS[nextIdx], 'v1');
+          this.setupModel(MODELS[nextIdx], 'v1beta');
           this.retryAttempt = 0; // Reset retry attempt when changing model
           return retryFn();
         } else {
