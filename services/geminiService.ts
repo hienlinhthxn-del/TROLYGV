@@ -133,8 +133,8 @@ export class GeminiService {
     await this.ensureInitialized();
     this.setStatus("Đang soạn nội dung...");
 
-    const fullPrompt = `${this.currentInstruction}\n\nYêu cầu: ${prompt}\n\nHãy trả về JSON chuẩn theo cấu trúc sau:
-    { "title": "tieu de", "subject": "mon hoc", "readingPassage": "van ban (neu co)", "questions": [ { "type": "Trắc nghiệm/Tự luận", "content": "cau hoi", "options": ["A", "B", "C", "D"], "answer": "dap an", "imagePrompt": "mo ta hinh anh" } ] }`;
+    const fullPrompt = `${this.currentInstruction}\n\nYêu cầu: ${prompt}\n\nCHỈ TRẢ VỀ JSON chuẩn (không có văn bản chào hỏi hay giải thích), theo cấu trúc sau:
+    { "title": "tieu de", "subject": "mon hoc", "readingPassage": "van ban (neu co)", "questions": [ { "type": "Trắc nghiệm/Tự luận", "content": "cau hoi", "options": ["A", "B", "C", "D"], "answer": "dap an", "explanation": "giai thich chi tiet", "imagePrompt": "mo ta hinh anh" } ] }`;
 
     try {
       const parts = [...(fileParts || []), { text: fullPrompt }];
@@ -184,7 +184,17 @@ export class GeminiService {
   // --- TIỆN ÍCH ---
 
   private cleanJSON(text: string): string {
-    return text.replace(/```json/g, '').replace(/```/g, '').trim();
+    try {
+      // Tìm vị trí của dấu { đầu tiên và dấu } cuối cùng để trích xuất JSON
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start !== -1 && end !== -1 && end > start) {
+        return text.substring(start, end + 1);
+      }
+      return text.replace(/```json/g, '').replace(/```/g, '').trim();
+    } catch {
+      return text;
+    }
   }
 
   private retryAttempt: number = 0;
