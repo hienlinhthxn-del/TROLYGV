@@ -332,7 +332,7 @@ const App: React.FC = () => {
           subject={practiceData.subject}
           grade={practiceData.grade}
           questions={practiceData.questions}
-          onExit={() => setView('exam')}
+          onExit={() => { setPracticeData(null); setView('exam'); }}
         />
       </Suspense>
     );
