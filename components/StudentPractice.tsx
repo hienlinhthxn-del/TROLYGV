@@ -88,6 +88,15 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
   if (isSubmitted && results) {
     return (
       <div className="h-screen flex flex-col bg-slate-50 animate-in fade-in duration-500 overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
+          <div className="flex items-center space-x-4">
+            <button onClick={onExit} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><i className="fas fa-arrow-left"></i></button>
+            <div>
+              <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Kết quả luyện tập</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject}</p>
+            </div>
+          </div>
+        </header>
         <div ref={resultsContainerRef} className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
           <div className="w-full max-w-2xl mx-auto bg-white rounded-[40px] shadow-2xl border border-slate-100 p-10 text-center space-y-8 my-10">
             <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
