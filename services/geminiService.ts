@@ -36,16 +36,23 @@ export class GeminiService {
   }
 
   private getApiKey(): string {
-    const manualKey = localStorage.getItem('manually_entered_api_key');
-    if (manualKey && manualKey.trim() && manualKey.trim() !== 'YOUR_NEW_API_KEY_HERE') {
-      return manualKey.trim().replace(/["']/g, '');
-    }
+    // Thử tìm Key ở tất cả các nguồn có thể
+    const sources = [
+      localStorage.getItem('manually_entered_api_key'),
+      (import.meta as any).env?.VITE_GEMINI_API_KEY,
+      (window as any).VITE_GEMINI_API_KEY,
+      (window as any).process?.env?.VITE_GEMINI_API_KEY
+    ];
 
-    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any).VITE_GEMINI_API_KEY || '';
-    if (envKey && envKey.trim() && envKey.trim() !== 'YOUR_NEW_API_KEY_HERE') {
-      return envKey.trim().replace(/["']/g, '');
+    for (const key of sources) {
+      if (typeof key === 'string') {
+        const cleaned = key.trim().replace(/["']/g, '');
+        // Kiểm tra xem có phải mã Key thật của Google không (bắt đầu bằng AIza và đủ độ dài)
+        if (cleaned.startsWith('AIza') && cleaned.length > 30 && cleaned !== 'YOUR_NEW_API_KEY_HERE') {
+          return cleaned;
+        }
+      }
     }
-
     return '';
   }
 
@@ -53,10 +60,11 @@ export class GeminiService {
     const key = this.getApiKey();
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      // Sử dụng v1beta làm mặc định vì nó hỗ trợ nhiều model alias hơn
       this.setupModel(MODELS[0], 'v1beta');
+      console.log("AI Assistant: API Key detected and active.");
     } else {
-      this.setStatus("LỖI: Thiếu API Key");
+      this.setStatus("LỖI: Chưa cấu hình API Key");
+      console.warn("AI Assistant: No valid API Key found.");
     }
   }
 
