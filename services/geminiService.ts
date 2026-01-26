@@ -9,7 +9,14 @@ export interface FilePart {
 }
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
-const MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+// Ưu tiên các model ổn định và có Quota cao
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
+// Ánh xạ model name sang alias nếu cần
+const MODEL_ALIASES: Record<string, string> = {
+  'gemini-1.5-flash': 'gemini-flash-latest',
+  'gemini-1.5-flash-8b': 'gemini-flash-lite-latest',
+  'gemini-1.5-pro': 'gemini-pro-latest'
+};
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -38,21 +45,25 @@ export class GeminiService {
     const key = this.getApiKey();
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      this.setupModel(MODELS[0], 'v1');
+      // Sử dụng v1beta làm mặc định vì nó hỗ trợ nhiều model alias hơn
+      this.setupModel(MODELS[0], 'v1beta');
     } else {
       this.setStatus("LỖI: Thiếu API Key");
     }
   }
 
-  private setupModel(modelName: string, version: 'v1' | 'v1beta' = 'v1') {
+  private setupModel(modelName: string, version: 'v1' | 'v1beta' = 'v1beta') {
     if (!this.genAI) return;
+
+    // Sử dụng alias nếu có (để tăng khả năng tương thích)
+    const activeModelName = MODEL_ALIASES[modelName] || modelName;
+
     this.currentModelName = modelName;
     this.currentVersion = version;
-    // QUAN TRỌNG: Phải reset chat về null để khi đổi model, phiên chat mới được tạo đúng model đó
     this.chat = null;
 
     this.model = this.genAI.getGenerativeModel({
-      model: modelName,
+      model: activeModelName,
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -60,7 +71,7 @@ export class GeminiService {
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     }, { apiVersion: version });
-    this.setStatus(`AI Sẵn sàng (${modelName} ${version})`);
+    this.setStatus(`AI Sẵn sàng (${activeModelName})`);
   }
 
   private async ensureInitialized() {

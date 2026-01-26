@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import dotenv from "dotenv";
+
 import { readFileSync } from "fs";
 
 // Load .env.local manually
