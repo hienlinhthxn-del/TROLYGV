@@ -90,7 +90,10 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
       <div className="h-screen flex flex-col bg-slate-50 animate-in fade-in duration-500 overflow-hidden">
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
           <div className="flex items-center space-x-4">
-            <button onClick={onExit} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><i className="fas fa-arrow-left"></i></button>
+            <button onClick={onExit} className="flex items-center space-x-2 text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-3 py-2 rounded-xl transition-all">
+              <i className="fas fa-arrow-left"></i>
+              <span className="font-bold text-xs uppercase tracking-wider">Trở về</span>
+            </button>
             <div>
               <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Kết quả luyện tập</h1>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject}</p>
