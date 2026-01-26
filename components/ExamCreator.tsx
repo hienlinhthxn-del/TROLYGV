@@ -247,8 +247,22 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     );
   };
 
-  const handleShareLink = () => {
+  const handleShareLink = async () => {
     if (questions.length === 0) return;
+
+    // Cảnh báo nếu đang chạy localhost
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalhost) {
+      const confirmLocal = window.confirm(
+        "⚠️ LƯU Ý QUAN TRỌNG:\n\n" +
+        "Thầy Cô đang chạy ứng dụng trên máy cá nhân (localhost).\n" +
+        "Link chia sẻ này CHỈ hoat động trên máy tính này.\n\n" +
+        "Nếu gửi cho học sinh ở nhà, các em sẽ KHÔNG truy cập được.\n" +
+        "Thầy Cô có muốn tiếp tục tạo link để kiểm thử không?"
+      );
+      if (!confirmLocal) return;
+    }
+
     const data = {
       subject: config.subject,
       grade: config.grade,
@@ -257,22 +271,34 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     try {
       const jsonStr = JSON.stringify(data);
-      const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
 
-      // Đảm bảo URL cơ sở chính xác
-      const baseUrl = window.location.href.split('?')[0];
+      // Cảnh báo kích thước dữ liệu
+      if (jsonStr.length > 20000) {
+        const confirmSize = window.confirm(
+          "⚠️ Cảnh báo dữ liệu lớn:\n\n" +
+          "Đề thi này chứa nhiều nội dung (hoặc hình ảnh), khiến link chia sẻ sẽ rất dài.\n" +
+          "Một số trình duyệt hoặc Zalo/Facebook có thể không mở được link này.\n\n" +
+          "Thầy Cô có muốn tiếp tục tạo link không?"
+        );
+        if (!confirmSize) return;
+      }
+
+      const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+      const baseUrl = window.location.origin + window.location.pathname;
       const url = `${baseUrl}?exam=${encoded}`;
 
-      navigator.clipboard.writeText(url).then(() => {
-        alert(`🚀 Thành công!\n\nLink luyện tập đã được sao chép. Thầy Cô có thể dán (Ctrl+V) để gửi cho học sinh nhé.`);
-      }).catch(err => {
-        console.error("Clipboard error:", err);
-        // Hiển thị link để copy thủ công nếu clipboard lỗi
-        prompt("Thầy Cô hãy copy link dưới đây:", url);
-      });
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(`🚀 Thành công!\n\nLink luyện tập đã được sao chép vào bộ nhớ tạm.\nThầy Cô có thể dán (Ctrl+V) để gửi thử nghiệm.`);
+      } catch (clipboardErr) {
+        console.error("Clipboard failed:", clipboardErr);
+        // Fallback thủ công
+        prompt("Do trình duyệt chặn tự động sao chép, Thầy Cô vui lòng copy link dưới đây:", url);
+      }
+
     } catch (e) {
-      console.error("Encoding error:", e);
-      alert("Có lỗi khi tạo link chia sẻ. Thầy Cô hãy thử lại nhé.");
+      console.error("Link generation error:", e);
+      alert("❌ Lỗi: Không thể tạo link chia sẻ do dữ liệu quá lớn hoặc lỗi trình duyệt.");
     }
   };
 
