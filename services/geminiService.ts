@@ -36,10 +36,17 @@ export class GeminiService {
   }
 
   private getApiKey(): string {
-    return localStorage.getItem('manually_entered_api_key') ||
-      (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-      (window as any).VITE_GEMINI_API_KEY ||
-      (window as any).process?.env?.VITE_GEMINI_API_KEY || '';
+    const manualKey = localStorage.getItem('manually_entered_api_key');
+    if (manualKey && manualKey.trim() && manualKey.trim() !== 'YOUR_NEW_API_KEY_HERE') {
+      return manualKey.trim().replace(/["']/g, '');
+    }
+
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any).VITE_GEMINI_API_KEY || '';
+    if (envKey && envKey.trim() && envKey.trim() !== 'YOUR_NEW_API_KEY_HERE') {
+      return envKey.trim().replace(/["']/g, '');
+    }
+
+    return '';
   }
 
   private initialize() {
