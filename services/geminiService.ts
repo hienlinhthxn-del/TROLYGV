@@ -239,21 +239,21 @@ export class GeminiService {
     if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
       if (this.retryAttempt < 2) {
         this.retryAttempt++;
-        this.setStatus(`Máy chủ bận, đang kết nối lại... (Lần ${this.retryAttempt})`);
-        await new Promise(r => setTimeout(r, 5000)); // Chờ 5s cố định
+        const waitMs = this.retryAttempt === 1 ? 5000 : 15000;
+        this.setStatus(`Google báo bận, đang đợi ${waitMs / 1000} giây để thử lại...`);
+        await new Promise(r => setTimeout(r, waitMs));
         return retryFn();
       } else {
         // Đổi model ngay nếu thử lại 2 lần không được
         this.retryAttempt = 0;
         const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
         if (nextIdx < MODELS.length) {
-          this.setStatus(`Chuyển sang đường truyền dự phòng...`);
+          this.setStatus(`Đang đổi sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
           this.setupModel(MODELS[nextIdx], 'v1beta');
-          this.retryAttempt = 0; // Reset retry attempt when changing model
           return retryFn();
         } else {
           this.setStatus("Tạm thời hết lượt.");
-          throw new Error("Google đã tạm khóa lượt dùng miễn phí của Thầy Cô trong 1 phút này. Thầy Cô vui lòng đợi khoảng 45 giây rồi hãy bấm nút Soạn bài lại nhé.");
+          throw new Error("Lượt dùng miễn phí của Google hiện đã hết trong lúc này. Thầy Cô vui lòng đợi khoảng 1 phút rồi bấm nút lại nhé. (Mách nhỏ: Thầy Cô có thể vào Trung tâm Bảo mật để nhập API Key cá nhân để dùng thoải mái hơn ạ!)");
         }
       }
     }
