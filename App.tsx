@@ -110,7 +110,7 @@ const App: React.FC = () => {
     const sharedExam = urlParams.get('exam');
     if (sharedExam) {
       try {
-        const data = JSON.parse(atob(sharedExam));
+        const data = JSON.parse(decodeURIComponent(escape(atob(sharedExam))));
         if (data.questions && data.questions.length > 0) {
           setPracticeData(data);
           setView('practice');
