@@ -139,7 +139,15 @@ export class GeminiService {
 
     try {
       const parts = [...(fileParts || []), { text: fullPrompt }];
-      const result = await this.model.generateContent(parts);
+
+      // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
+      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+      const jsonModel = this.genAI!.getGenerativeModel({
+        model: activeModelName,
+        generationConfig: { responseMimeType: "application/json" }
+      }, { apiVersion: 'v1beta' });
+
+      const result = await jsonModel.generateContent(parts);
       const text = result.response.text();
       const json = JSON.parse(this.cleanJSON(text));
 
@@ -186,13 +194,19 @@ export class GeminiService {
 
   private cleanJSON(text: string): string {
     try {
+      let cleaned = text.trim();
       // Tìm vị trí của dấu { đầu tiên và dấu } cuối cùng để trích xuất JSON
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
       if (start !== -1 && end !== -1 && end > start) {
-        return text.substring(start, end + 1);
+        cleaned = cleaned.substring(start, end + 1);
       }
-      return text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+      // Loại bỏ các ký tự điều khiển không hợp lệ (control characters) trong JSON
+      // nhưng vẫn giữ lại các ký tự Unicode tiếng Việt
+      cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+
+      return cleaned;
     } catch {
       return text;
     }
