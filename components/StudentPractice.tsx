@@ -7,9 +7,10 @@ interface StudentPracticeProps {
   grade: string;
   questions: ExamQuestion[];
   onExit: () => void;
+  isStandalone?: boolean;
 }
 
-const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, questions, onExit }) => {
+const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, questions, onExit, isStandalone = false }) => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -89,81 +90,98 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     return (
       <div className="h-screen flex flex-col bg-slate-50 animate-in fade-in duration-500 overflow-hidden">
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
-          <button onClick={onExit} className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm">
-            <i className="fas fa-arrow-left"></i>
-            <span className="font-bold text-xs uppercase tracking-wider">Trở về</span>
-          </button>
+          {!isStandalone && (
+            <button onClick={onExit} className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm">
+              <i className="fas fa-arrow-left"></i>
+              <span className="font-bold text-xs uppercase tracking-wider">Trở về</span>
+            </button>
+          )}
+          {isStandalone && <div className="w-10"></div>} {/* Spacer */}
           <div>
-            <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Kết quả luyện tập</h1>
+            <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest transition-all hover:text-indigo-600 cursor-default">Kết quả luyện tập</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject}</p>
           </div>
-      </div>
-        </header >
-  <div ref={resultsContainerRef} className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
-    <div className="w-full max-w-2xl mx-auto bg-white rounded-[40px] shadow-2xl border border-slate-100 p-10 text-center space-y-8 my-10">
-      <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
-        <i className="fas fa-trophy"></i>
-      </div>
-      <div>
-        <h2 className="text-3xl font-black text-slate-800">Kết quả luyện tập</h2>
-        <p className="text-slate-400 font-bold uppercase tracking-widest mt-2">Chúc mừng em đã hoàn thành bài tập!</p>
-      </div>
+          <div className="w-10"></div> {/* Spacer balance */}
+        </header>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điểm số</p>
-          <p className="text-2xl font-black text-indigo-600">{(results.correctCount / results.total * 10).toFixed(1)}</p>
-        </div>
-        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Số câu đúng</p>
-          <p className="text-2xl font-black text-emerald-600">{results.correctCount}/{results.total}</p>
-        </div>
-        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Thời gian</p>
-          <p className="text-2xl font-black text-amber-600">{Math.floor(results.duration / 60)}:{String(results.duration % 60).padStart(2, '0')}</p>
-        </div>
-      </div>
+        <div ref={resultsContainerRef} className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+          <div className="w-full max-w-2xl mx-auto bg-white rounded-[40px] shadow-2xl border border-slate-100 p-10 text-center space-y-8 my-10">
+            <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
+              <i className="fas fa-trophy"></i>
+            </div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-800">Kết quả luyện tập</h2>
+              <p className="text-slate-400 font-bold uppercase tracking-widest mt-2">{results.correctCount === results.total ? 'Xuất sắc! Em đã làm đúng tất cả!' : 'Chúc mừng em đã hoàn thành bài tập!'}</p>
+            </div>
 
-      <div className="space-y-4 pt-4">
-        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-left space-y-4">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Xem lại chi tiết bài làm</h4>
-          {questions.map((q, idx) => (
-            <div key={q.id} className={`p-4 rounded-2xl border ${results.details[idx].isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-              <p className="text-[13px] font-bold text-slate-800">Câu {idx + 1}: {q.content}</p>
-              <div className="mt-2 flex items-center space-x-4 text-[11px]">
-                <span className={results.details[idx].isCorrect ? 'text-emerald-600' : 'text-rose-600'}>
-                  <i className={`fas ${results.details[idx].isCorrect ? 'fa-check-circle' : 'fa-times-circle'} mr-1`}></i>
-                  {results.details[idx].isCorrect ? 'Đúng' : 'Chưa đúng'}
-                </span>
-                <span className="text-slate-500">Em chọn: <b>{answers[q.id] || 'Bỏ trống'}</b></span>
-                <span className="text-slate-500">Đáp án: <b>{q.answer}</b></span>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điểm số</p>
+                <p className="text-2xl font-black text-indigo-600">{(results.correctCount / results.total * 10).toFixed(1)}</p>
+              </div>
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Số câu đúng</p>
+                <p className="text-2xl font-black text-emerald-600">{results.correctCount}/{results.total}</p>
+              </div>
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Thời gian</p>
+                <p className="text-2xl font-black text-amber-600">{Math.floor(results.duration / 60)}:{String(results.duration % 60).padStart(2, '0')}</p>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="flex gap-4 pt-4">
-          <button
-            onClick={() => { setIsSubmitted(false); setCurrentIdx(0); setAnswers({}); }}
-            className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
-          >
-            Luyện tập lại
-          </button>
-          <button onClick={onExit} className="flex-1 py-4 bg-white text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-slate-200 hover:bg-slate-50 transition-all hover:text-indigo-600">
-            <i className="fas fa-home mr-2"></i>
-            Trở về màn hình chính
-          </button>
+            <div className="space-y-4 pt-4">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-left space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Xem lại chi tiết bài làm</h4>
+                {questions.map((q, idx) => (
+                  <div key={q.id} className={`p-4 rounded-2xl border ${results.details[idx].isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+                    <p className="text-[13px] font-bold text-slate-800">Câu {idx + 1}: {q.content}</p>
+                    <div className="mt-2 flex items-center space-x-4 text-[11px]">
+                      <span className={results.details[idx].isCorrect ? 'text-emerald-600' : 'text-rose-600'}>
+                        <i className={`fas ${results.details[idx].isCorrect ? 'fa-check-circle' : 'fa-times-circle'} mr-1`}></i>
+                        {results.details[idx].isCorrect ? 'Đúng' : 'Chưa đúng'}
+                      </span>
+                      <span className="text-slate-500">Em chọn: <b>{answers[q.id] || 'Bỏ trống'}</b></span>
+                      <span className="text-slate-500">Đáp án: <b>{q.answer}</b></span>
+                    </div>
+                    {q.explanation && !results.details[idx].isCorrect && (
+                      <div className="mt-2 text-[10px] text-slate-500 italic border-t border-slate-200/50 pt-2">
+                        Gợi ý: {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={() => { setIsSubmitted(false); setCurrentIdx(0); setAnswers({}); }}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                >
+                  Luyện tập lại
+                </button>
+                {!isStandalone && (
+                  <button onClick={onExit} className="flex-1 py-4 bg-white text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-slate-200 hover:bg-slate-50 transition-all hover:text-indigo-600">
+                    <i className="fas fa-home mr-2"></i>
+                    Trở về màn hình chính
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
     );
   }
 
-    return (
+  return (
     <div className="h-screen flex flex-col bg-slate-50 animate-in fade-in duration-500 overflow-hidden">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10">
+      <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center space-x-4">
-          <button onClick={onExit} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><i className="fas fa-arrow-left"></i></button>
+          {!isStandalone && (
+            <button onClick={onExit} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-xl transition-all"><i className="fas fa-arrow-left"></i></button>
+          )}
+          {isStandalone && <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black"><i className="fas fa-graduation-cap"></i></div>}
+
           <div>
             <h1 className="text-sm font-black text-slate-800 uppercase tracking-widest">Luyện tập: {subject} - Lớp {grade}</h1>
             <div className="flex items-center space-x-2 mt-1">
@@ -268,7 +286,7 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
         <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Hệ thống luyện tập EduAssist AI v2.0</p>
       </footer>
     </div>
-    );
+  );
 };
 
-    export default StudentPractice;
+export default StudentPractice;

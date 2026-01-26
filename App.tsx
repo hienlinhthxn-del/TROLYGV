@@ -43,7 +43,11 @@ const App: React.FC = () => {
   const [cloudDocs, setCloudDocs] = useState<CloudDocument[]>([]);
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
 
-  // State cho luyện tập online
+  // State để kiểm tra link chia sẻ ngay khi vào app
+  const [isCheckingLink, setIsCheckingLink] = useState(() => {
+    return new URLSearchParams(window.location.search).has('exam');
+  });
+
   const [practiceData, setPracticeData] = useState<{ subject: string, grade: string, questions: ExamQuestion[] } | null>(null);
 
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -89,26 +93,40 @@ const App: React.FC = () => {
     if (view === 'chat' && !debouncedSearchQuery) scrollToBottom();
   }, [messages, view, debouncedSearchQuery]);
 
-  // Tách riêng logic xử lý Link chia sẻ để đảm bảo ổn định (Chỉ chạy 1 lần khi mount)
+  // Xử lý link chia sẻ đề thi
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedExam = urlParams.get('exam');
+    const checkSharedExam = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sharedExam = urlParams.get('exam');
 
-    if (sharedExam) {
-      try {
-        const decoded = decodeURIComponent(escape(atob(sharedExam)));
-        const data = JSON.parse(decoded);
+      if (sharedExam) {
+        try {
+          // Thêm độ trễ nhỏ để đảm bảo UI loading hiển thị mượt mà
+          await new Promise(resolve => setTimeout(resolve, 500));
 
-        if (data && data.questions && data.questions.length > 0) {
-          setPracticeData(data);
-          setView('practice');
-          const newUrl = window.location.href.split('?')[0];
-          window.history.replaceState({}, document.title, newUrl);
+          const decoded = decodeURIComponent(escape(atob(sharedExam)));
+          const data = JSON.parse(decoded);
+
+          if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+            console.log("Đã khôi phục đề thi từ link:", data);
+            setPracticeData(data);
+            setView('practice');
+
+            // Xóa param trên URL để clean, nhưng không làm ngay reload
+            // const newUrl = window.location.href.split('?')[0];
+            // window.history.replaceState({}, document.title, newUrl);
+          } else {
+            alert("Dữ liệu đề thi không hợp lệ hoặc bị lỗi.");
+          }
+        } catch (e) {
+          console.error("Lỗi giải mã đề thi:", e);
+          alert("Không thể mở đề thi này. Link có thể bị hỏng hoặc lỗi phiên bản.");
         }
-      } catch (e) {
-        console.error("Lỗi giải mã đề thi:", e);
       }
-    }
+      setIsCheckingLink(false);
+    };
+
+    checkSharedExam();
   }, []);
 
   // Logic chạy khi đổi Persona hoặc khi ứng dụng khởi tạo
@@ -331,6 +349,10 @@ const App: React.FC = () => {
     }
   };
 
+  if (isCheckingLink) {
+    return <LoadingView />;
+  }
+
   if (view === 'practice' && practiceData) {
     return (
       <Suspense fallback={<LoadingView />}>
@@ -339,6 +361,7 @@ const App: React.FC = () => {
           grade={practiceData.grade}
           questions={practiceData.questions}
           onExit={() => { setPracticeData(null); setView('exam'); }}
+          isStandalone={true}
         />
       </Suspense>
     );
