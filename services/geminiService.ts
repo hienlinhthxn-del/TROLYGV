@@ -164,7 +164,7 @@ export class GeminiService {
 
       const result = await jsonModel.generateContent(parts);
       const text = result.response.text();
-      const json = JSON.parse(this.cleanJSON(text));
+      const json = this.parseJSONSafely(text);
 
       if (json.questions) {
         json.questions = json.questions.map((q: any) => ({
@@ -207,23 +207,46 @@ export class GeminiService {
 
   // --- TIỆN ÍCH ---
 
-  private cleanJSON(text: string): string {
+  /* --- XỬ LÝ JSON AN TOÀN --- */
+
+  private parseJSONSafely(text: string): any {
+    // 1. Loại bỏ Markdown code block nếu có
+    let cleaned = text.trim();
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '').replace(/```$/, '');
+    else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '').replace(/```$/, '');
+
+    // 2. Trích xuất phần nội dung giữa { và } (nếu có rác ở đầu/cuối)
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      cleaned = cleaned.substring(start, end + 1);
+    }
+
+    // 3. Hàm sửa lỗi escape sequence phổ biến (ví dụ LaTeX: \frac -> \\frac)
+    const repairJSON = (str: string): string => {
+      // Thay thế các dấu \ không hợp lệ thành \\
+      // Regex này tìm \ mà KHÔNG được theo sau bởi các ký tự escape hợp lệ (" \ / b f n r t u)
+      return str.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+    };
+
+    // 4. Thử Parse lần 1 (Chuẩn)
     try {
-      let cleaned = text.trim();
-      // Tìm vị trí của dấu { đầu tiên và dấu } cuối cùng để trích xuất JSON
-      const start = cleaned.indexOf('{');
-      const end = cleaned.lastIndexOf('}');
-      if (start !== -1 && end !== -1 && end > start) {
-        cleaned = cleaned.substring(start, end + 1);
+      return JSON.parse(cleaned);
+    } catch (e1) {
+      // 5. Nếu lỗi, thử sửa chuỗi và Parse lần 2
+      try {
+        const repaired = repairJSON(cleaned);
+        return JSON.parse(repaired);
+      } catch (e2) {
+        // 6. Nếu vẫn lỗi, thử loại bỏ các ký tự điều khiển và Parse lần 3
+        try {
+          const sanitzed = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+          return JSON.parse(sanitzed);
+        } catch (e3) {
+          console.error("JSON Parse Failed:", text);
+          throw new Error("Dữ liệu trả về từ AI bị lỗi định dạng. Vui lòng thử lại.");
+        }
       }
-
-      // Loại bỏ các ký tự điều khiển không hợp lệ (control characters) trong JSON
-      // nhưng vẫn giữ lại các ký tự Unicode tiếng Việt
-      cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-
-      return cleaned;
-    } catch {
-      return text;
     }
   }
 

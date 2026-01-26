@@ -284,8 +284,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       }
 
       const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-      const baseUrl = window.location.origin + window.location.pathname;
-      const url = `${baseUrl}?exam=${encoded}`;
+      // Cần encodeURIComponent chuỗi Base64 để tránh lỗi các ký tự đặc biệt như + / =
+      const url = `${window.location.origin}${window.location.pathname}?exam=${encodeURIComponent(encoded)}`;
 
       try {
         await navigator.clipboard.writeText(url);

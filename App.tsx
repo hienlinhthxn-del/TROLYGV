@@ -100,27 +100,63 @@ const App: React.FC = () => {
       const sharedExam = urlParams.get('exam');
 
       if (sharedExam) {
+        setIsCheckingLink(true); // Đảm bảo hiện loading
         try {
-          // Thêm độ trễ nhỏ để đảm bảo UI loading hiển thị mượt mà
           await new Promise(resolve => setTimeout(resolve, 500));
 
-          const decoded = decodeURIComponent(escape(atob(sharedExam)));
-          const data = JSON.parse(decoded);
+          // 1. Vệ sinh chuỗi Base64: 
+          // - Fix lỗi + bị biến thành khoảng trắng
+          let safeBase64 = sharedExam.replace(/ /g, '+');
+          // - Loại bỏ các ký tự xuống dòng (nếu copy paste bị dư)
+          safeBase64 = safeBase64.replace(/[\n\r]/g, '');
+          safeBase64 = safeBase64.replace(/-/g, '+').replace(/_/g, '/');
 
-          if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
-            console.log("Đã khôi phục đề thi từ link:", data);
-            setPracticeData(data);
-            setView('practice');
+          // 2. Bổ sung padding (=)
+          while (safeBase64.length % 4 !== 0) {
+            safeBase64 += '=';
+          }
 
-            // Xóa param trên URL để clean, nhưng không làm ngay reload
-            // const newUrl = window.location.href.split('?')[0];
-            // window.history.replaceState({}, document.title, newUrl);
-          } else {
-            alert("Dữ liệu đề thi không hợp lệ hoặc bị lỗi.");
+          console.log(`Checking Shared Link. Length: ${safeBase64.length}`);
+
+          try {
+            // 3. Giải mã
+            const decoded = decodeURIComponent(escape(atob(safeBase64)));
+            const data = JSON.parse(decoded);
+
+            if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+              console.log("Success:", data);
+              setPracticeData(data);
+              setView('practice');
+            } else {
+              throw new Error("Structure invalid");
+            }
+          } catch (innerError: any) {
+            console.error("Decode Error:", innerError);
+            const isTruncated = safeBase64.length < 100 || !safeBase64.endsWith('=');
+
+            let msg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n1. Link có thể đã bị CẮT CỤT do quá dài.\n2. Dữ liệu đề thi bị hỏng trong quá trình copy.\n\n";
+            msg += "Gợi ý: Thầy/Cô hãy thử copy lại link một lần nữa hoặc yêu cầu gửi file PDF thay thế.";
+
+            if (confirm(msg + "\n\nThầy/Cô có muốn thử nhập thủ công mã đề (nếu có) không?")) {
+              // Nếu người dùng muốn thử paste thủ công chuỗi raw
+              const manualInput = prompt("Dán mã đề thi (chuỗi ký tự dài) vào đây:");
+              if (manualInput) {
+                // Đệ quy nhẹ hoặc xử lý trực tiếp
+                try {
+                  const cleanInput = manualInput.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                  const d2 = decodeURIComponent(escape(atob(cleanInput)));
+                  const json2 = JSON.parse(d2);
+                  if (json2 && json2.questions) {
+                    setPracticeData(json2);
+                    setView('practice');
+                    return;
+                  }
+                } catch (e) { alert("Vẫn không hợp lệ!"); }
+              }
+            }
           }
         } catch (e) {
-          console.error("Lỗi giải mã đề thi:", e);
-          alert("Không thể mở đề thi này. Link có thể bị hỏng hoặc lỗi phiên bản.");
+          console.error("Critical Error:", e);
         }
       }
       setIsCheckingLink(false);
