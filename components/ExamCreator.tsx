@@ -29,6 +29,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [readingPassage, setReadingPassage] = useState<string>('');
   const [viewMode, setViewMode] = useState<'config' | 'matrix'>('config');
   const [examHeader, setExamHeader] = useState<string>('');
+  const [editingStrand, setEditingStrand] = useState<string | null>(null);
+  const [tempStrandName, setTempStrandName] = useState('');
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<Attachment | null>(null);
@@ -80,6 +82,27 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         [level]: { ...prev[strand][level], [type]: Math.max(0, prev[strand][level][type] + delta) }
       }
     }));
+  };
+
+  const handleSaveStrandName = () => {
+    if (!editingStrand) return;
+    const newName = tempStrandName.trim();
+
+    if (newName && newName !== editingStrand) {
+      setStrandMatrix(prev => {
+        const newMatrix: StrandConfig = {};
+        // Giữ nguyên thứ tự các mạch, chỉ đổi tên key
+        Object.keys(prev).forEach(key => {
+          if (key === editingStrand) {
+            newMatrix[newName] = prev[key];
+          } else {
+            newMatrix[key] = prev[key];
+          }
+        });
+        return newMatrix;
+      });
+    }
+    setEditingStrand(null);
   };
 
   const handleGenerate = async () => {
@@ -421,7 +444,33 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             <div className="space-y-3 pt-2">
               {Object.entries(strandMatrix).map(([strand, levels]) => (
                 <div key={strand} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3 truncate">{strand}</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    {editingStrand === strand ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={tempStrandName}
+                        onChange={(e) => setTempStrandName(e.target.value)}
+                        onBlur={handleSaveStrandName}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveStrandName()}
+                        className="flex-1 bg-white border border-indigo-300 rounded-lg px-2 py-1 text-[10px] font-black text-indigo-700 uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    ) : (
+                      <div className="flex items-center space-x-2 group cursor-pointer flex-1 min-w-0" onClick={() => { setEditingStrand(strand); setTempStrandName(strand); }} title="Nhấn để sửa tên mạch">
+                        <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest truncate">{strand}</h4>
+                        <i className="fas fa-pen text-[8px] text-slate-300 group-hover:text-indigo-400 transition-colors"></i>
+                      </div>
+                    )}
+                    {!editingStrand && (
+                      <button
+                        onClick={() => { if (window.confirm(`Xóa mạch "${strand}" khỏi ma trận?`)) { const newM = { ...strandMatrix }; delete newM[strand]; setStrandMatrix(newM); } }}
+                        className="ml-2 text-slate-300 hover:text-rose-500 transition-colors"
+                        title="Xóa mạch này"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     {COGNITIVE_LEVELS.map(level => (
                       <div key={level} className="grid grid-cols-5 gap-2 items-center">
