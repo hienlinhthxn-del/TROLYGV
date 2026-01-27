@@ -208,6 +208,11 @@ export class GeminiService {
 
   // --- HÌNH ẢNH & GỢI Ý ---
 
+  public async generateSpeech(text: string, voice: string): Promise<string | null> {
+    // Hiện tại ưu tiên dùng Web Speech API của trình duyệt
+    return null;
+  }
+
   public async generateImage(prompt: string): Promise<string> {
     // Không dùng Gemini để vẽ (vì phiên bản miễn phí thường lỗi 429 khi vẽ nhiều)
     // Tận dụng API bên ngoài để ổn định và nhanh hơn cho GV

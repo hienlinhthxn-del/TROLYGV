@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { geminiService, FilePart } from '../services/geminiService';
 import { Attachment } from '../types';
 
@@ -21,6 +21,17 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tải danh sách giọng đọc ngay khi mở tiện ích
+  useEffect(() => {
+    const loadVoices = () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+      }
+    };
+    loadVoices();
+    if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -178,7 +189,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       if ('speechSynthesis' in window) {
         setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
       } else {
-        const url = await geminiService.generateSpeech(topic);
+        const url = await geminiService.generateSpeech(topic, voiceName);
         if (url) {
           setAudioUrl(url);
           setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");
@@ -428,9 +439,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                                   const viVoices = voices.filter(v => v.lang.includes('vi'));
                                   if (viVoices.length > 0) {
                                     if (voiceName === 'Kore') {
-                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh')) || viVoices[0];
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh') || v.name.toLowerCase().includes('khang')) || viVoices[0];
                                     } else {
-                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('thao') || v.name.toLowerCase().includes('linh')) || viVoices[0];
                                     }
                                   }
 
