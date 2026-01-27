@@ -664,9 +664,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               </div>
             </div>
           </div>
-      )}
         </div>
-      );
+      )}
+    </div>
+  );
 };
 
-      export default ExamCreator;
+export default ExamCreator;
