@@ -92,6 +92,52 @@
             }, 1000);
         });
     </script>
+
+    <!-- Script xử lý Link chia sẻ đề thi (Decode Base64 UTF-8) -->
+    <script>
+        (function () {
+            // Tự động kiểm tra URL xem có mã đề thi không (tham số ?exam=...)
+            const urlParams = new URLSearchParams(window.location.search);
+            const sharedCode = urlParams.get('exam');
+
+            if (sharedCode) {
+                console.log("%c Đang xử lý link chia sẻ... ", "background: #eab308; color: black; font-weight: bold;");
+                try {
+                    // 1. Chuẩn hóa chuỗi Base64 (URL Safe)
+                    let cleanBase64 = sharedCode.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                    while (cleanBase64.length % 4 !== 0) {
+                        cleanBase64 += '=';
+                    }
+
+                    // 2. Giải mã Binary String
+                    const binaryString = atob(cleanBase64);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+
+                    // 3. Decode UTF-8 (Hỗ trợ tiếng Việt không bị lỗi font)
+                    const decoder = new TextDecoder('utf-8');
+                    const jsonString = decoder.decode(bytes);
+                    const examData = JSON.parse(jsonString);
+
+                    // 4. Lưu vào localStorage để React App (index.tsx) đọc được
+                    localStorage.setItem('shared_exam_data', JSON.stringify(examData));
+                    console.log("✅ Đã giải mã đề thi thành công:", examData);
+
+                    // Cập nhật trạng thái debug
+                    window.ai_status = "Đã nhận đề thi từ Link!";
+
+                    // Xóa param trên URL để nhìn gọn hơn (tuỳ chọn)
+                    window.history.replaceState({}, document.title, window.location.pathname);
+
+                } catch (e) {
+                    console.error("❌ Lỗi giải mã link đề thi:", e);
+                    alert("Link đề thi bị lỗi hoặc không đúng định dạng!");
+                }
+            }
+        })();
+    </script>
 </head>
 
 <body class="bg-slate-50 text-slate-900 overflow-hidden">

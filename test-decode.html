@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Test Decode Mã Đề</title>
+</head>
+
+<body>
+    <h1>Test Decode Mã Đề</h1>
+    <div id="result"></div>
+
+    <script>
+        const code = "eyJzIjoiVG_DoW4iLCJnIjoiMSIsInEiOltbMSwiU-G7kSBsaeG7gW4gc2F1IGPhu6dhIHPhu5EgNyBsw6Agc-G7kSBuw6BvPyIsWyJBLiA2IiwiQi4gOCIsIkMuIDkiLCJELiAxMCJdLCJCLiA4IiwiU-G7kSBsaeG7gW4gc2F1IGPhu6dhIG3hu5l0IHPhu5EgbMOgIHPhu5EgbOG7m24gaMahbiBz4buRIMSRw7MgMSDEkcahbiB24buLLiA3ICsgMSA9IDguIl0sWzEsIlBow6lwIHTDrW5oIG7DoG8gc2F1IMSRw6J5IGNobyBr4bq_dCBxdeG6oyBsw6AgMTA_IixbIkEuIDUgKyAzIiwiQi4gNiArIDQiLCJDLiA5IC0gMSIsIkQuIDcgKyAyIl0sIkIuIDYgKyA0IiwiS2nhu4NtIHRyYSBjw6FjIHBow6lwIHTDrW5oOiA1KzM9ODsgNis0PTEwOyA5LTE9ODsgNysyPTkuIENo4buJIGPDsyA2ICsgNCA9IDEwLiJdLFsxLCJUcm9uZyBjw6FjIHPhu5Egc2F1LCBz4buRIG7DoG8gbMOgIHPhu5EgbOG7m24gbmjhuqV0PyIsWyJBLiA0IiwiQi4gMSIsIkMuIDEwIiwiRC4gMCJdLCJDLiAxMCIsIlNvIHPDoW5oIGPDoWMgc+G7kSB04burIDAgxJHhur9uIDEwLCBz4buRIDEwIGzDoCBz4buRIGzhu5tuIG5o4bqldC4iXSxbMSwiS-G6v3QgcXXhuqMgY-G7p2EgcGjDqXAgdMOtbmggOCAtIDUgbMOgIGJhbyBuaGnDqnU_IixbIkEuIDQiLCJCLiAzIiwiQy4gMiIsIkQuIDEzIl0sIkIuIDMiLCLEkMOieSBsw6AgcGjDqXAgdHLhu6sgY8ahIGLhuqNuOiA4IHRy4burIMSRaSA1IGPDsm4gbOG6oWkgMy4iXSxbMCwixJBp4buBbiBk4bqldSA-OyA8OyA9IHRow61jaCBo4bujcCB2w6BvIGNo4buXIHRy4buRbmc6IDkgKyAxIF9fXyA1ICsgNSIsW10sIj0gKGhv4bq3YyBi4bqxbmcpIiwiVGEgdMOtbmg6IDkgKyAxID0gMTA7IDUgKyA1ID0gMTAuIFbhuq95IDEwID0gMTAuIl0sWzAsIkjDuW5nIGPDsyA2IHZpw6puIGJpLCBt4bq5IGNobyB0aMOqbSAzIHZpw6puIGJpLiBI4buPaSBIw7luZyBjw7MgdOG6pXQgY-G6oyBiYW8gbmhpw6p1IHZpw6puIGJpPyAoVHLDrG5oIGLDoHkgcGjDqXAgdMOtbmgpIixbXSwiUGjDqXAgdMOtbmg6IDYgKyAzID0gOSAodmnDqm4gYmkpLlxuVHLhuqMgbOG7nWk6IEjDuW5nIGPDsyB04bqldCBj4bqjIDkgdmnDqm4gYmkuIiwixJDDonkgbMOgIGLDoGkgdG_DoW4gY-G7mW5nIMSRxqFuIGdp4bqjbiB0cm9uZyBwaOG6oW0gdmkgMTAuIl0sWzAsIlZp4bq_dCBjw6FjIHPhu5Egc2F1IHRoZW8gdGjhu6kgdOG7sSB04burIGLDqSDEkeG6v24gbOG7m246IDIsIDksIDUsIDAsIDciLFtdLCIwLCAyLCA1LCA3LCA5IiwiU-G6r3AgeOG6v3AgY8OhYyBz4buRIHThu7Egbmhpw6puIHRoZW8gdGjhu6kgdOG7sSB0xINuZyBk4bqnbi4iXSxbMCwiVHJvbmcgcGjDqXAgdMOtbmggdHLhu6s6IDEwIC0gX19fID0gNC4gU-G7kSBjw7JuIHRoaeG6v3UgdHJvbmcgw7QgdHLhu5FuZyBsw6Agc-G7kSBuw6BvPyIsW10sIjYiLCLEkMOieSBsw6AgYsOgaSB0b8OhbiB0w6xtIHPhu5EgaOG6oW5nIGLhu4sgdHLhu6sgKGhv4bq3YyBz4butIGThu6VuZyBwaMOpcCBj4buZbmcgxJHhu4Mga2nhu4NtIHRyYTogNCArIDYgPSAxMCkuIl0sWzAsIk1haSBjw7MgOSBjw6FpIGvhurlvLiBNYWkgY2hvIGVtIDIgY8OhaSBr4bq5bywgc2F1IMSRw7MgxINuIG3huqV0IDEgY8OhaSBr4bq5by4gSOG7j2kgTWFpIGPDsm4gbOG6oWkgYmFvIG5oacOqdSBjw6FpIGvhurlvPyAoVHLDrG5oIGLDoHkgcGjDqXAgdMOtbmgpIixbXSwiUGjDqXAgdMOtbmg6IDkgLSAyID0gNyAoY8OhaSBr4bq5bykuIFNhdSDEkcOzOiA3IC0gMSA9IDYgKGPDoWkga-G6uW8pLlxuSG_hurdjOiA5IC0gKDIgKyAxKSA9IDYgKGPDoWkga-G6uW8pLlxuVHLhuqMgbOG7nWk6IE1haSBjw7JuIGzhuqFpIDYgY8OhaSBr4bq5by4iLCLEkMOieSBsw6AgYsOgaSB0b8OhbiBjw7MgaGFpIGLGsOG7m2MgdHLhu6sgbGnDqm4gdGnhur9wIHRyb25nIHBo4bqhbSB2aSAxMC4iXSxbMCwiU-G7rSBk4bulbmcgY8OhYyBz4buRIDMsIDUsIHbDoCBk4bqldSBwaMOpcCB0w61uaCAoKyBob-G6t2MgLSkgxJHhu4MgdOG6oW8gdGjDoG5oIG3hu5l0IHBow6lwIHTDrW5oIGPDsyBr4bq_dCBxdeG6oyBi4bqxbmcgOC4gKENo4buJIMSRxrDhu6NjIGTDuW5nIDIgc-G7kSB2w6AgMSBwaMOpcCB0w61uaCkiLFtdLCIzICsgNSA9IDggKGhv4bq3YyA1ICsgMyA9IDgpIiwiWcOqdSBj4bqndSB24bqtbiBk4bulbmcgY2FvIGzDoCB0w6xtIHBow6lwIHTDrW5oIHRow61jaCBo4bujcCB04burIGPDoWMgc-G7kSDEkcOjIGNobyDEkeG7gyDEkeG6oXQgxJHGsOG7o2Mga-G6v3QgcXXhuqMgbW9uZyBtdeG7kW4gKDgpLiAzICsgNSA9IDggbMOgIMSRw6FwIMOhbiDEkcO6bmcgZHV5IG5o4bqldCB24bubaSBjw6FjIHPhu5EgxJHDoyBjaG8gdsOgIHBow6lwIGPhu5luZy90cuG7qy4iXV19";
+
+        console.log("=== TEST DECODE MÃ ĐỀ ===");
+        console.log("Mã gốc:", code);
+        console.log("Độ dài:", code.length);
+
+        try {
+            // Phương pháp 1: TextDecoder (mới)
+            console.log("\n--- Phương pháp 1: TextDecoder ---");
+            try {
+                let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                while (cleanBase64.length % 4 !== 0) {
+                    cleanBase64 += '=';
+                }
+
+                const binaryString = atob(cleanBase64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const decoder = new TextDecoder('utf-8');
+                const jsonString = decoder.decode(bytes);
+                const data1 = JSON.parse(jsonString);
+
+                console.log("✅ TextDecoder SUCCESS!");
+                console.log("Môn:", data1.s);
+                console.log("Lớp:", data1.g);
+                console.log("Số câu:", data1.q.length);
+                console.log("Câu 1:", data1.q[0]);
+
+                document.getElementById('result').innerHTML = `
+                    <h2 style="color: green;">✅ DECODE THÀNH CÔNG (TextDecoder)</h2>
+                    <p><strong>Môn:</strong> ${data1.s}</p>
+                    <p><strong>Lớp:</strong> ${data1.g}</p>
+                    <p><strong>Số câu:</strong> ${data1.q.length}</p>
+                    <pre>${JSON.stringify(data1, null, 2)}</pre>
+                `;
+            } catch (e1) {
+                console.error("❌ TextDecoder FAILED:", e1);
+
+                // Phương pháp 2: Legacy (cũ)
+                console.log("\n--- Phương pháp 2: Legacy ---");
+                try {
+                    let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                    while (cleanBase64.length % 4 !== 0) {
+                        cleanBase64 += '=';
+                    }
+                    const decoded = decodeURIComponent(escape(atob(cleanBase64)));
+                    const data2 = JSON.parse(decoded);
+
+                    console.log("✅ Legacy method SUCCESS!");
+                    console.log("Môn:", data2.s);
+                    console.log("Lớp:", data2.g);
+                    console.log("Số câu:", data2.q.length);
+
+                    document.getElementById('result').innerHTML = `
+                        <h2 style="color: orange;">⚠️ DECODE THÀNH CÔNG (Legacy)</h2>
+                        <p><strong>Môn:</strong> ${data2.s}</p>
+                        <p><strong>Lớp:</strong> ${data2.g}</p>
+                        <p><strong>Số câu:</strong> ${data2.q.length}</p>
+                        <pre>${JSON.stringify(data2, null, 2)}</pre>
+                    `;
+                } catch (e2) {
+                    console.error("❌ Legacy FAILED:", e2);
+                    document.getElementById('result').innerHTML = `
+                        <h2 style="color: red;">❌ DECODE THẤT BẠI</h2>
+                        <p><strong>Lỗi TextDecoder:</strong> ${e1.message}</p>
+                        <p><strong>Lỗi Legacy:</strong> ${e2.message}</p>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error("❌ CRITICAL ERROR:", error);
+            document.getElementById('result').innerHTML = `
+                <h2 style="color: red;">❌ LỖI NGHIÊM TRỌNG</h2>
+                <p>${error.message}</p>
+            `;
+        }
+    </script>
+</body>
+
+</html>

@@ -45,7 +45,7 @@ const App: React.FC = () => {
 
   // State để kiểm tra link chia sẻ ngay khi vào app
   const [isCheckingLink, setIsCheckingLink] = useState(() => {
-    return new URLSearchParams(window.location.search).has('exam');
+    return new URLSearchParams(window.location.search).has('exam') || !!localStorage.getItem('shared_exam_data');
   });
 
   const [practiceData, setPracticeData] = useState<{ subject: string, grade: string, questions: ExamQuestion[] } | null>(null);
@@ -98,63 +98,70 @@ const App: React.FC = () => {
     const checkSharedExam = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const sharedExam = urlParams.get('exam');
+      const localSharedData = localStorage.getItem('shared_exam_data');
 
-      if (sharedExam) {
+      if (sharedExam || localSharedData) {
         setIsCheckingLink(true);
         try {
           // Đợi một chút để UI ổn định
           await new Promise(resolve => setTimeout(resolve, 300));
 
-          // 1. VỆ SINH CHUỖI BASE64 CỰC KỲ CẨN THẬN
-          // Loại bỏ tất cả khoảng trắng, xuống dòng, ký tự lạ thường gặp khi copy từ Zalo/Messenger
-          let cleanBase64 = sharedExam.trim()
-            .replace(/\s/g, '') // Loại bỏ mọi loại khoảng trắng (\n, \r, \t, space)
-            .replace(/-/g, '+') // URL safe -> Standard
-            .replace(/_/g, '/'); // URL safe -> Standard
+          let data: any = null;
 
-          // Xử lý trường hợp chuỗi bị cắt cụt do Zalo/Messenger giới hạn ký tự
-          // Thêm padding '=' cho đúng chuẩn Base64
-          while (cleanBase64.length % 4 !== 0) {
-            cleanBase64 += '=';
+          // Ưu tiên 1: Lấy từ localStorage (do index.html đã xử lý trước)
+          if (localSharedData) {
+            try {
+              data = JSON.parse(localSharedData);
+              localStorage.removeItem('shared_exam_data'); // Xóa sau khi đọc
+              console.log("✅ Loaded exam from localStorage (pre-decoded)");
+            } catch (e) {
+              console.error("Error parsing local shared data", e);
+            }
           }
 
-          console.log(`Processing shared exam. Raw length: ${sharedExam.length}, Clean length: ${cleanBase64.length}`);
+          // Ưu tiên 2: Nếu không có trong storage thì tự decode từ URL
+          if (!data && sharedExam) {
+            // 1. VỆ SINH CHUỖI BASE64 CỰC KỲ CẨN THẬN
+            let cleanBase64 = sharedExam.trim()
+              .replace(/\s/g, '')
+              .replace(/-/g, '+')
+              .replace(/_/g, '/');
+
+            while (cleanBase64.length % 4 !== 0) {
+              cleanBase64 += '=';
+            }
+
+            try {
+              // 2. GIẢI MÃ AN TOÀN với TextDecoder
+              const decodeData = (base64String: string): any => {
+                try {
+                  const binaryString = atob(base64String);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+                  const decoder = new TextDecoder('utf-8');
+                  const jsonString = decoder.decode(bytes);
+                  return JSON.parse(jsonString);
+                } catch (e) {
+                  // Fallback methods...
+                  try {
+                    const decoded = decodeURIComponent(escape(atob(base64String)));
+                    return JSON.parse(decoded);
+                  } catch (e2) {
+                    const rawDecoded = atob(base64String);
+                    return JSON.parse(rawDecoded);
+                  }
+                }
+              };
+              data = decodeData(cleanBase64);
+            } catch (innerError: any) {
+              // Xử lý lỗi decode ở dưới
+              throw innerError;
+            }
+          }
 
           try {
-            // 2. GIẢI MÃ AN TOÀN với TextDecoder
-            const decodeData = (base64String: string): any => {
-              try {
-                // Decode Base64 thành binary string
-                const binaryString = atob(base64String);
-
-                // Chuyển binary string thành Uint8Array
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i);
-                }
-
-                // Decode UTF-8 bytes thành string
-                const decoder = new TextDecoder('utf-8');
-                const jsonString = decoder.decode(bytes);
-
-                // Parse JSON
-                return JSON.parse(jsonString);
-              } catch (e) {
-                console.warn("Modern decode failed, trying legacy method:", e);
-                // Fallback: phương pháp cũ
-                try {
-                  const decoded = decodeURIComponent(escape(atob(base64String)));
-                  return JSON.parse(decoded);
-                } catch (e2) {
-                  // Fallback cuối: decode trực tiếp
-                  const rawDecoded = atob(base64String);
-                  return JSON.parse(rawDecoded);
-                }
-              }
-            };
-
-            const data = decodeData(cleanBase64);
-
             if (data && (data.q || data.questions)) {
               let inflatedQuestions: ExamQuestion[] = [];
 
@@ -200,7 +207,7 @@ const App: React.FC = () => {
             console.error("❌ Decode/Parse error:", innerError);
 
             let errorMsg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n";
-            if (cleanBase64.length > 2500) {
+            if (sharedExam && sharedExam.length > 2500) {
               errorMsg += "Lý do: Link này quá dài, dữ liệu đã bị các ứng dụng (Zalo/Messenger) cắt bớt khi gửi.\n\n";
             } else {
               errorMsg += `Lý do: ${innerError.message || 'Link bị lỗi định dạng hoặc copy thiếu ký tự.'}\n\n`;
@@ -223,9 +230,10 @@ const App: React.FC = () => {
           }
         } catch (e) {
           console.error("Critical link check error:", e);
+        } finally {
+          setIsCheckingLink(false);
         }
       }
-      setIsCheckingLink(false);
     };
 
     checkSharedExam();

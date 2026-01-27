@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Mã Đề Thi</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🧪 Test Decode Mã Đề Thi</h1>
+        <p>Dán mã đề thi vào ô bên dưới để kiểm tra:</p>
+
+        <textarea id="codeInput" placeholder="Dán mã đề thi hoặc link vào đây..."></textarea>
+
+        <button onclick="testDecode()">🔍 Kiểm Tra Mã</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function testDecode() {
+            const input = document.getElementById('codeInput').value.trim();
+            const resultDiv = document.getElementById('result');
+
+            if (!input) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '❌ Vui lòng dán mã đề thi vào ô trên!';
+                return;
+            }
+
+            try {
+                // 1. Tách mã nếu là link
+                let code = input;
+                if (input.includes('exam=')) {
+                    code = input.split('exam=')[1].split('&')[0];
+                    resultDiv.innerHTML = '<div class="result info">ℹ️ Đã tách mã từ link</div>';
+                }
+
+                // 2. Làm sạch Base64
+                let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                while (cleanBase64.length % 4 !== 0) {
+                    cleanBase64 += '=';
+                }
+
+                console.log('Độ dài mã gốc:', code.length);
+                console.log('Độ dài sau làm sạch:', cleanBase64.length);
+
+                // 3. Thử decode
+                let json;
+                let method = '';
+
+                try {
+                    // Phương pháp 1: TextDecoder (mới)
+                    const binaryString = atob(cleanBase64);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const decoder = new TextDecoder('utf-8');
+                    const jsonString = decoder.decode(bytes);
+                    json = JSON.parse(jsonString);
+                    method = 'TextDecoder (Mới)';
+                } catch (e1) {
+                    console.warn('TextDecoder failed:', e1);
+                    try {
+                        // Phương pháp 2: Legacy (cũ)
+                        const decoded = decodeURIComponent(escape(atob(cleanBase64)));
+                        json = JSON.parse(decoded);
+                        method = 'Legacy (Cũ)';
+                    } catch (e2) {
+                        throw new Error(`Cả 2 phương pháp đều thất bại!\nTextDecoder: ${e1.message}\nLegacy: ${e2.message}`);
+                    }
+                }
+
+                // 4. Hiển thị kết quả
+                if (json && (json.q || json.questions)) {
+                    const questions = json.q || json.questions;
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+✅ DECODE THÀNH CÔNG!
+
+📊 Thông tin đề thi:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Môn học: ${json.s || json.subject || 'Không rõ'}
+Lớp: ${json.g || json.grade || 'Không rõ'}
+Số câu hỏi: ${questions.length}
+Phương pháp decode: ${method}
+
+📝 Câu hỏi đầu tiên:
+${Array.isArray(questions[0]) ? questions[0][1] : questions[0].content || questions[0]}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ MÃ NÀY HỢP LỆ - Có thể sử dụng trong app!
+                    `;
+                } else {
+                    throw new Error('Dữ liệu không đúng định dạng đề thi');
+                }
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+❌ DECODE THẤT BẠI!
+
+Lỗi: ${error.message}
+
+💡 Gợi ý khắc phục:
+1. Kiểm tra lại mã có copy đầy đủ không
+2. Đảm bảo không có ký tự thừa hoặc khoảng trắng
+3. Thử copy lại từ nguồn gốc
+4. Nếu là link, hãy copy toàn bộ link
+
+📞 Nếu vẫn lỗi, liên hệ giáo viên để lấy lại mã mới.
+                `;
+            }
+        }
+
+        // Auto test nếu có mã trong URL
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const examCode = urlParams.get('exam');
+            if (examCode) {
+                document.getElementById('codeInput').value = examCode;
+                testDecode();
+            }
+        });
+    </script>
+</body>
+
+</html>
