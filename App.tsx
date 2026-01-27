@@ -123,8 +123,28 @@ const App: React.FC = () => {
             const decoded = decodeURIComponent(escape(atob(safeBase64)));
             const data = JSON.parse(decoded);
 
-            if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
-              console.log("Success:", data);
+            if (data.q && Array.isArray(data.q)) {
+              // A. Trường hợp dữ liệu Rút gọn (Minified)
+              console.log("Phát hiện dữ liệu rút gọn (Mobile optimized)");
+              const inflatedQuestions = data.q.map((item: any, idx: number) => ({
+                id: `share-${idx}`,
+                type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
+                content: item[1],
+                options: item[2],
+                answer: item[3],
+                explanation: item[4],
+                image: item[5]
+              }));
+
+              setPracticeData({
+                subject: data.s,
+                grade: data.g,
+                questions: inflatedQuestions
+              });
+              setView('practice');
+            } else if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+              // B. Trường hợp dữ liệu Cũ (Full JSON)
+              console.log("Success (Legacy format):", data);
               setPracticeData(data);
               setView('practice');
             } else {

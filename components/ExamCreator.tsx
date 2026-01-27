@@ -247,58 +247,61 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     );
   };
 
-  const handleShareLink = async () => {
+  const handleShareLink = async (viewMode: 'link' | 'code' = 'link') => {
     if (questions.length === 0) return;
 
     // Cảnh báo nếu đang chạy localhost
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalhost) {
-      const confirmLocal = window.confirm(
-        "⚠️ LƯU Ý QUAN TRỌNG:\n\n" +
-        "Thầy Cô đang chạy ứng dụng trên máy cá nhân (localhost).\n" +
-        "Link chia sẻ này CHỈ hoat động trên máy tính này.\n\n" +
-        "Nếu gửi cho học sinh ở nhà, các em sẽ KHÔNG truy cập được.\n" +
-        "Thầy Cô có muốn tiếp tục tạo link để kiểm thử không?"
-      );
-      if (!confirmLocal) return;
-    }
-
-    const data = {
-      subject: config.subject,
-      grade: config.grade,
-      questions: questions
-    };
 
     try {
-      const jsonStr = JSON.stringify(data);
+      // 1. Tối ưu hóa dữ liệu (Minify)
+      const minifiedData = {
+        s: config.subject,
+        g: config.grade,
+        q: questions.map(q => {
+          // Rút gọn mảng: bỏ các phần tử rỗng ở cuối
+          const item = [
+            q.type === 'Trắc nghiệm' ? 1 : 0,
+            q.content,
+            q.options || [],
+            q.answer,
+            q.explanation || '',
+            q.image || ''
+          ];
+          // Remove trailing empty values (image, explanation)
+          while (item.length > 0 && (item[item.length - 1] === '' || item[item.length - 1] === null || (Array.isArray(item[item.length - 1]) && (item[item.length - 1] as any[]).length === 0))) {
+            item.pop();
+          }
+          return item;
+        })
+      };
 
-      // Cảnh báo kích thước dữ liệu
-      if (jsonStr.length > 20000) {
-        const confirmSize = window.confirm(
-          "⚠️ Cảnh báo dữ liệu lớn:\n\n" +
-          "Đề thi này chứa nhiều nội dung (hoặc hình ảnh), khiến link chia sẻ sẽ rất dài.\n" +
-          "Một số trình duyệt hoặc Zalo/Facebook có thể không mở được link này.\n\n" +
-          "Thầy Cô có muốn tiếp tục tạo link không?"
-        );
-        if (!confirmSize) return;
+      const jsonStr = JSON.stringify(minifiedData);
+
+      // 2. Encode Base64 an toàn cho URL (URL Safe)
+      const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+      const safeBase64 = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      if (viewMode === 'code') {
+        await navigator.clipboard.writeText(safeBase64);
+        alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nNếu link bị lỗi, Thầy/Cô hãy gửi mã này cho học sinh. Học sinh chọn "Nhập Mã" để làm bài.`);
+        return;
       }
 
-      const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-      // Cần encodeURIComponent chuỗi Base64 để tránh lỗi các ký tự đặc biệt như + / =
-      const url = `${window.location.origin}${window.location.pathname}?exam=${encodeURIComponent(encoded)}`;
+      const url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
 
-      try {
-        await navigator.clipboard.writeText(url);
-        alert(`🚀 Thành công!\n\nLink luyện tập đã được sao chép vào bộ nhớ tạm.\nThầy Cô có thể dán (Ctrl+V) để gửi thử nghiệm.`);
-      } catch (clipboardErr) {
-        console.error("Clipboard failed:", clipboardErr);
-        // Fallback thủ công
-        prompt("Do trình duyệt chặn tự động sao chép, Thầy Cô vui lòng copy link dưới đây:", url);
+      // Kiểm tra độ dài URL
+      if (url.length > 2000) {
+        const confirmMsg = `⚠️ LINK QUÁ DÀI (${url.length} ký tự)\n\nLink này có thể bị lỗi khi gửi qua Zalo/Messenger.\n\nKhuyên dùng: Chọn "Copy Mã Đề" và gửi mã riêng.\n\nBạn vẫn muốn copy Link?`;
+        if (!window.confirm(confirmMsg)) return;
       }
+
+      await navigator.clipboard.writeText(url);
+      alert(`🚀 Link đã được sao chép!\n\n(Dạng rút gọn tối đa). Gửi ngay cho học sinh nhé!`);
 
     } catch (e) {
-      console.error("Link generation error:", e);
-      alert("❌ Lỗi: Không thể tạo link chia sẻ do dữ liệu quá lớn hoặc lỗi trình duyệt.");
+      console.error("Link gen error:", e);
+      alert("❌ Lỗi tạo link. Vui lòng thử lại.");
     }
   };
 
@@ -382,9 +385,14 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           <div className="flex items-center space-x-2">
             {questions.length > 0 && (
               <>
-                <button onClick={handleShareLink} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase border border-rose-100 hover:bg-rose-100 transition-all">
-                  <i className="fas fa-share-nodes mr-2"></i>Chia sẻ Link
-                </button>
+                <div className="flex space-x-1">
+                  <button onClick={() => handleShareLink('link')} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-l-xl rounded-r-none text-[10px] font-black uppercase border border-rose-100 hover:bg-rose-100 transition-all border-r-0">
+                    <i className="fas fa-share-nodes mr-2"></i>Chia sẻ Link
+                  </button>
+                  <button onClick={() => handleShareLink('code')} className="px-3 py-2 bg-rose-50 text-rose-600 rounded-r-xl rounded-l-none text-[10px] font-black uppercase border border-rose-100 hover:bg-rose-100 transition-all border-l-slate-200" title="Copy Mã Đề (Dùng khi Link bị lỗi)">
+                    <i className="fas fa-code"></i>
+                  </button>
+                </div>
                 {onStartPractice && (
                   <button onClick={() => onStartPractice(config.subject, config.grade, questions)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
                     <i className="fas fa-play mr-2"></i>Luyện tập ngay
@@ -545,33 +553,90 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               <button onClick={() => setShowImportModal(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
             </div>
             <div className="space-y-6">
-              <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
-                {pendingImportFile ? (
-                  pendingImportFile.mimeType === 'application/pdf' ? (
-                    <div className="flex flex-col items-center">
-                      <i className="fas fa-file-pdf text-6xl text-rose-500 mb-3"></i>
-                      <p className="text-xs font-bold text-slate-600">{pendingImportFile.name}</p>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
+                    {pendingImportFile ? (
+                      pendingImportFile.mimeType === 'application/pdf' ? (
+                        <div className="flex flex-col items-center">
+                          <i className="fas fa-file-pdf text-6xl text-rose-500 mb-3"></i>
+                          <p className="text-xs font-bold text-slate-600">{pendingImportFile.name}</p>
+                        </div>
+                      ) : (
+                        <img src={`data:${pendingImportFile.mimeType};base64,${pendingImportFile.data}`} className="w-full h-full object-contain" />
+                      )
+                    ) : (
+                      <>
+                        <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn ảnh hoặc PDF đề thi</p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col space-y-3">
+                    <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-[32px] p-4 flex flex-col relative focus-within:border-indigo-400 focus-within:bg-white transition-all">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"><i className="fas fa-code mr-1"></i> Dán Mã Đề (Nếu có)</p>
+                      <textarea
+                        id="paste-code-input"
+                        placeholder="Dán mã đề thi vào đây..."
+                        className="flex-1 w-full bg-transparent border-none focus:ring-0 text-[11px] font-mono resize-none"
+                        onChange={(e) => {
+                          // Auto-detect and load
+                          const val = e.target.value.trim();
+                          if (val.length > 20) {
+                            try {
+                              // Validate base64 slightly
+                              if (!val.startsWith('{') && !val.includes(' ')) {
+                                // Likely base64
+                                const safe = val.replace(/-/g, '+').replace(/_/g, '/');
+                                const json = JSON.parse(decodeURIComponent(escape(atob(safe))));
+                                if (json) {
+                                  if (confirm("Phát hiện mã đề hợp lệ! Bạn có muốn mở ngay không?")) {
+                                    if (json.q || json.questions) {
+                                      // Chuyển đổi format nếu cần
+                                      // Nhưng logic chính nằm ở App.tsx hoặc load vào state questions
+                                      // Ở đây ta setQuestions trực tiếp
+                                      let loadedQuestions: ExamQuestion[] = [];
+                                      if (json.q) {
+                                        loadedQuestions = json.q.map((item: any, idx: number) => ({
+                                          id: `imp-code-${idx}`,
+                                          type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
+                                          content: item[1],
+                                          options: item[2],
+                                          answer: item[3],
+                                          explanation: item[4],
+                                          image: item[5]
+                                        }));
+                                      } else {
+                                        loadedQuestions = json.questions;
+                                      }
+                                      setQuestions(loadedQuestions);
+                                      if (json.s) setConfig({ ...config, subject: json.s, grade: json.g || config.grade });
+                                      setShowImportModal(false);
+                                      alert("Đã tải đề thi thành công!");
+                                      e.target.value = "";
+                                    }
+                                  }
+                                }
+                              }
+                            } catch (err) { /* ignore partial input */ }
+                          }
+                        }}
+                      />
                     </div>
-                  ) : (
-                    <img src={`data:${pendingImportFile.mimeType};base64,${pendingImportFile.data}`} className="w-full h-full object-contain" />
-                  )
-                ) : (
-                  <>
-                    <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn ảnh hoặc file PDF đề thi</p>
-                  </>
-                )}
+                  </div>
+                </div>
+
+                <input ref={importFileInputRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
+                <button onClick={handleImportOldExam} disabled={isImporting || !pendingImportFile} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
+                  {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ File)</span></>}
+                </button>
               </div>
-              <input ref={importFileInputRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
-              <button onClick={handleImportOldExam} disabled={isImporting || !pendingImportFile} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
-                {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách thông minh</span></>}
-              </button>
             </div>
           </div>
-        </div>
       )}
-    </div>
-  );
+        </div>
+      );
 };
 
-export default ExamCreator;
+      export default ExamCreator;
