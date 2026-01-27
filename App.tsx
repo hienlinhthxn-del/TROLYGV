@@ -121,40 +121,55 @@ const App: React.FC = () => {
 
           // Ưu tiên 2: Nếu không có trong storage thì tự decode từ URL
           if (!data && sharedExam) {
-            // 1. VỆ SINH CHUỖI BASE64 CỰC KỲ CẨN THẬN
-            let cleanBase64 = sharedExam.trim()
-              .replace(/\s/g, '')
-              .replace(/-/g, '+')
-              .replace(/_/g, '/');
-
-            while (cleanBase64.length % 4 !== 0) {
-              cleanBase64 += '=';
-            }
-
             try {
-              // 2. GIẢI MÃ AN TOÀN với TextDecoder
-              const decodeData = (base64String: string): any => {
-                try {
-                  const binaryString = atob(base64String);
-                  const bytes = new Uint8Array(binaryString.length);
-                  for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                  }
-                  const decoder = new TextDecoder('utf-8');
-                  const jsonString = decoder.decode(bytes);
-                  return JSON.parse(jsonString);
-                } catch (e) {
-                  // Fallback methods...
-                  try {
-                    const decoded = decodeURIComponent(escape(atob(base64String)));
-                    return JSON.parse(decoded);
-                  } catch (e2) {
-                    const rawDecoded = atob(base64String);
-                    return JSON.parse(rawDecoded);
-                  }
+              if (sharedExam.startsWith('v2_') && 'DecompressionStream' in window) {
+                // --- GIẢI NÉN GZIP (MỚI) ---
+                const base64 = sharedExam.substring(3).replace(/-/g, '+').replace(/_/g, '/');
+                const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+                const binaryString = atob(padded);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
                 }
-              };
-              data = decodeData(cleanBase64);
+                const stream = new Blob([bytes]).stream();
+                // @ts-ignore
+                const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
+                const response = new Response(decompressed);
+                data = await response.json();
+              } else {
+                // --- GIẢI MÃ CŨ (Base64) ---
+                let cleanBase64 = sharedExam.trim()
+                  .replace(/\s/g, '')
+                  .replace(/-/g, '+')
+                  .replace(/_/g, '/');
+
+                while (cleanBase64.length % 4 !== 0) {
+                  cleanBase64 += '=';
+                }
+
+                const decodeData = (base64String: string): any => {
+                  try {
+                    const binaryString = atob(base64String);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                      bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const decoder = new TextDecoder('utf-8');
+                    const jsonString = decoder.decode(bytes);
+                    return JSON.parse(jsonString);
+                  } catch (e) {
+                    // Fallback methods...
+                    try {
+                      const decoded = decodeURIComponent(escape(atob(base64String)));
+                      return JSON.parse(decoded);
+                    } catch (e2) {
+                      const rawDecoded = atob(base64String);
+                      return JSON.parse(rawDecoded);
+                    }
+                  }
+                };
+                data = decodeData(cleanBase64);
+              }
             } catch (innerError: any) {
               // Xử lý lỗi decode ở dưới
               throw innerError;

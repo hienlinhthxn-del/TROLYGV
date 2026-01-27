@@ -319,16 +319,45 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         }
       };
 
+      // 3. Nén dữ liệu (Gzip Compression) - GIẢM 60-70% DUNG LƯỢNG
+      const compressData = async (data: any): Promise<string | null> => {
+        // @ts-ignore
+        if (!window.CompressionStream) return null;
+        try {
+          const json = JSON.stringify(data);
+          const stream = new Blob([json]).stream();
+          // @ts-ignore
+          const compressed = stream.pipeThrough(new CompressionStream('gzip'));
+          const response = new Response(compressed);
+          const blob = await response.blob();
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              // URL Safe & Prefix v2_
+              const urlSafe = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+              resolve('v2_' + urlSafe);
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch (e) {
+          console.error("Compression error:", e);
+          return null;
+        }
+      };
+
       let currentData = prepareData(false);
-      let safeBase64 = encodeData(currentData);
-      let url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
+
+      // Thử nén trước, nếu không hỗ trợ thì dùng cách cũ
+      let finalCode = await compressData(currentData) || encodeData(currentData);
+      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
       // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
       if (viewMode === 'link' && url.length > 1800) {
         console.warn(`Link quá dài (${url.length} ký tự), đang thử nén dữ liệu...`);
         currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
-        safeBase64 = encodeData(currentData);
-        url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
+        finalCode = await compressData(currentData) || encodeData(currentData);
+        url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
         if (url.length > 2000) {
           const confirmMsg = `⚠️ ĐỀ THI QUÁ LỚN (${questions.length} câu)\n\nLink hiện tại dài ${url.length} ký tự, có thể bị lỗi (cụt link) khi gửi qua Zalo/Facebook.\n\n✅ KHUYẾN NGHỊ: Chọn "Copy Mã Đề" để gửi cho học sinh sẽ ổn định hơn.\n\nBạn vẫn muốn thử Copy Link?`;
@@ -338,7 +367,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
       if (viewMode === 'code') {
         // Chế độ copy mã đề: luôn dùng bản đầy đủ
-        const fullBase64 = encodeData(prepareData(false));
+        const fullBase64 = await compressData(prepareData(false)) || encodeData(prepareData(false));
         await navigator.clipboard.writeText(fullBase64);
         alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nHướng dẫn: Gửi mã này cho học sinh. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
         return;

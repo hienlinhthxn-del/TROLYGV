@@ -95,7 +95,7 @@
 
     <!-- Script xử lý Link chia sẻ đề thi (Decode Base64 UTF-8) -->
     <script>
-        (function () {
+        (async function () {
             // Tự động kiểm tra URL xem có mã đề thi không (tham số ?exam=...)
             const urlParams = new URLSearchParams(window.location.search);
             const sharedCode = urlParams.get('exam');
@@ -103,25 +103,44 @@
             if (sharedCode) {
                 console.log("%c Đang xử lý link chia sẻ... ", "background: #eab308; color: black; font-weight: bold;");
                 try {
-                    // 1. Chuẩn hóa chuỗi Base64 (URL Safe)
-                    let cleanBase64 = sharedCode.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-                    while (cleanBase64.length % 4 !== 0) {
-                        cleanBase64 += '=';
+                    let examData;
+
+                    // KIỂM TRA PHIÊN BẢN: Nếu bắt đầu bằng 'v2_', dùng giải nén Gzip (Mới)
+                    if (sharedCode.startsWith('v2_') && window.DecompressionStream) {
+                        const base64 = sharedCode.substring(3).replace(/-/g, '+').replace(/_/g, '/');
+                        // Thêm padding nếu cần
+                        const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+
+                        const binaryString = atob(padded);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+
+                        const stream = new Blob([bytes]).stream();
+                        const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
+                        const response = new Response(decompressed);
+                        examData = await response.json();
+                        console.log("✅ Đã giải nén Gzip thành công");
+                    } else {
+                        // PHƯƠNG PHÁP CŨ (Base64 thuần)
+                        let cleanBase64 = sharedCode.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                        while (cleanBase64.length % 4 !== 0) {
+                            cleanBase64 += '=';
+                        }
+
+                        const binaryString = atob(cleanBase64);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+
+                        const decoder = new TextDecoder('utf-8');
+                        const jsonString = decoder.decode(bytes);
+                        examData = JSON.parse(jsonString);
                     }
 
-                    // 2. Giải mã Binary String
-                    const binaryString = atob(cleanBase64);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                    }
-
-                    // 3. Decode UTF-8 (Hỗ trợ tiếng Việt không bị lỗi font)
-                    const decoder = new TextDecoder('utf-8');
-                    const jsonString = decoder.decode(bytes);
-                    const examData = JSON.parse(jsonString);
-
-                    // 4. Lưu vào localStorage để React App (index.tsx) đọc được
+                    // Lưu vào localStorage để React App đọc
                     localStorage.setItem('shared_exam_data', JSON.stringify(examData));
                     console.log("✅ Đã giải mã đề thi thành công:", examData);
 
