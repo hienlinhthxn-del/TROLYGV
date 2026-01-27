@@ -257,19 +257,26 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           s: config.subject,
           g: config.grade,
           q: questions.map(q => {
-            // Rút gọn mảng: [type, content, options, answer, explanation, image]
+            // [type, content, options, answer, explanation, image]
+            let explanation = q.explanation || '';
+            let image = q.image || '';
+
+            if (isCompact) {
+              // Rút gọn mạnh nếu link quá dài
+              explanation = explanation.length > 50 ? explanation.substring(0, 47) + '...' : explanation;
+              image = (image.length > 50 || image.startsWith('<svg')) ? '' : image;
+            }
+
             const item: any[] = [
               q.type === 'Trắc nghiệm' ? 1 : 0,
               q.content,
               q.options || [],
               q.answer,
-              // Nếu chế độ Compact (cho Link), bỏ bớt giải thích và hình ảnh nếu quá dài
-              isCompact ? (q.explanation?.substring(0, 100) || '') : (q.explanation || ''),
-              isCompact ? (q.image?.startsWith('<svg') ? '' : q.image) : q.image
+              explanation,
+              image
             ];
 
-            // Xóa các phần tử rỗng ở cuối để tiết kiệm dung lượng
-            while (item.length > 0 && (item[item.length - 1] === '' || item[item.length - 1] === null || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
+            while (item.length > 0 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
               item.pop();
             }
             return item;
@@ -277,29 +284,25 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         };
       };
 
-      let minifiedData = prepareData(false);
-      let jsonStr = JSON.stringify(minifiedData);
-
-      // 2. Encode Base64 an toàn cho URL
-      const toSafeBase64 = (str: string) => {
-        try {
-          // Sử dụng phương pháp hiện đại hơn hoặc btoa an toàn
-          const b64 = btoa(unescape(encodeURIComponent(str)));
-          return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        } catch (e) {
-          return '';
-        }
+      // 2. Encode Base64 an toàn và Nén nhẹ
+      const encodeData = (data: any) => {
+        const json = JSON.stringify(data);
+        // Base64 chuẩn URL Safe
+        return btoa(unescape(encodeURIComponent(json)))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
       };
 
-      let safeBase64 = toSafeBase64(jsonStr);
+      let currentData = prepareData(false);
+      let safeBase64 = encodeData(currentData);
       let url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
 
-      // 3. Xử lý Link quá dài (Đặc biệt quan trọng cho Mobile)
+      // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
       if (viewMode === 'link' && url.length > 1800) {
         console.warn("Link quá dài, đang thử nén dữ liệu...");
-        minifiedData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
-        jsonStr = JSON.stringify(minifiedData);
-        safeBase64 = toSafeBase64(jsonStr);
+        currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
+        safeBase64 = encodeData(currentData);
         url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
 
         if (url.length > 2000) {
@@ -310,7 +313,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
       if (viewMode === 'code') {
         // Chế độ copy mã đề: luôn dùng bản đầy đủ
-        const fullBase64 = toSafeBase64(JSON.stringify(prepareData(false)));
+        const fullBase64 = encodeData(prepareData(false));
         await navigator.clipboard.writeText(fullBase64);
         alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nHướng dẫn: Gửi mã này cho học sinh. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
         return;

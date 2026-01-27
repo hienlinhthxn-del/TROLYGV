@@ -230,66 +230,68 @@ export class GeminiService {
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
   private parseJSONSafely(text: string): any {
-    // 1. Làm sạch sơ bộ
-    let cleaned = text.trim();
+    // 1. Tìm và bóc tách khối JSON bằng cách quét cân bằng dấu ngoặc { }
+    // Điều này giúp loại bỏ rác ở đầu và cuối một cách tuyệt đối
+    const extractJSON = (input: string): string => {
+      const firstOpen = input.indexOf('{');
+      const lastClose = input.lastIndexOf('}');
+      if (firstOpen === -1 || lastClose === -1 || lastClose < firstOpen) return input;
 
-    // Loại bỏ Markdown code block
-    cleaned = cleaned.replace(/^```json/g, '').replace(/^```/g, '').replace(/```$/g, '').trim();
+      let count = 0;
+      let start = -1;
+      for (let i = firstOpen; i <= lastClose; i++) {
+        if (input[i] === '{') {
+          if (count === 0) start = i;
+          count++;
+        } else if (input[i] === '}') {
+          count--;
+          if (count === 0 && start !== -1) {
+            return input.substring(start, i + 1);
+          }
+        }
+      }
+      return input.substring(firstOpen, lastClose + 1);
+    };
 
-    // 2. Trích xuất phần JSON thực sự (giữa { và })
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start !== -1 && end !== -1 && end > start) {
-      cleaned = cleaned.substring(start, end + 1);
-    }
+    let cleaned = extractJSON(text.trim());
 
-    // 3. Hàm sửa lỗi JSON nâng cao
-    const advancedRepair = (str: string): string => {
+    // 2. Hàm sửa lỗi JSON "siêu cấp"
+    const ultraRepair = (str: string): string => {
       let r = str;
 
-      // Xử lý lỗi thoát chuỗi (unescaped backslashes)
-      // Tìm các dấu \ không phải là phần của một escape sequence chuẩn
-      // Gồm: \" \\ \/ \b \f \n \r \t \uXXXX
-      r = r.replace(/\\(?!(["\\\/bfnrtu]|u[0-9a-fA-F]{4}))/g, "\\\\");
+      // A. Sửa lỗi backslash: Chỉ giữ lại các escape hơp lệ, còn lại biến thành double backslash
+      // Các escape hợp lệ: " \ / b f n r t uXXXX
+      r = r.replace(/\\/g, '__BACKSLASH__'); // Tạm thời ẩn tất cả backslash
 
-      // Xử lý các ký tự điều khiển (Control characters) - nguyên nhân chính gây lỗi parse
-      // Đặc biệt là các ký tự từ \u0000 đến \u001F
+      // Khôi phục các escape chuẩn
+      r = r.replace(/__BACKSLASH__(["\\\/bfnrt])/g, '\\$1');
+      r = r.replace(/__BACKSLASH__u([0-9a-fA-F]{4})/g, '\\u$1');
+
+      // Những gì còn lại là backslash đơn lẻ gây lỗi -> biến thành \\
+      r = r.replace(/__BACKSLASH__/g, '\\\\');
+
+      // B. Sửa lỗi ký tự điều khiển (Newline, Tab...) bên trong chuỗi
       r = r.replace(/[\u0000-\u001F]/g, (match) => {
         const charCode = match.charCodeAt(0);
-        if (charCode === 10) return "\\n"; // Newline
-        if (charCode === 13) return "\\r"; // Carriage return
-        if (charCode === 9) return "\\t";  // Tab
-        return ""; // Loại bỏ các ký tự điều khiển khác
+        if (charCode === 10) return "\\n";
+        if (charCode === 13) return "\\r";
+        if (charCode === 9) return "\\t";
+        return "";
       });
 
       return r;
     };
 
-    // 4. Thử Parse với các cấp độ bảo trì
+    // 3. Thử Parse đa tầng
     try {
-      // Cấp 1: Parse trực tiếp sau khi làm sạch Markdown
       return JSON.parse(cleaned);
     } catch (e1) {
       try {
-        // Cấp 2: Áp dụng sửa lỗi ký tự thoát và điều khiển
-        const repaired = advancedRepair(cleaned);
+        const repaired = ultraRepair(cleaned);
         return JSON.parse(repaired);
       } catch (e2) {
-        try {
-          // Cấp 3: Thay thế các ký tự gây lỗi còn sót lại (Brute force)
-          // Đôi khi AI nhét các ký tự đặc biệt vào giữa chuỗi
-          const extremeSanitized = cleaned
-            .replace(/\\/g, "\\\\") // Escape all backslashes first
-            .replace(/\\\\"/g, '\\"') // Restore escaped quotes
-            .replace(/\\\\n/g, '\\n') // Restore escaped newlines
-            .replace(/\\'/g, "'");    // Convert \' to '
-
-          return JSON.parse(extremeSanitized);
-        } catch (e3) {
-          console.error("JSON Parse Failed completely. Original text:", text);
-          // Ghi đè lỗi để hiển thị thông báo thân thiện hơn
-          throw new Error(`Dữ liệu AI không chuẩn (vị trí lỗi: ${e1 instanceof Error ? e1.message : 'không xác định'}). Thầy/Cô hãy thử bấm nút tạo lại lần nữa nhé.`);
-        }
+        console.error("JSON Parse Failed completely.", { original: text, repaired: ultraRepair(cleaned) });
+        throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
       }
     }
   }
