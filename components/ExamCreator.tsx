@@ -250,58 +250,78 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const handleShareLink = async (viewMode: 'link' | 'code' = 'link') => {
     if (questions.length === 0) return;
 
-    // Cảnh báo nếu đang chạy localhost
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
     try {
       // 1. Tối ưu hóa dữ liệu (Minify)
-      const minifiedData = {
-        s: config.subject,
-        g: config.grade,
-        q: questions.map(q => {
-          // Rút gọn mảng: bỏ các phần tử rỗng ở cuối
-          const item = [
-            q.type === 'Trắc nghiệm' ? 1 : 0,
-            q.content,
-            q.options || [],
-            q.answer,
-            q.explanation || '',
-            q.image || ''
-          ];
-          // Remove trailing empty values (image, explanation)
-          while (item.length > 0 && (item[item.length - 1] === '' || item[item.length - 1] === null || (Array.isArray(item[item.length - 1]) && (item[item.length - 1] as any[]).length === 0))) {
-            item.pop();
-          }
-          return item;
-        })
+      const prepareData = (isCompact: boolean) => {
+        return {
+          s: config.subject,
+          g: config.grade,
+          q: questions.map(q => {
+            // Rút gọn mảng: [type, content, options, answer, explanation, image]
+            const item: any[] = [
+              q.type === 'Trắc nghiệm' ? 1 : 0,
+              q.content,
+              q.options || [],
+              q.answer,
+              // Nếu chế độ Compact (cho Link), bỏ bớt giải thích và hình ảnh nếu quá dài
+              isCompact ? (q.explanation?.substring(0, 100) || '') : (q.explanation || ''),
+              isCompact ? (q.image?.startsWith('<svg') ? '' : q.image) : q.image
+            ];
+
+            // Xóa các phần tử rỗng ở cuối để tiết kiệm dung lượng
+            while (item.length > 0 && (item[item.length - 1] === '' || item[item.length - 1] === null || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
+              item.pop();
+            }
+            return item;
+          })
+        };
       };
 
-      const jsonStr = JSON.stringify(minifiedData);
+      let minifiedData = prepareData(false);
+      let jsonStr = JSON.stringify(minifiedData);
 
-      // 2. Encode Base64 an toàn cho URL (URL Safe)
-      const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
-      const safeBase64 = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      // 2. Encode Base64 an toàn cho URL
+      const toSafeBase64 = (str: string) => {
+        try {
+          // Sử dụng phương pháp hiện đại hơn hoặc btoa an toàn
+          const b64 = btoa(unescape(encodeURIComponent(str)));
+          return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        } catch (e) {
+          return '';
+        }
+      };
+
+      let safeBase64 = toSafeBase64(jsonStr);
+      let url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
+
+      // 3. Xử lý Link quá dài (Đặc biệt quan trọng cho Mobile)
+      if (viewMode === 'link' && url.length > 1800) {
+        console.warn("Link quá dài, đang thử nén dữ liệu...");
+        minifiedData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
+        jsonStr = JSON.stringify(minifiedData);
+        safeBase64 = toSafeBase64(jsonStr);
+        url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
+
+        if (url.length > 2000) {
+          const confirmMsg = `⚠️ ĐỀ THI QUÁ LỚN (${questions.length} câu)\n\nLink hiện tại dài ${url.length} ký tự, có thể bị lỗi (cụt link) khi gửi qua Zalo/Facebook.\n\nKhuyên dùng: Chọn "Copy Mã Đề" để gửi cho học sinh sẽ ổn định hơn.\n\nBạn vẫn muốn thử Copy Link?`;
+          if (!window.confirm(confirmMsg)) return;
+        }
+      }
 
       if (viewMode === 'code') {
-        await navigator.clipboard.writeText(safeBase64);
-        alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nNếu link bị lỗi, Thầy/Cô hãy gửi mã này cho học sinh. Học sinh chọn "Nhập Mã" để làm bài.`);
+        // Chế độ copy mã đề: luôn dùng bản đầy đủ
+        const fullBase64 = toSafeBase64(JSON.stringify(prepareData(false)));
+        await navigator.clipboard.writeText(fullBase64);
+        alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nHướng dẫn: Gửi mã này cho học sinh. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
         return;
       }
 
-      const url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
-
-      // Kiểm tra độ dài URL
-      if (url.length > 2000) {
-        const confirmMsg = `⚠️ LINK QUÁ DÀI (${url.length} ký tự)\n\nLink này có thể bị lỗi khi gửi qua Zalo/Messenger.\n\nKhuyên dùng: Chọn "Copy Mã Đề" và gửi mã riêng.\n\nBạn vẫn muốn copy Link?`;
-        if (!window.confirm(confirmMsg)) return;
-      }
-
       await navigator.clipboard.writeText(url);
-      alert(`🚀 Link đã được sao chép!\n\n(Dạng rút gọn tối đa). Gửi ngay cho học sinh nhé!`);
+      alert(`🚀 Link đã được sao chép!\n\n${url.length > 1500 ? '⚠️ Lưu ý: Đề khá dài, nếu học sinh không mở được link, hãy dùng chức năng "Copy Mã Đề" nhé!' : 'Gửi ngay cho học sinh để bắt đầu luyện tập.'}`);
 
     } catch (e) {
       console.error("Link gen error:", e);
-      alert("❌ Lỗi tạo link. Vui lòng thử lại.");
+      alert("❌ Lỗi tạo link. Thầy/Cô hãy thử rút ngắn nội dung câu hỏi hoặc giảm số lượng câu hỏi nhé.");
     }
   };
 
@@ -581,45 +601,52 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                         placeholder="Dán mã đề thi vào đây..."
                         className="flex-1 w-full bg-transparent border-none focus:ring-0 text-[11px] font-mono resize-none"
                         onChange={(e) => {
-                          // Auto-detect and load
-                          const val = e.target.value.trim();
-                          if (val.length > 20) {
+                          // Tự động nhận diện và tải đề khi dán mã
+                          const input = e.target.value.trim();
+                          if (input.length > 20) {
                             try {
-                              // Validate base64 slightly
-                              if (!val.startsWith('{') && !val.includes(' ')) {
-                                // Likely base64
-                                const safe = val.replace(/-/g, '+').replace(/_/g, '/');
-                                const json = JSON.parse(decodeURIComponent(escape(atob(safe))));
-                                if (json) {
-                                  if (confirm("Phát hiện mã đề hợp lệ! Bạn có muốn mở ngay không?")) {
-                                    if (json.q || json.questions) {
-                                      // Chuyển đổi format nếu cần
-                                      // Nhưng logic chính nằm ở App.tsx hoặc load vào state questions
-                                      // Ở đây ta setQuestions trực tiếp
-                                      let loadedQuestions: ExamQuestion[] = [];
-                                      if (json.q) {
-                                        loadedQuestions = json.q.map((item: any, idx: number) => ({
-                                          id: `imp-code-${idx}`,
-                                          type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
-                                          content: item[1],
-                                          options: item[2],
-                                          answer: item[3],
-                                          explanation: item[4],
-                                          image: item[5]
-                                        }));
-                                      } else {
-                                        loadedQuestions = json.questions;
-                                      }
-                                      setQuestions(loadedQuestions);
-                                      if (json.s) setConfig({ ...config, subject: json.s, grade: json.g || config.grade });
-                                      setShowImportModal(false);
-                                      alert("Đã tải đề thi thành công!");
-                                      e.target.value = "";
-                                    }
+                              // 1. Tách lấy mã nếu người dùng dán cả link
+                              let code = input;
+                              if (input.includes('exam=')) {
+                                code = input.split('exam=')[1].split('&')[0];
+                              }
+
+                              // 2. Làm sạch mã Base64
+                              const safe = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                              const decoded = decodeURIComponent(escape(atob(safe)));
+                              const json = JSON.parse(decoded);
+
+                              if (json && (json.q || json.questions || json.s)) {
+                                if (confirm("Phát hiện dữ liệu đề thi hợp lệ! Bạn có muốn nhập ngay không?")) {
+                                  let loadedQuestions: ExamQuestion[] = [];
+                                  if (json.q && Array.isArray(json.q)) {
+                                    // Chuyển đổi từ định dạng rút gọn
+                                    loadedQuestions = json.q.map((item: any, idx: number) => ({
+                                      id: `imp-code-${Date.now()}-${idx}`,
+                                      type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
+                                      content: item[1] || '',
+                                      options: item[2] || [],
+                                      answer: item[3] || '',
+                                      explanation: item[4] || '',
+                                      image: item[5] || '',
+                                      level: 'Thông hiểu'
+                                    }));
+                                  } else {
+                                    loadedQuestions = json.questions || [];
+                                  }
+
+                                  if (loadedQuestions.length > 0) {
+                                    setQuestions(prev => [...prev, ...loadedQuestions]);
+                                    if (json.s || json.subject) setConfig(prev => ({ ...prev, subject: json.s || json.subject, grade: json.g || json.grade || prev.grade }));
+                                    setShowImportModal(false);
+                                    alert(`Đã nhập thành công ${loadedQuestions.length} câu hỏi.`);
+                                    e.target.value = "";
                                   }
                                 }
                               }
-                            } catch (err) { /* ignore partial input */ }
+                            } catch (err) {
+                              // Bỏ qua nếu đang gõ dở hoặc không phải mã đề
+                            }
                           }
                         }}
                       />

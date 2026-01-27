@@ -100,83 +100,102 @@ const App: React.FC = () => {
       const sharedExam = urlParams.get('exam');
 
       if (sharedExam) {
-        setIsCheckingLink(true); // Đảm bảo hiện loading
+        setIsCheckingLink(true);
         try {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Đợi một chút để UI ổn định
+          await new Promise(resolve => setTimeout(resolve, 300));
 
-          // 1. Vệ sinh chuỗi Base64: 
-          // - Fix lỗi + bị biến thành khoảng trắng
-          let safeBase64 = sharedExam.replace(/ /g, '+');
-          // - Loại bỏ các ký tự xuống dòng (nếu copy paste bị dư)
-          safeBase64 = safeBase64.replace(/[\n\r]/g, '');
-          safeBase64 = safeBase64.replace(/-/g, '+').replace(/_/g, '/');
+          // 1. VỆ SINH CHUỖI BASE64 CỰC KỲ CẨN THẬN
+          // Loại bỏ tất cả khoảng trắng, xuống dòng, ký tự lạ thường gặp khi copy từ Zalo/Messenger
+          let cleanBase64 = sharedExam.trim()
+            .replace(/\s/g, '') // Loại bỏ mọi loại khoảng trắng (\n, \r, \t, space)
+            .replace(/-/g, '+') // URL safe -> Standard
+            .replace(/_/g, '/'); // URL safe -> Standard
 
-          // 2. Bổ sung padding (=)
-          while (safeBase64.length % 4 !== 0) {
-            safeBase64 += '=';
+          // Xử lý trường hợp chuỗi bị cắt cụt do Zalo/Messenger giới hạn ký tự
+          // Thêm padding '=' cho đúng chuẩn Base64
+          while (cleanBase64.length % 4 !== 0) {
+            cleanBase64 += '=';
           }
 
-          console.log(`Checking Shared Link. Length: ${safeBase64.length}`);
+          console.log(`Processing shared exam. Raw length: ${sharedExam.length}, Clean length: ${cleanBase64.length}`);
 
           try {
-            // 3. Giải mã
-            const decoded = decodeURIComponent(escape(atob(safeBase64)));
+            // 2. GIẢI MÃ
+            // Sử dụng try-catch lồng nhau vì giải mã Unicode có thể phức tạp
+            let decoded = '';
+            try {
+              decoded = decodeURIComponent(escape(atob(cleanBase64)));
+            } catch (e) {
+              // Fallback: Nếu decode Unicode lỗi, thử giải mã raw
+              console.warn("Unicode decode failed, trying raw atob");
+              decoded = atob(cleanBase64);
+            }
+
             const data = JSON.parse(decoded);
 
-            if (data.q && Array.isArray(data.q)) {
-              // A. Trường hợp dữ liệu Rút gọn (Minified)
-              console.log("Phát hiện dữ liệu rút gọn (Mobile optimized)");
-              const inflatedQuestions = data.q.map((item: any, idx: number) => ({
-                id: `share-${idx}`,
-                type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
-                content: item[1],
-                options: item[2],
-                answer: item[3],
-                explanation: item[4],
-                image: item[5]
-              }));
+            if (data && (data.q || data.questions)) {
+              let inflatedQuestions: ExamQuestion[] = [];
+
+              if (data.q && Array.isArray(data.q)) {
+                // FORMAT RÚT GỌN (Minified)
+                inflatedQuestions = data.q.map((item: any, idx: number) => ({
+                  id: `share-${Date.now()}-${idx}`,
+                  type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
+                  content: item[1] || '',
+                  options: item[2] || [],
+                  answer: item[3] || '',
+                  explanation: item[4] || '',
+                  image: item[5] || '',
+                  level: 'Thông hiểu' // Default level
+                }));
+              } else {
+                // FORMAT ĐẦY ĐỦ (Legacy)
+                inflatedQuestions = data.questions.map((q: any, idx: number) => ({
+                  ...q,
+                  id: q.id || `share-old-${idx}`
+                }));
+              }
 
               setPracticeData({
-                subject: data.s,
-                grade: data.g,
+                subject: data.s || data.subject || 'Chưa rõ',
+                grade: data.g || data.grade || '?',
                 questions: inflatedQuestions
               });
+
+              // Chuyển sang chế độ luyện tập
               setView('practice');
-            } else if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
-              // B. Trường hợp dữ liệu Cũ (Full JSON)
-              console.log("Success (Legacy format):", data);
-              setPracticeData(data);
-              setView('practice');
+              console.log("Successfully loaded shared exam:", inflatedQuestions.length, "questions");
             } else {
-              throw new Error("Structure invalid");
+              throw new Error("Dữ liệu không đúng cấu trúc đề thi.");
             }
           } catch (innerError: any) {
-            console.error("Decode Error:", innerError);
-            const isTruncated = safeBase64.length < 100 || !safeBase64.endsWith('=');
+            console.error("Decode/Parse error:", innerError);
 
-            let msg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n1. Link có thể đã bị CẮT CỤT do quá dài.\n2. Dữ liệu đề thi bị hỏng trong quá trình copy.\n\n";
-            msg += "Gợi ý: Thầy/Cô hãy thử copy lại link một lần nữa hoặc yêu cầu gửi file PDF thay thế.";
+            let errorMsg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n";
+            if (cleanBase64.length > 2500) {
+              errorMsg += "Lý do: Link này quá dài, dữ liệu đã bị các ứng dụng (Zalo/Messenger) cắt bớt khi gửi.\n\n";
+            } else {
+              errorMsg += "Lý do: Link bị lỗi định dạng hoặc copy thiếu ký tự.\n\n";
+            }
 
-            if (confirm(msg + "\n\nThầy/Cô có muốn thử nhập thủ công mã đề (nếu có) không?")) {
-              // Nếu người dùng muốn thử paste thủ công chuỗi raw
-              const manualInput = prompt("Dán mã đề thi (chuỗi ký tự dài) vào đây:");
+            errorMsg += "GIẢI PHÁP:\n1. Copy lại toàn bộ link một lần nữa.\n2. Yêu cầu giáo viên gửi 'MÃ ĐỀ THI' (chuỗi ký tự dài).\n3. Thử mở trên máy tính.";
+
+            if (confirm(errorMsg + "\n\nBạn có muốn thử nhập thủ công MÃ ĐỀ không?")) {
+              const manualInput = prompt("Dán Mã Đề (hoặc Link) vào đây:");
               if (manualInput) {
-                // Đệ quy nhẹ hoặc xử lý trực tiếp
-                try {
-                  const cleanInput = manualInput.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-                  const d2 = decodeURIComponent(escape(atob(cleanInput)));
-                  const json2 = JSON.parse(d2);
-                  if (json2 && json2.questions) {
-                    setPracticeData(json2);
-                    setView('practice');
-                    return;
-                  }
-                } catch (e) { alert("Vẫn không hợp lệ!"); }
+                // Tách lấy param exam nếu user dán cả link
+                let codeOnly = manualInput;
+                if (manualInput.includes('exam=')) {
+                  codeOnly = manualInput.split('exam=')[1].split('&')[0];
+                }
+                // Reload location với code mới (đơn giản nhất)
+                window.location.href = `${window.location.origin}${window.location.pathname}?exam=${codeOnly}`;
               }
             }
           }
         } catch (e) {
-          console.error("Critical Error:", e);
+          console.error("Critical link check error:", e);
         }
       }
       setIsCheckingLink(false);
