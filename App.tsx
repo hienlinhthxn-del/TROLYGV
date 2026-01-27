@@ -121,18 +121,37 @@ const App: React.FC = () => {
           console.log(`Processing shared exam. Raw length: ${sharedExam.length}, Clean length: ${cleanBase64.length}`);
 
           try {
-            // 2. GIẢI MÃ
-            // Sử dụng try-catch lồng nhau vì giải mã Unicode có thể phức tạp
+            // 2. GIẢI MÃ VÀ SỬA LỖI JSON (Robust Parsing)
+            const robustJSONParse = (str: string) => {
+              try {
+                return JSON.parse(str);
+              } catch (e) {
+                // Thử sửa lỗi escape phổ biến nếu parse thất bại
+                const repaired = str
+                  .replace(/\\/g, "\\\\")
+                  .replace(/\\\\"/g, '\\"')
+                  .replace(/\\\\n/g, '\\n')
+                  .replace(/\\\\r/g, '\\r')
+                  .replace(/\\\\t/g, '\\t');
+                try {
+                  return JSON.parse(repaired);
+                } catch (e2) {
+                  // Fallback cuối cùng: loại bỏ ký tự điều khiển
+                  const finalTry = str.replace(/[\u0000-\u001F]/g, "");
+                  return JSON.parse(finalTry);
+                }
+              }
+            };
+
             let decoded = '';
             try {
               decoded = decodeURIComponent(escape(atob(cleanBase64)));
             } catch (e) {
-              // Fallback: Nếu decode Unicode lỗi, thử giải mã raw
               console.warn("Unicode decode failed, trying raw atob");
               decoded = atob(cleanBase64);
             }
 
-            const data = JSON.parse(decoded);
+            const data = robustJSONParse(decoded);
 
             if (data && (data.q || data.questions)) {
               let inflatedQuestions: ExamQuestion[] = [];
@@ -147,13 +166,20 @@ const App: React.FC = () => {
                   answer: item[3] || '',
                   explanation: item[4] || '',
                   image: item[5] || '',
-                  level: 'Thông hiểu' // Default level
+                  level: 'Thông hiểu'
                 }));
               } else {
                 // FORMAT ĐẦY ĐỦ (Legacy)
-                inflatedQuestions = data.questions.map((q: any, idx: number) => ({
+                const sourceQuestions = data.q || data.questions || [];
+                inflatedQuestions = sourceQuestions.map((q: any, idx: number) => ({
                   ...q,
-                  id: q.id || `share-old-${idx}`
+                  id: q.id || `share-old-${idx}`,
+                  type: q.type || (q[0] === 1 ? 'Trắc nghiệm' : 'Tự luận'),
+                  content: q.content || q[1] || '',
+                  options: q.options || q[2] || [],
+                  answer: q.answer || q[3] || '',
+                  explanation: q.explanation || q[4] || '',
+                  image: q.image || q[5] || ''
                 }));
               }
 
@@ -163,7 +189,6 @@ const App: React.FC = () => {
                 questions: inflatedQuestions
               });
 
-              // Chuyển sang chế độ luyện tập
               setView('practice');
               console.log("Successfully loaded shared exam:", inflatedQuestions.length, "questions");
             } else {
