@@ -121,37 +121,39 @@ const App: React.FC = () => {
           console.log(`Processing shared exam. Raw length: ${sharedExam.length}, Clean length: ${cleanBase64.length}`);
 
           try {
-            // 2. GIẢI MÃ VÀ SỬA LỖI JSON (Robust Parsing)
-            const robustJSONParse = (str: string) => {
+            // 2. GIẢI MÃ AN TOÀN với TextDecoder
+            const decodeData = (base64String: string): any => {
               try {
-                return JSON.parse(str);
+                // Decode Base64 thành binary string
+                const binaryString = atob(base64String);
+
+                // Chuyển binary string thành Uint8Array
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // Decode UTF-8 bytes thành string
+                const decoder = new TextDecoder('utf-8');
+                const jsonString = decoder.decode(bytes);
+
+                // Parse JSON
+                return JSON.parse(jsonString);
               } catch (e) {
-                // Thử sửa lỗi escape phổ biến nếu parse thất bại
-                const repaired = str
-                  .replace(/\\/g, "\\\\")
-                  .replace(/\\\\"/g, '\\"')
-                  .replace(/\\\\n/g, '\\n')
-                  .replace(/\\\\r/g, '\\r')
-                  .replace(/\\\\t/g, '\\t');
+                console.warn("Modern decode failed, trying legacy method:", e);
+                // Fallback: phương pháp cũ
                 try {
-                  return JSON.parse(repaired);
+                  const decoded = decodeURIComponent(escape(atob(base64String)));
+                  return JSON.parse(decoded);
                 } catch (e2) {
-                  // Fallback cuối cùng: loại bỏ ký tự điều khiển
-                  const finalTry = str.replace(/[\u0000-\u001F]/g, "");
-                  return JSON.parse(finalTry);
+                  // Fallback cuối: decode trực tiếp
+                  const rawDecoded = atob(base64String);
+                  return JSON.parse(rawDecoded);
                 }
               }
             };
 
-            let decoded = '';
-            try {
-              decoded = decodeURIComponent(escape(atob(cleanBase64)));
-            } catch (e) {
-              console.warn("Unicode decode failed, trying raw atob");
-              decoded = atob(cleanBase64);
-            }
-
-            const data = robustJSONParse(decoded);
+            const data = decodeData(cleanBase64);
 
             if (data && (data.q || data.questions)) {
               let inflatedQuestions: ExamQuestion[] = [];
@@ -190,23 +192,23 @@ const App: React.FC = () => {
               });
 
               setView('practice');
-              console.log("Successfully loaded shared exam:", inflatedQuestions.length, "questions");
+              console.log("✅ Successfully loaded shared exam:", inflatedQuestions.length, "questions");
             } else {
               throw new Error("Dữ liệu không đúng cấu trúc đề thi.");
             }
           } catch (innerError: any) {
-            console.error("Decode/Parse error:", innerError);
+            console.error("❌ Decode/Parse error:", innerError);
 
             let errorMsg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n";
             if (cleanBase64.length > 2500) {
               errorMsg += "Lý do: Link này quá dài, dữ liệu đã bị các ứng dụng (Zalo/Messenger) cắt bớt khi gửi.\n\n";
             } else {
-              errorMsg += "Lý do: Link bị lỗi định dạng hoặc copy thiếu ký tự.\n\n";
+              errorMsg += `Lý do: ${innerError.message || 'Link bị lỗi định dạng hoặc copy thiếu ký tự.'}\n\n`;
             }
 
-            errorMsg += "GIẢI PHÁP:\n1. Copy lại toàn bộ link một lần nữa.\n2. Yêu cầu giáo viên gửi 'MÃ ĐỀ THI' (chuỗi ký tự dài).\n3. Thử mở trên máy tính.";
+            errorMsg += "💡 GIẢI PHÁP:\n1. Copy lại toàn bộ link một lần nữa.\n2. Yêu cầu giáo viên gửi 'MÃ ĐỀ THI' (chuỗi ký tự dài).\n3. Thử mở trên máy tính.";
 
-            if (confirm(errorMsg + "\n\nBạn có muốn thử nhập thủ công MÃ ĐỀ không?")) {
+            if (confirm(errorMsg + "\n\n❓ Bạn có muốn thử nhập thủ công MÃ ĐỀ không?")) {
               const manualInput = prompt("Dán Mã Đề (hoặc Link) vào đây:");
               if (manualInput) {
                 // Tách lấy param exam nếu user dán cả link

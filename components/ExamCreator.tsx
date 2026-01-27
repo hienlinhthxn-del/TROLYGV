@@ -276,6 +276,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               image
             ];
 
+            // Loại bỏ các phần tử rỗng ở cuối để giảm kích thước
             while (item.length > 0 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
               item.pop();
             }
@@ -284,14 +285,38 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         };
       };
 
-      // 2. Encode Base64 an toàn và Nén nhẹ
+      // 2. Encode Base64 AN TOÀN với xử lý ký tự đặc biệt
       const encodeData = (data: any) => {
-        const json = JSON.stringify(data);
-        // Base64 chuẩn URL Safe
-        return btoa(unescape(encodeURIComponent(json)))
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
+        try {
+          // Stringify với replacer để xử lý ký tự đặc biệt
+          const json = JSON.stringify(data, (key, value) => {
+            // Giữ nguyên giá trị, nhưng đảm bảo không có ký tự điều khiển
+            if (typeof value === 'string') {
+              // Loại bỏ các ký tự điều khiển không hợp lệ (U+0000 đến U+001F trừ \n, \r, \t)
+              return value.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
+            }
+            return value;
+          });
+
+          // Kiểm tra JSON hợp lệ
+          JSON.parse(json); // Validate trước khi encode
+
+          // Encode UTF-8 an toàn sang Base64
+          const utf8Bytes = new TextEncoder().encode(json);
+          let binary = '';
+          utf8Bytes.forEach(byte => {
+            binary += String.fromCharCode(byte);
+          });
+
+          // Base64 encode và chuyển sang URL-safe format
+          return btoa(binary)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+        } catch (error) {
+          console.error("Encoding error:", error);
+          throw new Error("Không thể mã hóa dữ liệu. Vui lòng kiểm tra nội dung câu hỏi.");
+        }
       };
 
       let currentData = prepareData(false);
@@ -300,13 +325,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
       // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
       if (viewMode === 'link' && url.length > 1800) {
-        console.warn("Link quá dài, đang thử nén dữ liệu...");
+        console.warn(`Link quá dài (${url.length} ký tự), đang thử nén dữ liệu...`);
         currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
         safeBase64 = encodeData(currentData);
         url = `${window.location.origin}${window.location.pathname}?exam=${safeBase64}`;
 
         if (url.length > 2000) {
-          const confirmMsg = `⚠️ ĐỀ THI QUÁ LỚN (${questions.length} câu)\n\nLink hiện tại dài ${url.length} ký tự, có thể bị lỗi (cụt link) khi gửi qua Zalo/Facebook.\n\nKhuyên dùng: Chọn "Copy Mã Đề" để gửi cho học sinh sẽ ổn định hơn.\n\nBạn vẫn muốn thử Copy Link?`;
+          const confirmMsg = `⚠️ ĐỀ THI QUÁ LỚN (${questions.length} câu)\n\nLink hiện tại dài ${url.length} ký tự, có thể bị lỗi (cụt link) khi gửi qua Zalo/Facebook.\n\n✅ KHUYẾN NGHỊ: Chọn "Copy Mã Đề" để gửi cho học sinh sẽ ổn định hơn.\n\nBạn vẫn muốn thử Copy Link?`;
           if (!window.confirm(confirmMsg)) return;
         }
       }
@@ -322,9 +347,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       await navigator.clipboard.writeText(url);
       alert(`🚀 Link đã được sao chép!\n\n${url.length > 1500 ? '⚠️ Lưu ý: Đề khá dài, nếu học sinh không mở được link, hãy dùng chức năng "Copy Mã Đề" nhé!' : 'Gửi ngay cho học sinh để bắt đầu luyện tập.'}`);
 
-    } catch (e) {
-      console.error("Link gen error:", e);
-      alert("❌ Lỗi tạo link. Thầy/Cô hãy thử rút ngắn nội dung câu hỏi hoặc giảm số lượng câu hỏi nhé.");
+    } catch (e: any) {
+      console.error("Link generation error:", e);
+      alert(`❌ Lỗi tạo link: ${e.message || 'Không xác định'}\n\nThầy/Cô hãy thử:\n1. Rút ngắn nội dung câu hỏi\n2. Giảm số lượng câu hỏi\n3. Dùng "Copy Mã Đề" thay vì Link`);
     }
   };
 
@@ -614,13 +639,34 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                                 code = input.split('exam=')[1].split('&')[0];
                               }
 
-                              // 2. Làm sạch mã Base64
-                              const safe = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-                              const decoded = decodeURIComponent(escape(atob(safe)));
-                              const json = JSON.parse(decoded);
+                              // 2. Làm sạch mã Base64 (URL-safe -> Standard)
+                              let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+
+                              // Thêm padding nếu cần
+                              while (cleanBase64.length % 4 !== 0) {
+                                cleanBase64 += '=';
+                              }
+
+                              // 3. Decode an toàn với TextDecoder
+                              let json: any;
+                              try {
+                                // Phương pháp mới: TextDecoder
+                                const binaryString = atob(cleanBase64);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) {
+                                  bytes[i] = binaryString.charCodeAt(i);
+                                }
+                                const decoder = new TextDecoder('utf-8');
+                                const jsonString = decoder.decode(bytes);
+                                json = JSON.parse(jsonString);
+                              } catch (e) {
+                                // Fallback: phương pháp cũ
+                                const decoded = decodeURIComponent(escape(atob(cleanBase64)));
+                                json = JSON.parse(decoded);
+                              }
 
                               if (json && (json.q || json.questions || json.s)) {
-                                if (confirm("Phát hiện dữ liệu đề thi hợp lệ! Bạn có muốn nhập ngay không?")) {
+                                if (confirm("✅ Phát hiện dữ liệu đề thi hợp lệ! Bạn có muốn nhập ngay không?")) {
                                   let loadedQuestions: ExamQuestion[] = [];
                                   if (json.q && Array.isArray(json.q)) {
                                     // Chuyển đổi từ định dạng rút gọn
