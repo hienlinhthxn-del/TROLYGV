@@ -307,13 +307,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                     onClick={() => setVoiceName('Kore')}
                     className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
                   >
-                    <i className="fas fa-mars mr-2"></i>Kore (Nam)
+                    <i className="fas fa-mars mr-2"></i>Giọng Nam
                   </button>
                   <button
                     onClick={() => setVoiceName('Puck')}
                     className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
                   >
-                    <i className="fas fa-venus mr-2"></i>Puck (Nữ)
+                    <i className="fas fa-venus mr-2"></i>Giọng Nữ
                   </button>
                 </div>
               </div>
@@ -428,9 +428,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                                   const viVoices = voices.filter(v => v.lang.includes('vi'));
                                   if (viVoices.length > 0) {
                                     if (voiceName === 'Kore') {
-                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam')) || viVoices[0];
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh')) || viVoices[0];
                                     } else {
-                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female')) || viVoices[0];
+                                      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
                                     }
                                   }
 
