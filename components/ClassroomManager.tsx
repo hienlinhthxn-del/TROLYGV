@@ -122,9 +122,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       }
     } else {
       // No assignments, so clear selection
-      setSelectedAssignmentId('');
+      if (selectedAssignmentId) setSelectedAssignmentId('');
     }
-  }, [classroom.assignments]); // Rerun only when the list of assignments changes
+  }, [classroom.assignments, selectedAssignmentId]);
 
   const storageKey = useMemo(() => {
     if (reportViewMode === 'subjects' && selectedAssignmentId) {
@@ -1198,7 +1198,14 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           <button
             onClick={() => {
               const newId = Date.now().toString();
-              const newAssignment = { id: newId, title: `Bài tập mới ${new Date().toLocaleDateString('vi-VN')}`, dueDate: new Date().toISOString().split('T')[0], status: 'Đã đóng' as const, submissions: [], grades: [] };
+              const newAssignment = {
+                id: newId,
+                title: `Bài tập mới ${new Date().toLocaleDateString('vi-VN')}`,
+                dueDate: new Date().toISOString().split('T')[0],
+                status: 'Đang mở' as const,
+                submissions: [],
+                grades: []
+              };
               onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
               setSelectedAssignmentId(newId);
             }}
