@@ -60,6 +60,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempClassName, setTempClassName] = useState(classroom.name);
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showGradePasteModal, setShowGradePasteModal] = useState(false);
+  const [gradePasteContent, setGradePasteContent] = useState('');
   const [pasteContent, setPasteContent] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set(['Tiếng Việt', 'Toán']));
   const [selectedQualities, setSelectedQualities] = useState<Set<string>>(new Set(QUALITIES_LIST));
@@ -513,6 +515,67 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handleProcessGradePaste = () => {
+    if (!gradePasteContent.trim()) return;
+
+    const lines = gradePasteContent.trim().split('\n');
+    const updatedAssignments = [...classroom.assignments];
+    let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+
+    if (!targetAssignment) {
+      updatedAssignments.push({
+        id: Date.now().toString(),
+        title: 'Bài tập nhập từ Bảng dán',
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Đã đóng',
+        submissions: [],
+        grades: []
+      });
+      targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+    }
+
+    let updatedCount = 0;
+    const studentMapByName = new Map(classroom.students.map(s => [s.name.trim().toLowerCase(), s]));
+    const studentMapByCode = new Map(classroom.students.map(s => [s.code.trim().toLowerCase(), s]));
+
+    let startIndex = 0;
+    const firstLine = lines[0].toLowerCase();
+    if (firstLine.includes('tên') || firstLine.includes('mã') || firstLine.includes('điểm')) {
+      startIndex = 1;
+    }
+
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+
+      const separator = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
+      const parts = line.split(separator).map(p => p.trim().replace(/"/g, ''));
+      if (parts.length < 2) continue;
+
+      const [identifier, score, feedback] = parts;
+      const student = studentMapByCode.get(identifier.toLowerCase()) || studentMapByName.get(identifier.toLowerCase());
+
+      if (student && score) {
+        const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === student!.id);
+        if (gradeIdx > -1) {
+          targetAssignment.grades[gradeIdx] = { ...targetAssignment.grades[gradeIdx], score, feedback: feedback || targetAssignment.grades[gradeIdx].feedback || '' };
+        } else {
+          targetAssignment.grades.push({ studentId: student.id, score, feedback: feedback || '' });
+        }
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      onUpdate({ ...classroom, assignments: updatedAssignments });
+      alert(`Đã cập nhật điểm và nhận xét cho ${updatedCount} học sinh.`);
+      setShowGradePasteModal(false);
+      setGradePasteContent('');
+    } else {
+      alert("Không tìm thấy dữ liệu học sinh hợp lệ để cập nhật. Vui lòng kiểm tra định dạng: (Mã HS hoặc Tên), Điểm, [Nhận xét]");
+    }
+  };
+
   const addStudent = () => {
     if (!newStudentName.trim()) return;
 
@@ -941,6 +1004,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <i className="fas fa-file-invoice mr-2"></i>Nhập điểm File
           </button>
           <button
+            onClick={() => setShowGradePasteModal(true)}
+            className="px-4 py-2 rounded-xl bg-sky-50 text-sky-700 text-[10px] font-black uppercase tracking-widest border border-sky-200 hover:bg-sky-100 transition-all"
+          >
+            <i className="fas fa-paste mr-2"></i>Dán Bảng điểm
+          </button>
+          <button
             onClick={handleExportSMAS}
             disabled={isExportingSMAS}
             className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-100 transition-all"
@@ -961,7 +1030,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             onClick={() => setActiveTab(tab as any)}
             className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            <i className={`fas fa-${tab === 'students' ? 'users' : tab === 'logbook' ? 'book-medical' : tab === 'assignments' ? 'tasks' : 'chart-simple'} mr-2`}></i>
+            <i className={`fas fa-${tab === 'students' ? 'users' : tab === 'logbook' ? 'book' : tab === 'assignments' ? 'tasks' : 'chart-simple'} mr-2`}></i>
             {tab === 'students' ? 'Học sinh' : tab === 'logbook' ? 'Nhật ký lớp' : tab === 'assignments' ? 'Bài tập' : 'Thống kê'}
           </button>
         ))}
@@ -1624,6 +1693,37 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                 ) : (
                   <><i className="fas fa-wand-magic-sparkles mr-2"></i>Tạo Nhận xét</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGradePasteModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowGradePasteModal(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán Bảng điểm & Nhận xét</h3>
+              <button onClick={() => setShowGradePasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-xs text-slate-500 mb-2 font-medium">Copy từ Excel (Cột Mã HS/Tên, Điểm, Nhận xét) và dán vào đây:</p>
+              <textarea
+                value={gradePasteContent}
+                onChange={(e) => setGradePasteContent(e.target.value)}
+                placeholder={`Ví dụ:\nHS001\t9\tHoàn thành tốt\nTrần Thị Bình\t7\tCần cẩn thận hơn`}
+                className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowGradePasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
+              <button onClick={handleProcessGradePaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
+                <i className="fas fa-file-import mr-2"></i>Xử lý & Nhập điểm
               </button>
             </div>
           </div>
