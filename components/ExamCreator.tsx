@@ -774,155 +774,150 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                           </div>
                         )}
                       </div>
-                    </div>))}
-                              />
+                    </div>
+                  ))}
+                  <button onClick={addQuestion} className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-[32px] text-indigo-500 font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-300 transition-all">
+                    <i className="fas fa-plus-circle mr-2"></i>Thêm câu hỏi thủ công
+                  </button>
+                </>
+              ) : (
+                <div className="h-[400px] flex flex-col items-center justify-center text-center opacity-20">
+                  <i className="fas fa-magic text-6xl text-slate-300 mb-6"></i>
+                  <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Thiết lập ma trận hoặc nhập đề cũ để bắt đầu</p>
+                  <button onClick={addQuestion} className="mt-4 px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 pointer-events-auto">
+                    Hoặc tạo thủ công
+                  </button>
                 </div>
-                          )}
-            </div>
-                      </div>
-      </div>))}
-      <button onClick={addQuestion} className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-[32px] text-indigo-500 font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-300 transition-all">
-        <i className="fas fa-plus-circle mr-2"></i>Thêm câu hỏi thủ công
-      </button>
-    </>
-  ) : (
-    <div className="h-[400px] flex flex-col items-center justify-center text-center opacity-20">
-      <i className="fas fa-magic text-6xl text-slate-300 mb-6"></i>
-      <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Thiết lập ma trận hoặc nhập đề cũ để bắt đầu</p>
-      <button onClick={addQuestion} className="mt-4 px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 pointer-events-auto">
-        Hoặc tạo thủ công
-      </button>
-    </div>
-  )
-}
+              )
+              }
             </div >
           )}
         </div >
       </div >
 
-  { showImportModal && (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isImporting && setShowImportModal(false)}></div>
-      <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 overflow-hidden p-8 animate-in zoom-in-95 duration-300">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-800">Số hóa đề thi cũ</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Bóc tách câu hỏi và hình ảnh từ ảnh/PDF</p>
-          </div>
-          <button onClick={() => setShowImportModal(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
-        </div>
-        <div className="space-y-6">
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
-                {pendingImportFile ? (
-                  pendingImportFile.mimeType === 'application/pdf' ? (
-                    <div className="flex flex-col items-center">
-                      <i className="fas fa-file-pdf text-6xl text-rose-500 mb-3"></i>
-                      <p className="text-xs font-bold text-slate-600">{pendingImportFile.name}</p>
-                    </div>
-                  ) : (
-                    <img src={`data:${pendingImportFile.mimeType};base64,${pendingImportFile.data}`} className="w-full h-full object-contain" />
-                  )
-                ) : (
-                  <>
-                    <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn hoặc Dán ảnh/PDF đề thi</p>
-                  </>
-                )}
+      {showImportModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isImporting && setShowImportModal(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 overflow-hidden p-8 animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-widest text-slate-800">Số hóa đề thi cũ</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Bóc tách câu hỏi và hình ảnh từ ảnh/PDF</p>
               </div>
+              <button onClick={() => setShowImportModal(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
+                    {pendingImportFile ? (
+                      pendingImportFile.mimeType === 'application/pdf' ? (
+                        <div className="flex flex-col items-center">
+                          <i className="fas fa-file-pdf text-6xl text-rose-500 mb-3"></i>
+                          <p className="text-xs font-bold text-slate-600">{pendingImportFile.name}</p>
+                        </div>
+                      ) : (
+                        <img src={`data:${pendingImportFile.mimeType};base64,${pendingImportFile.data}`} className="w-full h-full object-contain" />
+                      )
+                    ) : (
+                      <>
+                        <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn hoặc Dán ảnh/PDF đề thi</p>
+                      </>
+                    )}
+                  </div>
 
-              <div className="flex flex-col space-y-3">
-                <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-[32px] p-4 flex flex-col relative focus-within:border-indigo-400 focus-within:bg-white transition-all">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"><i className="fas fa-code mr-1"></i> Dán Mã Đề (Nếu có)</p>
-                  <textarea
-                    id="paste-code-input"
-                    placeholder="Dán mã đề thi vào đây..."
-                    className="flex-1 w-full bg-transparent border-none focus:ring-0 text-[11px] font-mono resize-none"
-                    onChange={(e) => {
-                      // Tự động nhận diện và tải đề khi dán mã
-                      const input = e.target.value.trim();
-                      if (input.length > 20) {
-                        try {
-                          // 1. Tách lấy mã nếu người dùng dán cả link
-                          let code = input;
-                          if (input.includes('exam=')) {
-                            code = input.split('exam=')[1].split('&')[0];
-                          }
-
-                          // 2. Làm sạch mã Base64 (URL-safe -> Standard)
-                          let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-
-                          // Thêm padding nếu cần
-                          while (cleanBase64.length % 4 !== 0) {
-                            cleanBase64 += '=';
-                          }
-
-                          // 3. Decode an toàn với TextDecoder
-                          let json: any;
-                          try {
-                            // Phương pháp mới: TextDecoder
-                            const binaryString = atob(cleanBase64);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {
-                              bytes[i] = binaryString.charCodeAt(i);
-                            }
-                            const decoder = new TextDecoder('utf-8');
-                            const jsonString = decoder.decode(bytes);
-                            json = JSON.parse(jsonString);
-                          } catch (e) {
-                            // Fallback: phương pháp cũ
-                            const decoded = decodeURIComponent(escape(atob(cleanBase64)));
-                            json = JSON.parse(decoded);
-                          }
-
-                          if (json && (json.q || json.questions || json.s)) {
-                            if (confirm("✅ Phát hiện dữ liệu đề thi hợp lệ! Bạn có muốn nhập ngay không?")) {
-                              let loadedQuestions: ExamQuestion[] = [];
-                              if (json.q && Array.isArray(json.q)) {
-                                // Chuyển đổi từ định dạng rút gọn
-                                loadedQuestions = json.q.map((item: any, idx: number) => ({
-                                  id: `imp-code-${Date.now()}-${idx}`,
-                                  type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
-                                  content: item[1] || '',
-                                  options: item[2] || [],
-                                  answer: item[3] || '',
-                                  explanation: item[4] || '',
-                                  image: item[5] || '',
-                                  level: 'Thông hiểu'
-                                }));
-                              } else {
-                                loadedQuestions = json.questions || [];
+                  <div className="flex flex-col space-y-3">
+                    <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-[32px] p-4 flex flex-col relative focus-within:border-indigo-400 focus-within:bg-white transition-all">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"><i className="fas fa-code mr-1"></i> Dán Mã Đề (Nếu có)</p>
+                      <textarea
+                        id="paste-code-input"
+                        placeholder="Dán mã đề thi vào đây..."
+                        className="flex-1 w-full bg-transparent border-none focus:ring-0 text-[11px] font-mono resize-none"
+                        onChange={(e) => {
+                          // Tự động nhận diện và tải đề khi dán mã
+                          const input = e.target.value.trim();
+                          if (input.length > 20) {
+                            try {
+                              // 1. Tách lấy mã nếu người dùng dán cả link
+                              let code = input;
+                              if (input.includes('exam=')) {
+                                code = input.split('exam=')[1].split('&')[0];
                               }
 
-                              if (loadedQuestions.length > 0) {
-                                setQuestions(prev => [...prev, ...loadedQuestions]);
-                                if (json.s || json.subject) setConfig(prev => ({ ...prev, subject: json.s || json.subject, grade: json.g || json.grade || prev.grade }));
-                                setShowImportModal(false);
-                                alert(`Đã nhập thành công ${loadedQuestions.length} câu hỏi.`);
-                                e.target.value = "";
+                              // 2. Làm sạch mã Base64 (URL-safe -> Standard)
+                              let cleanBase64 = code.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+
+                              // Thêm padding nếu cần
+                              while (cleanBase64.length % 4 !== 0) {
+                                cleanBase64 += '=';
                               }
+
+                              // 3. Decode an toàn với TextDecoder
+                              let json: any;
+                              try {
+                                // Phương pháp mới: TextDecoder
+                                const binaryString = atob(cleanBase64);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) {
+                                  bytes[i] = binaryString.charCodeAt(i);
+                                }
+                                const decoder = new TextDecoder('utf-8');
+                                const jsonString = decoder.decode(bytes);
+                                json = JSON.parse(jsonString);
+                              } catch (e) {
+                                // Fallback: phương pháp cũ
+                                const decoded = decodeURIComponent(escape(atob(cleanBase64)));
+                                json = JSON.parse(decoded);
+                              }
+
+                              if (json && (json.q || json.questions || json.s)) {
+                                if (confirm("✅ Phát hiện dữ liệu đề thi hợp lệ! Bạn có muốn nhập ngay không?")) {
+                                  let loadedQuestions: ExamQuestion[] = [];
+                                  if (json.q && Array.isArray(json.q)) {
+                                    // Chuyển đổi từ định dạng rút gọn
+                                    loadedQuestions = json.q.map((item: any, idx: number) => ({
+                                      id: `imp-code-${Date.now()}-${idx}`,
+                                      type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
+                                      content: item[1] || '',
+                                      options: item[2] || [],
+                                      answer: item[3] || '',
+                                      explanation: item[4] || '',
+                                      image: item[5] || '',
+                                      level: 'Thông hiểu'
+                                    }));
+                                  } else {
+                                    loadedQuestions = json.questions || [];
+                                  }
+
+                                  if (loadedQuestions.length > 0) {
+                                    setQuestions(prev => [...prev, ...loadedQuestions]);
+                                    if (json.s || json.subject) setConfig(prev => ({ ...prev, subject: json.s || json.subject, grade: json.g || json.grade || prev.grade }));
+                                    setShowImportModal(false);
+                                    alert(`Đã nhập thành công ${loadedQuestions.length} câu hỏi.`);
+                                    e.target.value = "";
+                                  }
+                                }
+                              }
+                            } catch (err) {
+                              // Bỏ qua nếu đang gõ dở hoặc không phải mã đề
                             }
                           }
-                        } catch (err) {
-                          // Bỏ qua nếu đang gõ dở hoặc không phải mã đề
-                        }
-                      }
-                    }}
-                  />
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
+
+                <input ref={importFileInputRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
+                <button onClick={handleImportOldExam} disabled={isImporting || !pendingImportFile} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
+                  {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ File)</span></>}
+                </button>
               </div>
             </div>
-
-            <input ref={importFileInputRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
-            <button onClick={handleImportOldExam} disabled={isImporting || !pendingImportFile} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
-              {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ File)</span></>}
-            </button>
           </div>
         </div>
-      </div>
-    </div>
-  )}
+      )}
     </div >
   );
 };
