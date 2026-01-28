@@ -14,6 +14,18 @@ const SUBJECTS_LIST = [
   'Giáo dục thể chất', 'Âm nhạc', 'Mỹ thuật', 'Hoạt động trải nghiệm'
 ];
 
+const QUALITIES_LIST = ['Yêu nước', 'Nhân ái', 'Chăm chỉ', 'Trung thực', 'Trách nhiệm'];
+
+const COMPETENCIES_LIST = [
+  'Tự chủ và tự học', 'Giao tiếp và hợp tác', 'Giải quyết vấn đề và sáng tạo', // 3 NL Chung
+  'Ngôn ngữ', 'Tính toán', 'Khoa học', 'Công nghệ', 'Tin học', 'Thẩm mỹ', 'Thể chất' // 7 NL Đặc thù
+];
+
+const EVALUATION_PERIODS = [
+  'Giữa Học kỳ I', 'Cuối Học kỳ I',
+  'Giữa Học kỳ II', 'Cuối Học kỳ II'
+];
+
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
   const [activeTab, setActiveTab] = useState<'students' | 'attendance' | 'assignments' | 'reports'>('students');
   const [newStudentName, setNewStudentName] = useState('');
@@ -30,6 +42,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set(['Tiếng Việt', 'Toán']));
+  const [selectedQualities, setSelectedQualities] = useState<Set<string>>(new Set(QUALITIES_LIST));
+  const [selectedCompetencies, setSelectedCompetencies] = useState<Set<string>>(new Set(COMPETENCIES_LIST));
+  const [evaluationPeriod, setEvaluationPeriod] = useState('Cuối Học kỳ I');
+  const [showReviewPasteModal, setShowReviewPasteModal] = useState(false);
+  const [reviewPasteContent, setReviewPasteContent] = useState('');
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
@@ -159,18 +176,22 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       const newGrades: Grade[] = [];
       lines.forEach(line => {
         if (!line.trim()) return;
+
+        // Fix lỗi định dạng: Loại bỏ dấu ngoặc kép thừa từ Excel
+        const cleanLine = line.replace(/"/g, '');
+
         // Tự động nhận diện dấu phân cách , hoặc ;
-        const separator = line.includes(';') ? ';' : ',';
-        const parts = line.split(separator).map(s => s.trim());
+        const separator = cleanLine.includes(';') ? ';' : ',';
+        const parts = cleanLine.split(separator).map(s => s.trim());
 
         if (parts.length >= 2) {
-          const [code, score] = parts;
+          const [code, score, feedback] = parts;
           const student = classroom.students.find(s => s.code === code);
           if (student && score) {
             newGrades.push({
               studentId: student.id,
               score: score,
-              feedback: ''
+              feedback: feedback || ''
             });
           }
         }
@@ -195,7 +216,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           };
         }
         onUpdate({ ...classroom, assignments: updatedAssignments });
-        alert(`Đã nhập thành công điểm cho ${newGrades.length} học sinh.`);
+        alert(`Đã nhập thành công điểm và nhận xét cho ${newGrades.length} học sinh.`);
       } else {
         alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra định dạng (MãHS, Điểm)");
       }
@@ -203,6 +224,19 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       if (gradeFileInputRef.current) gradeFileInputRef.current.value = '';
     };
     reader.readAsText(file);
+  };
+
+  const handleDownloadGradeSample = () => {
+    // Tạo file mẫu có BOM để Excel hiển thị đúng tiếng Việt
+    const csvContent = "\uFEFFMã HS,Điểm số,Nhận xét (Tùy chọn)\nHS001,9,Hoàn thành tốt nhiệm vụ\nHS002,7,Cần cẩn thận hơn trong tính toán\nHS003,5,Cần cố gắng nhiều hơn";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'Mau_nhap_diem_va_nhan_xet.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDownloadSample = () => {
@@ -435,6 +469,52 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setSelectedSubjects(newSet);
   };
 
+  const toggleQuality = (item: string) => {
+    const newSet = new Set(selectedQualities);
+    if (newSet.has(item)) newSet.delete(item);
+    else newSet.add(item);
+    setSelectedQualities(newSet);
+  };
+
+  const toggleCompetence = (item: string) => {
+    const newSet = new Set(selectedCompetencies);
+    if (newSet.has(item)) newSet.delete(item);
+    else newSet.add(item);
+    setSelectedCompetencies(newSet);
+  };
+
+  const handleGenerateAIReviewFromPaste = () => {
+    if (!onAIAssist || !reviewPasteContent.trim()) return;
+
+    const subjectsList = Array.from(selectedSubjects).join(', ');
+    const qualitiesList = Array.from(selectedQualities).join(', ');
+    const competenciesList = Array.from(selectedCompetencies).join(', ');
+
+    const prompt = `Dựa trên dữ liệu điểm số và đánh giá được cung cấp dưới đây, hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
+
+THÔNG TIN ĐÁNH GIÁ:
+- Thời điểm: ${evaluationPeriod}
+- Dữ liệu học sinh (được dán vào):
+${reviewPasteContent}
+
+YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
+
+1. CÁC MÔN HỌC VÀ HOẠT ĐỘNG GIÁO DỤC:
+   - Nhận xét tập trung các môn: ${subjectsList}.
+   - Đánh giá mức độ Hoàn thành (HTT/HT/CHT) dựa trên điểm số và suy luận sư phạm.
+   - Nêu rõ sự tiến bộ, kiến thức và kỹ năng đạt được.
+
+2. NĂNG LỰC VÀ PHẨM CHẤT:
+   - Tập trung nhận xét các Phẩm chất: ${qualitiesList}.
+   - Tập trung nhận xét các Năng lực: ${competenciesList}.
+   - Xếp loại: Tốt / Đạt / Cần cố gắng.
+
+Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
+
+    onAIAssist(prompt);
+    setShowReviewPasteModal(false);
+  };
+
   const handleGenerateAIReview = () => {
     if (!onAIAssist) return;
 
@@ -447,10 +527,14 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }).join('\n');
 
     const subjectsList = Array.from(selectedSubjects).join(', ');
+    const qualitiesList = Array.from(selectedQualities).join(', ');
+    const competenciesList = Array.from(selectedCompetencies).join(', ');
 
     const prompt = `Dựa trên danh sách điểm số của lớp ${classroom.name}, hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
 
-Dữ liệu học sinh & điểm số (đã sắp xếp):
+THÔNG TIN ĐÁNH GIÁ:
+- Thời điểm: ${evaluationPeriod}
+- Dữ liệu học sinh & điểm số:
 ${studentDataText}
 
 YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
@@ -461,8 +545,8 @@ YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho
    - Nêu rõ sự tiến bộ, kiến thức và kỹ năng đạt được.
 
 2. NĂNG LỰC VÀ PHẨM CHẤT:
-   - Năng lực chung (Tự chủ và tự học, Giao tiếp và hợp tác, Giải quyết vấn đề và sáng tạo).
-   - Phẩm chất chủ yếu (Yêu nước, Nhân ái, Chăm chỉ, Trung thực, Trách nhiệm).
+   - Tập trung nhận xét các Phẩm chất: ${qualitiesList}.
+   - Tập trung nhận xét các Năng lực: ${competenciesList}.
    - Xếp loại: Tốt / Đạt / Cần cố gắng.
 
 Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
@@ -510,6 +594,13 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Hệ thống Quản lý Sư phạm</p>
         </div>
         <div className="flex space-x-2 shrink-0">
+          <button
+            onClick={handleDownloadGradeSample}
+            className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-100 transition-all"
+            title="Tải mẫu nhập điểm (Excel)"
+          >
+            <i className="fas fa-download mr-1"></i>Mẫu
+          </button>
           <button
             onClick={() => gradeFileInputRef.current?.click()}
             className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
@@ -656,30 +747,90 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                   </div>
                   <div>
                     <h4 className="text-xl font-black">Trợ lý Nhận xét AI</h4>
-                    <p className="text-[11px] text-indigo-100 opacity-80 mt-1">Viết nhận xét học bạ Thông tư 27 dựa trên điểm số</p>
+                    <p className="text-[11px] text-indigo-100 opacity-80 mt-1">Viết nhận xét học bạ Thông tư 27 chuẩn xác</p>
                   </div>
                 </div>
-                <button
-                  onClick={handleGenerateAIReview}
-                  className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl"
-                >
-                  Tạo Nhận xét AI
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => setShowReviewPasteModal(true)}
+                    className="px-6 py-4 bg-indigo-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-400 transition-all active:scale-95 shadow-lg border border-indigo-400"
+                  >
+                    <i className="fas fa-paste mr-2"></i>Dán bảng điểm
+                  </button>
+                  <button
+                    onClick={handleGenerateAIReview}
+                    className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl"
+                  >
+                    Tạo từ Dữ liệu lớp
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-indigo-800/40 p-6 rounded-3xl border border-indigo-400/30">
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-3 flex items-center"><i className="fas fa-check-double mr-2"></i>Chọn môn học & Hoạt động giáo dục cần đánh giá:</p>
-                <div className="flex flex-wrap gap-2">
-                  {SUBJECTS_LIST.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => toggleSubject(s)}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedSubjects.has(s) ? 'bg-white text-indigo-600 border-white shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
-                    >
-                      {selectedSubjects.has(s) && <i className="fas fa-check mr-1.5"></i>}
-                      {s}
-                    </button>
-                  ))}
+              <div className="bg-indigo-800/40 p-6 rounded-3xl border border-indigo-400/30 space-y-6">
+                {/* Thời điểm đánh giá */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-clock mr-2"></i>Thời điểm đánh giá:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {EVALUATION_PERIODS.map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setEvaluationPeriod(p)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${evaluationPeriod === p ? 'bg-amber-400 text-indigo-900 border-amber-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
+                      >
+                        {evaluationPeriod === p && <i className="fas fa-check mr-1.5"></i>}
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Môn học */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-book-open mr-2"></i>Môn học & HĐGD:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SUBJECTS_LIST.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => toggleSubject(s)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedSubjects.has(s) ? 'bg-white text-indigo-600 border-white shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
+                      >
+                        {selectedSubjects.has(s) && <i className="fas fa-check mr-1.5"></i>}
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Phẩm chất & Năng lực */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-indigo-400/30">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-heart mr-2"></i>5 Phẩm chất chủ yếu:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {QUALITIES_LIST.map(q => (
+                        <button
+                          key={q}
+                          onClick={() => toggleQuality(q)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedQualities.has(q) ? 'bg-emerald-400 text-emerald-900 border-emerald-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-brain mr-2"></i>10 Năng lực cốt lõi:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {COMPETENCIES_LIST.map(c => (
+                        <button
+                          key={c}
+                          onClick={() => toggleCompetence(c)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedCompetencies.has(c) ? 'bg-sky-400 text-sky-900 border-sky-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -888,6 +1039,37 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
               <button onClick={() => setShowPasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleProcessPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
                 <i className="fas fa-file-import mr-2"></i>Xử lý & Thêm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReviewPasteModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowReviewPasteModal(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán bảng điểm & Đánh giá</h3>
+              <button onClick={() => setShowReviewPasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-xs text-slate-500 mb-2 font-medium">Copy danh sách từ Excel (Tên, Điểm, Nhận xét...) và dán vào đây để AI xử lý:</p>
+              <textarea
+                value={reviewPasteContent}
+                onChange={(e) => setReviewPasteContent(e.target.value)}
+                placeholder={`Ví dụ:\nNguyễn Văn A - Toán: 9, Tiếng Việt: 8 - Chăm chỉ, ngoan\nTrần Thị B - Toán: 5, Tiếng Việt: 6 - Cần cố gắng môn Toán`}
+                className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowReviewPasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
+              <button onClick={handleGenerateAIReviewFromPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
+                <i className="fas fa-wand-magic-sparkles mr-2"></i>Tạo Nhận xét
               </button>
             </div>
           </div>
