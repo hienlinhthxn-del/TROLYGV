@@ -885,6 +885,55 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handlePasteScores = (event: React.ClipboardEvent<HTMLInputElement>, startStudentId: string) => {
+    event.preventDefault();
+    const pasteData = event.clipboardData.getData('text');
+    const lines = pasteData.trim().split(/\r\n|\n|\r/);
+
+    if (lines.length === 0) return;
+
+    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
+    if (startIndex === -1) return;
+
+    const updatedAssignments = [...classroom.assignments];
+    let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+
+    if (!targetAssignment) {
+      updatedAssignments.push({
+        id: Date.now().toString(),
+        title: 'Bài tập nhập từ Dán',
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Đã đóng',
+        submissions: [],
+        grades: []
+      });
+      targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+    }
+
+    lines.forEach((line, index) => {
+      const studentIndex = startIndex + index;
+      if (studentIndex < filteredStudents.length) {
+        const student = filteredStudents[studentIndex];
+        // Tự động nhận diện dấu phân cách (Tab, Phẩy, Chấm phẩy) để hỗ trợ nhiều nguồn copy
+        const separator = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
+        const parts = line.split(separator).map(p => p.trim().replace(/"/g, ''));
+
+        const score = parts[0] || '';
+        const feedback = parts[1] || '';
+
+        const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === student.id);
+        if (gradeIdx > -1) {
+          if (score) targetAssignment.grades[gradeIdx].score = score;
+          if (feedback) targetAssignment.grades[gradeIdx].feedback = feedback;
+        } else {
+          targetAssignment.grades.push({ studentId: student.id, score, feedback });
+        }
+      }
+    });
+
+    onUpdate({ ...classroom, assignments: updatedAssignments });
+  };
+
   const handleFeedbackChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
     const latest = updatedAssignments[updatedAssignments.length - 1];
@@ -1319,6 +1368,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                                 className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
                                 value={grade?.score || ''}
                                 onChange={(e) => handleScoreChange(s.id, e.target.value)}
+                                onPaste={(e) => handlePasteScores(e, s.id)}
                                 placeholder="-"
                               />
                             </td>
