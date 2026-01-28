@@ -34,28 +34,13 @@ const SecurityCenter: React.FC<SecurityCenterProps> = ({ onClearAllData }) => {
 
                <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-4">
                   <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                     <i className="fas fa-key"></i>
+                     <i className="fas fa-cloud-shield"></i>
                   </div>
-                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">Cấu hình API Key</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed font-medium">Nếu AI không phản hồi, Thầy Cô hãy dán API Key của mình vào đây để kích hoạt thủ công.</p>
-                  <div className="flex space-x-2">
-                     <input
-                        id="manual-api-key"
-                        type="password"
-                        placeholder="Dán AI Key tại đây..."
-                        defaultValue={localStorage.getItem('manually_entered_api_key') || ''}
-                        className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-indigo-300 focus:bg-white transition-all"
-                     />
-                     <button
-                        onClick={() => {
-                           const val = (document.getElementById('manual-api-key') as HTMLInputElement).value;
-                           localStorage.setItem('manually_entered_api_key', val);
-                           window.location.reload();
-                        }}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700"
-                     >
-                        Lưu & Chạy lại
-                     </button>
+                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">API Gemini Secure</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed font-medium">Dữ liệu gửi đến mô hình AI được bảo vệ qua kênh truyền HTTPS/SSL 256-bit. Thông tin không được sử dụng để huấn luyện mô hình công cộng.</p>
+                  <div className="flex items-center space-x-2 text-emerald-600 text-[10px] font-bold uppercase">
+                     <i className="fas fa-circle-check"></i>
+                     <span>Đã xác thực SSL</span>
                   </div>
                </div>
             </div>

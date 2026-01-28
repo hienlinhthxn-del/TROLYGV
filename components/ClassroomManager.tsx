@@ -83,6 +83,29 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
 
+  const [openSubjectSelect, setOpenSubjectSelect] = useState(false);
+  const [openQualitySelect, setOpenQualitySelect] = useState(false);
+  const [openCompetenceSelect, setOpenCompetenceSelect] = useState(false);
+  const subjectDropdownRef = useRef<HTMLDivElement>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement>(null);
+  const competenceDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(event.target as Node)) {
+        setOpenSubjectSelect(false);
+      }
+      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(event.target as Node)) {
+        setOpenQualitySelect(false);
+      }
+      if (competenceDropdownRef.current && !competenceDropdownRef.current.contains(event.target as Node)) {
+        setOpenCompetenceSelect(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'logbook') {
       const logsForDate = classroom.dailyLogs?.find(log => log.date === logDate);
@@ -784,6 +807,20 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handleScoreChange = (studentId: string, val: string) => {
+    const updatedAssignments = [...classroom.assignments];
+    const latest = updatedAssignments[updatedAssignments.length - 1];
+    if (latest) {
+      const gradeIdx = latest.grades.findIndex(g => g.studentId === studentId);
+      if (gradeIdx > -1) {
+        latest.grades[gradeIdx] = { ...latest.grades[gradeIdx], score: val };
+      } else {
+        latest.grades.push({ studentId, score: val, feedback: '' });
+      }
+      onUpdate({ ...classroom, assignments: updatedAssignments });
+    }
+  };
+
   const handleFeedbackChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
     const latest = updatedAssignments[updatedAssignments.length - 1];
@@ -1080,52 +1117,77 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   </div>
                 </div>
 
-                {/* Môn học */}
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-book-open mr-2"></i>Môn học & HĐGD:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {SUBJECTS_LIST.map(s => (
-                      <button
-                        key={s}
-                        onClick={() => toggleSubject(s)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedSubjects.has(s) ? 'bg-white text-indigo-600 border-white shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
-                      >
-                        {selectedSubjects.has(s) && <i className="fas fa-check mr-1.5"></i>}
-                        {s}
-                      </button>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-indigo-400/30">
+                  {/* Subjects */}
+                  <div className="relative" ref={subjectDropdownRef}>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-book-open mr-1.5"></i>Môn học ({selectedSubjects.size})</label>
+                    <button
+                      onClick={() => setOpenSubjectSelect(!openSubjectSelect)}
+                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
+                    >
+                      <span className="truncate">{selectedSubjects.size > 0 ? Array.from(selectedSubjects).join(', ') : 'Chọn môn học...'}</span>
+                      <i className={`fas fa-chevron-${openSubjectSelect ? 'up' : 'down'} ml-2`}></i>
+                    </button>
+                    {openSubjectSelect && (
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
+                        {SUBJECTS_LIST.map(s => (
+                          <div key={s} onClick={() => toggleSubject(s)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedSubjects.has(s) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                              {selectedSubjects.has(s) && <i className="fas fa-check text-white text-[8px]"></i>}
+                            </div>
+                            <span className={`text-xs font-medium ${selectedSubjects.has(s) ? 'text-indigo-700 font-bold' : 'text-slate-600'}`}>{s}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {/* Phẩm chất & Năng lực */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-indigo-400/30">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-heart mr-2"></i>5 Phẩm chất chủ yếu:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {QUALITIES_LIST.map(q => (
-                        <button
-                          key={q}
-                          onClick={() => toggleQuality(q)}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedQualities.has(q) ? 'bg-emerald-400 text-emerald-900 border-emerald-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
+                  {/* Qualities */}
+                  <div className="relative" ref={qualityDropdownRef}>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-heart mr-1.5"></i>Phẩm chất ({selectedQualities.size})</label>
+                    <button
+                      onClick={() => setOpenQualitySelect(!openQualitySelect)}
+                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
+                    >
+                      <span className="truncate">{selectedQualities.size > 0 ? Array.from(selectedQualities).join(', ') : 'Chọn phẩm chất...'}</span>
+                      <i className={`fas fa-chevron-${openQualitySelect ? 'up' : 'down'} ml-2`}></i>
+                    </button>
+                    {openQualitySelect && (
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
+                        {QUALITIES_LIST.map(q => (
+                          <div key={q} onClick={() => toggleQuality(q)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedQualities.has(q) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
+                              {selectedQualities.has(q) && <i className="fas fa-check text-white text-[8px]"></i>}
+                            </div>
+                            <span className={`text-xs font-medium ${selectedQualities.has(q) ? 'text-emerald-700 font-bold' : 'text-slate-600'}`}>{q}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-brain mr-2"></i>10 Năng lực cốt lõi:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {COMPETENCIES_LIST.map(c => (
-                        <button
-                          key={c}
-                          onClick={() => toggleCompetence(c)}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedCompetencies.has(c) ? 'bg-sky-400 text-sky-900 border-sky-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
+
+                  {/* Competencies */}
+                  <div className="relative" ref={competenceDropdownRef}>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-brain mr-1.5"></i>Năng lực ({selectedCompetencies.size})</label>
+                    <button
+                      onClick={() => setOpenCompetenceSelect(!openCompetenceSelect)}
+                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
+                    >
+                      <span className="truncate">{selectedCompetencies.size > 0 ? Array.from(selectedCompetencies).join(', ') : 'Chọn năng lực...'}</span>
+                      <i className={`fas fa-chevron-${openCompetenceSelect ? 'up' : 'down'} ml-2`}></i>
+                    </button>
+                    {openCompetenceSelect && (
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
+                        {COMPETENCIES_LIST.map(c => (
+                          <div key={c} onClick={() => toggleCompetence(c)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedCompetencies.has(c) ? 'bg-sky-600 border-sky-600' : 'border-slate-300'}`}>
+                              {selectedCompetencies.has(c) && <i className="fas fa-check text-white text-[8px]"></i>}
+                            </div>
+                            <span className={`text-xs font-medium ${selectedCompetencies.has(c) ? 'text-sky-700 font-bold' : 'text-slate-600'}`}>{c}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1181,7 +1243,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                         return (
                           <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
-                            <td className="py-3 px-4 text-center font-black text-indigo-600 border-r border-slate-100">{grade?.score || '-'}</td>
+                            <td className="p-0 border-r border-slate-100">
+                              <input
+                                type="text"
+                                className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
+                                value={grade?.score || ''}
+                                onChange={(e) => handleScoreChange(s.id, e.target.value)}
+                                placeholder="-"
+                              />
+                            </td>
                             <td className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}>
                               <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
                                 {displaySubjectEval}
