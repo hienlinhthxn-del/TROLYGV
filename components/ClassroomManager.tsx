@@ -9,13 +9,6 @@ interface ClassroomManagerProps {
   onAIAssist?: (prompt: string, attachments?: Attachment[]) => void;
 }
 
-// Add periodicEvaluations to Classroom type for type safety
-declare module '../types' {
-  interface Classroom {
-    periodicEvaluations?: Record<string, Record<string, PeriodicEvaluation>>;
-  }
-}
-
 const SUBJECTS_LIST = [
   'Tiếng Việt', 'Toán', 'Đạo đức', 'Tự nhiên và Xã hội',
   'Khoa học', 'Lịch sử và Địa lí', 'Tin học', 'Công nghệ',
@@ -109,12 +102,21 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Initialize selectedAssignmentId
+  // Initialize and validate selectedAssignmentId
   useEffect(() => {
-    if (classroom.assignments.length > 0 && !selectedAssignmentId) {
-      setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
+    if (classroom.assignments.length > 0) {
+      if (!selectedAssignmentId) {
+        setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
+      } else {
+        const exists = classroom.assignments.find(a => a.id === selectedAssignmentId);
+        if (!exists) {
+          setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
+        }
+      }
+    } else {
+      if (selectedAssignmentId) setSelectedAssignmentId('');
     }
-  }, [classroom.assignments]);
+  }, [classroom.assignments, selectedAssignmentId]);
 
   const storageKey = useMemo(() => {
     if (reportViewMode === 'subjects' && selectedAssignmentId) {
@@ -1456,7 +1458,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                         <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
                       </tr>
                     </thead>
-                    <tbody className="text-xs font-medium text-slate-600">
+                    <tbody key={`${selectedAssignmentId}-${evaluationPeriod}`} className="text-xs font-medium text-slate-600">
                       {filteredStudents.map(s => {
                         const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
                         const eval27 = getCircular27Evaluation(grade?.score || '');

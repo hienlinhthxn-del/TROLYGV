@@ -98,12 +98,34 @@ export interface AttendanceRecord {
   absent: string[];
 }
 
+export interface DailyLogEntry {
+  studentId: string;
+  comment: string;
+  type: 'praise' | 'mistake';
+}
+
+export interface DailyLog {
+  date: string;
+  entries: DailyLogEntry[];
+}
+
+export interface PeriodicEvaluation {
+  subject?: string;
+  competencies?: Record<number, string>;
+  qualities?: Record<number, string>;
+  compComment?: string;
+  specComment?: string;
+  qualComment?: string;
+}
+
 export interface Classroom {
   id: string;
   name: string;
   students: Student[];
   assignments: Assignment[];
   attendance: AttendanceRecord[];
+  dailyLogs?: DailyLog[];
+  periodicEvaluations?: Record<string, Record<string, PeriodicEvaluation>>;
 }
 
 // Cloud Storage Types
