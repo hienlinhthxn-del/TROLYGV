@@ -114,14 +114,16 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   // Initialize and validate selectedAssignmentId
   useEffect(() => {
     if (classroom.assignments.length > 0) {
-      const currentExists = selectedAssignmentId && classroom.assignments.some(a => a.id === selectedAssignmentId);
-      if (!currentExists) {
+      // If there's no selection OR the selected one is no longer valid
+      const currentSelectionIsValid = classroom.assignments.some(a => a.id === selectedAssignmentId);
+      if (!selectedAssignmentId || !currentSelectionIsValid) {
         setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
       }
-    } else if (selectedAssignmentId) {
+    } else {
+      // No assignments, so clear selection
       setSelectedAssignmentId('');
     }
-  }, [classroom.assignments, selectedAssignmentId]);
+  }, [classroom.assignments]); // Rerun only when the list of assignments changes
 
   const storageKey = useMemo(() => {
     if (reportViewMode === 'subjects' && selectedAssignmentId) {
@@ -268,12 +270,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setIsExportingSMAS(true);
     setTimeout(() => {
       try {
-        const latestAssignment = stats.latestAssignment;
+        const assignmentToExport = selectedAssignment;
         let csvContent = "\uFEFF";
         csvContent += "Mã học sinh,Họ và tên,Giới tính,Điểm số,Nhận xét chuyên môn\n";
 
         filteredStudents.forEach(s => {
-          const grade = latestAssignment?.grades.find(g => g.studentId === s.id);
+          const grade = assignmentToExport?.grades.find(g => g.studentId === s.id);
           const score = grade?.score || "";
           const feedback = (grade?.feedback || "").replace(/,/g, ';');
           csvContent += `${s.code},${s.name},${s.gender},${score},${feedback}\n`;
@@ -823,11 +825,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
     setIsGeneratingReview(true);
 
-    const latestAssignment = stats.latestAssignment;
+    const assignmentToReview = selectedAssignment;
     let studentDataText = '';
 
     studentDataText = filteredStudents.map(s => {
-      const grade = latestAssignment?.grades.find(g => g.studentId === s.id);
+      const grade = assignmentToReview?.grades.find(g => g.studentId === s.id);
       return `- ${s.name} (${s.code}): ${grade ? `Điểm ${grade.score}. ${grade.feedback || ''}` : 'Chưa có điểm'}`;
     }).join('\n');
 
@@ -858,7 +860,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     csvContent += headers.map(h => `"${h}"`).join(',') + '\n';
 
     filteredStudents.forEach((s, idx) => {
-      const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+      const grade = selectedAssignment?.grades.find(g => g.studentId === s.id);
       const eval27 = getCircular27Evaluation(grade?.score || '');
       const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : 'C';
       const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : 'C';
