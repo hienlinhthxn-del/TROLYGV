@@ -127,11 +127,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   }, [classroom.assignments]);
 
   const storageKey = useMemo(() => {
-    if (reportViewMode === 'subjects' && selectedAssignmentId) {
+    // Luôn gắn ID bài tập vào key lưu trữ để tách biệt nhận xét cho từng môn/bài
+    if (selectedAssignmentId) {
       return `${evaluationPeriod}_${selectedAssignmentId}`;
     }
     return evaluationPeriod;
-  }, [evaluationPeriod, selectedAssignmentId, reportViewMode]);
+  }, [evaluationPeriod, selectedAssignmentId]);
 
   const manualEvaluations = useMemo(() => {
     return classroom.periodicEvaluations?.[storageKey] || {};

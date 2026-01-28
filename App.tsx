@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
-import { Message, TeacherPersona, GroundingSource, Classroom, CloudDocument, Attachment, ViewType, ExamQuestion } from './types';
+import { Message, TeacherPersona, GroundingSource, Classroom, CloudDocument, Attachment, ViewType, ExamQuestion, Assignment } from './types';
 import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS } from './constants';
 import { geminiService, FilePart } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
@@ -310,6 +310,20 @@ const App: React.FC = () => {
     localStorage.setItem('edu_classroom_data', JSON.stringify(updated));
   };
 
+  const handleCreateAssignmentFromExam = (title: string) => {
+    const newAssignment: Assignment = {
+      id: Date.now().toString(),
+      title: title,
+      dueDate: new Date().toISOString().split('T')[0],
+      status: 'Đang mở',
+      submissions: [],
+      grades: []
+    };
+    const updatedClassroom = { ...classroom, assignments: [...classroom.assignments, newAssignment] };
+    updateClassroom(updatedClassroom);
+    alert(`✅ Đã tạo bài tập "${title}" trong Quản lý lớp học!\n\nThầy Cô có thể vào mục "Quản lý lớp học" -> "Nhập KQ Online" để cập nhật điểm số khi học sinh nộp bài.`);
+  };
+
   const sendToWorkspace = (content: string) => {
     setWorkspaceContent(content);
     setView('workspace');
@@ -616,7 +630,7 @@ const App: React.FC = () => {
 
             {view === 'classroom' && <ClassroomManager classroom={classroom} onUpdate={updateClassroom} onAIAssist={(p, atts) => { setInput(p); if (atts) setPendingAttachments(atts); setView('chat'); }} />}
             {view === 'workspace' && <Workspace initialContent={workspaceContent} onSave={(c) => setWorkspaceContent(c)} onSaveToCloud={handleSaveToCloud} />}
-            {view === 'exam' && <ExamCreator onExportToWorkspace={sendToWorkspace} onStartPractice={startPractice} />}
+            {view === 'exam' && <ExamCreator onExportToWorkspace={sendToWorkspace} onStartPractice={startPractice} onCreateAssignment={handleCreateAssignmentFromExam} />}
             {view === 'worksheet' && <WorksheetCreator />}
             {view === 'cloud' && <CloudDrive documents={cloudDocs} onOpen={handleOpenCloudDoc} onDelete={handleDeleteCloudDoc} />}
             {view === 'utility' && <UtilityKit onSendToWorkspace={sendToWorkspace} />}

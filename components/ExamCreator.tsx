@@ -6,6 +6,7 @@ import { geminiService, FilePart } from '../services/geminiService';
 interface ExamCreatorProps {
   onExportToWorkspace: (content: string) => void;
   onStartPractice?: (subject: string, grade: string, questions: ExamQuestion[]) => void;
+  onCreateAssignment?: (title: string) => void;
 }
 
 const SUBJECT_STRANDS: Record<string, string[]> = {
@@ -21,7 +22,7 @@ const COGNITIVE_LEVELS: CognitiveLevel[] = ['Nhận biết', 'Thông hiểu', 'V
 interface LevelConfig { mcq: number; essay: number; }
 interface StrandConfig { [strandName: string]: { [level in CognitiveLevel]: LevelConfig; }; }
 
-const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartPractice }) => {
+const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartPractice, onCreateAssignment }) => {
   const [config, setConfig] = useState({ subject: 'Toán', grade: '1', topic: '' });
   const [strandMatrix, setStrandMatrix] = useState<StrandConfig>({});
   const [isGenerating, setIsGenerating] = useState(false);
@@ -283,6 +284,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     text += "---------------------------------------------------------------\nĐÁP ÁN VÀ HƯỚNG DẪN CHẤM\n\n";
     questions.forEach((q, i) => text += `Câu ${i + 1}: ${q.answer}\n${q.explanation ? `(Giải thích: ${q.explanation})\n` : ''}\n`);
     onExportToWorkspace(text);
+  };
+
+  const handleCreateAssignment = () => {
+    if (onCreateAssignment) {
+      const title = examHeader.split('\n')[0] || `Bài kiểm tra ${config.subject}`;
+      onCreateAssignment(title);
+    }
   };
 
   const removeQuestion = (id: string) => {
@@ -584,6 +592,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                     <i className="fas fa-code"></i>
                   </button>
                 </div>
+                {onCreateAssignment && (
+                  <button onClick={handleCreateAssignment} className="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase border border-purple-100 hover:bg-purple-100 transition-all" title="Tạo cột điểm trong Quản lý lớp để theo dõi kết quả">
+                    <i className="fas fa-list-check mr-2"></i>Tạo bài tập
+                  </button>
+                )}
                 {onStartPractice && (
                   <button onClick={() => onStartPractice(config.subject, config.grade, questions)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
                     <i className="fas fa-play mr-2"></i>Luyện tập ngay
