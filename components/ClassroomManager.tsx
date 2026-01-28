@@ -26,6 +26,24 @@ const EVALUATION_PERIODS = [
   'Giữa Học kỳ II', 'Cuối Học kỳ II'
 ];
 
+const COMMENTS_BANK = {
+  subject: {
+    'Hoàn thành tốt': ['Nắm vững kiến thức, kỹ năng. Hoàn thành tốt các bài tập.', 'Tiếp thu bài nhanh, vận dụng tốt.', 'Có năng khiếu, tích cực phát biểu xây dựng bài.', 'Hoàn thành xuất sắc các nội dung học tập.'],
+    'Hoàn thành': ['Nắm được kiến thức cơ bản. Hoàn thành các nhiệm vụ.', 'Chăm chỉ, cần cẩn thận hơn khi làm bài.', 'Có tiến bộ, cần phát huy hơn nữa.', 'Thực hiện được các yêu cầu của bài học.'],
+    'Chưa hoàn thành': ['Cần cố gắng nhiều hơn. Chưa nắm vững kiến thức.', 'Cần rèn luyện thêm kỹ năng tính toán.', 'Cần chú ý nghe giảng và làm bài tập đầy đủ.', 'Tiếp thu bài còn chậm, cần phụ đạo thêm.']
+  },
+  competence: {
+    'T': ['Có khả năng tự chủ và tự học tốt.', 'Giao tiếp tự tin, hợp tác nhóm hiệu quả.', 'Biết giải quyết vấn đề sáng tạo.', 'Tự giác thực hiện nhiệm vụ học tập.'],
+    'Đ': ['Có ý thức tự học.', 'Biết hợp tác với bạn bè.', 'Giải quyết được các nhiệm vụ được giao.', 'Mạnh dạn hơn trong giao tiếp.'],
+    'C': ['Cần rèn luyện thêm khả năng tự học.', 'Cần mạnh dạn hơn trong giao tiếp.', 'Cần sự hỗ trợ của giáo viên trong giải quyết vấn đề.', 'Chưa tập trung vào nhiệm vụ.']
+  },
+  quality: {
+    'T': ['Lễ phép, vâng lời thầy cô.', 'Đoàn kết, yêu thương bạn bè.', 'Trung thực, có trách nhiệm cao.', 'Chăm chỉ, tích cực tham gia hoạt động lớp.'],
+    'Đ': ['Ngoan, thực hiện đúng nội quy.', 'Hòa đồng với bạn bè.', 'Biết giữ gìn vệ sinh chung.', 'Trung thực trong học tập.'],
+    'C': ['Cần thực hiện tốt hơn nội quy lớp học.', 'Cần trung thực hơn trong học tập.', 'Cần rèn luyện tính kỷ luật.', 'Cần hòa đồng hơn với bạn bè.']
+  }
+};
+
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
   const [activeTab, setActiveTab] = useState<'students' | 'logbook' | 'assignments' | 'reports'>('students');
   const [newStudentName, setNewStudentName] = useState('');
@@ -53,6 +71,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     subject?: string;
     competencies?: Record<number, string>;
     qualities?: Record<number, string>;
+    compComment?: string;
+    specComment?: string;
+    qualComment?: string;
   }>>({});
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
@@ -176,6 +197,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
 
     return { subject, competence, quality };
+  };
+
+  const getRandomComment = (type: 'subject' | 'competence' | 'quality', level: string) => {
+    const bank = COMMENTS_BANK[type] as any;
+    const options = bank[level] || bank['Đ'] || bank['Hoàn thành'] || [];
+    return options[Math.floor(Math.random() * options.length)];
   };
 
   const handleExportSMAS = () => {
@@ -612,27 +639,63 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
   };
 
   const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
+    let newVal = currentVal;
+    let newComment = '';
+
+    // 1. Xác định giá trị mới (Vòng lặp trạng thái)
+    if (type === 'subject') {
+      if (currentVal === 'Hoàn thành tốt') newVal = 'Hoàn thành';
+      else if (currentVal === 'Hoàn thành') newVal = 'Chưa hoàn thành';
+      else newVal = 'Hoàn thành tốt';
+      newComment = getRandomComment('subject', newVal);
+    } else {
+      const map: Record<string, string> = { 'T': 'Đ', 'Đ': 'C', 'C': 'T', '-': 'Đ' };
+      newVal = map[currentVal] || 'Đ';
+    }
+
+    // 2. Cập nhật State
     setManualEvaluations(prev => {
       const studentData = prev[studentId] || {};
-      let newVal = currentVal;
 
       if (type === 'subject') {
-        if (currentVal === 'Hoàn thành tốt') newVal = 'Hoàn thành';
-        else if (currentVal === 'Hoàn thành') newVal = 'Chưa hoàn thành';
-        else newVal = 'Hoàn thành tốt';
         return { ...prev, [studentId]: { ...studentData, subject: newVal } };
       } else if (type === 'competence') {
-        const map: Record<string, string> = { 'T': 'Đ', 'Đ': 'C', 'C': 'T', '-': 'Đ' };
-        newVal = map[currentVal] || 'Đ';
         const newCompetencies = { ...(studentData.competencies || {}), [index]: newVal };
-        return { ...prev, [studentId]: { ...studentData, competencies: newCompetencies } };
+
+        // Tự động tạo nhận xét NL Chung (index 1-3) hoặc NL Đặc thù (index > 3)
+        let commentKey = 'compComment';
+        let isSpec = index > 3;
+        if (isSpec) commentKey = 'specComment';
+
+        // Logic đơn giản: Lấy nhận xét theo mức vừa chọn
+        const autoComment = getRandomComment('competence', newVal);
+
+        return {
+          ...prev,
+          [studentId]: {
+            ...studentData,
+            competencies: newCompetencies,
+            [commentKey]: autoComment // Cập nhật nhận xét tương ứng
+          }
+        };
       } else {
-        const map: Record<string, string> = { 'T': 'Đ', 'Đ': 'C', 'C': 'T', '-': 'Đ' };
-        newVal = map[currentVal] || 'Đ';
         const newQualities = { ...(studentData.qualities || {}), [index]: newVal };
-        return { ...prev, [studentId]: { ...studentData, qualities: newQualities } };
+        const autoComment = getRandomComment('quality', newVal);
+        return {
+          ...prev,
+          [studentId]: {
+            ...studentData,
+            qualities: newQualities,
+            qualComment: autoComment
+          }
+        };
       }
     });
+
+    // 3. Cập nhật feedback cho môn học (lưu vào assignment)
+    if (type === 'subject') {
+      handleFeedbackChange(studentId, newComment);
+    }
   };
 
   const handleFeedbackChange = (studentId: string, val: string) => {
@@ -647,6 +710,13 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
       }
       onUpdate({ ...classroom, assignments: updatedAssignments });
     }
+  };
+
+  const handleManualCommentChange = (studentId: string, field: 'compComment' | 'specComment' | 'qualComment', val: string) => {
+    setManualEvaluations(prev => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], [field]: val }
+    }));
   };
 
   const handleLogChange = (studentId: string, comment: string) => {
@@ -1007,11 +1077,10 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                   <table className="w-full text-left border-collapse min-w-[800px]">
                     <thead>
                       <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
-                        <th className="py-3 px-4 font-black border-r border-slate-200">Mã học sinh</th>
-                        <th className="py-3 px-4 font-black border-r border-slate-200">Họ và tên</th>
+                        <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
+                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm</th>
                         <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
-                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mã nhận xét</th>
-                        <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nội dung nhận xét</th>
+                        <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
                         <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
                       </tr>
                     </thead>
@@ -1020,17 +1089,17 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                         const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
                         const eval27 = getCircular27Evaluation(grade?.score || '');
                         const finalSubject = manualEvaluations[s.id]?.subject || eval27.subject;
+                        const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
 
                         return (
                           <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                            <td className="py-3 px-4 border-r border-slate-100">{s.code}</td>
-                            <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name}</td>
+                            <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
+                            <td className="py-3 px-4 text-center font-black text-indigo-600 border-r border-slate-100">{grade?.score || '-'}</td>
                             <td className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}>
                               <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                                {finalSubject}
+                                {displaySubjectEval}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-center border-r border-slate-100 text-slate-400">-</td>
                             <td className="py-3 px-4 border-r border-slate-100 p-0">
                               <input
                                 type="text"
@@ -1095,6 +1164,7 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                         const eval27 = getCircular27Evaluation(grade?.score || '');
                         const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : eval27.competence === 'Cần cố gắng' ? 'C' : '-';
                         const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : eval27.quality === 'Cần cố gắng' ? 'C' : '-';
+                        const manualData = manualEvaluations[s.id] || {};
 
                         return (
                           <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
@@ -1103,28 +1173,49 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                             <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
                             {/* NL Chung */}
                             {[1, 2, 3].map(i => {
-                              const val = manualEvaluations[s.id]?.competencies?.[i] || cVal;
+                              const val = manualData.competencies?.[i] || cVal;
                               return <td key={i} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                             })}
                             {/* NL Đặc thù */}
                             {[1, 2, 3, 4, 5, 6, 7].map(i => {
                               // Offset index cho NL đặc thù để không trùng key với NL chung trong state
                               const realIdx = i + 3;
-                              const val = manualEvaluations[s.id]?.competencies?.[realIdx] || cVal;
+                              const val = manualData.competencies?.[realIdx] || cVal;
                               return <td key={i} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                             })}
                             {/* Phẩm chất */}
                             {[1, 2, 3, 4, 5].map(i => {
-                              const val = manualEvaluations[s.id]?.qualities?.[i] || qVal;
+                              const val = manualData.qualities?.[i] || qVal;
                               return <td key={i} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                             })}
                             {/* Nhận xét */}
                             <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
-                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 p-0">
+                              <textarea
+                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                value={manualData.compComment || ''}
+                                onChange={(e) => handleManualCommentChange(s.id, 'compComment', e.target.value)}
+                                placeholder="Nhận xét NL chung..."
+                              />
+                            </td>
                             <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
-                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 p-0">
+                              <textarea
+                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                value={manualData.specComment || ''}
+                                onChange={(e) => handleManualCommentChange(s.id, 'specComment', e.target.value)}
+                                placeholder="Nhận xét NL đặc thù..."
+                              />
+                            </td>
                             <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
-                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 p-0">
+                              <textarea
+                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                value={manualData.qualComment || ''}
+                                onChange={(e) => handleManualCommentChange(s.id, 'qualComment', e.target.value)}
+                                placeholder="Nhận xét phẩm chất..."
+                              />
+                            </td>
                             <td className="py-2 px-2 border border-slate-200 text-center">{evaluationPeriod}</td>
                           </tr>
                         );
