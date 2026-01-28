@@ -102,6 +102,14 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const selectedAssignment = useMemo(() => {
+    if (!selectedAssignmentId || classroom.assignments.length === 0) {
+      return classroom.assignments.length > 0 ? classroom.assignments[classroom.assignments.length - 1] : undefined;
+    }
+    const assignment = classroom.assignments.find(a => a.id === selectedAssignmentId);
+    return assignment || (classroom.assignments.length > 0 ? classroom.assignments[classroom.assignments.length - 1] : undefined);
+  }, [classroom.assignments, selectedAssignmentId]);
+
   // Initialize and validate selectedAssignmentId
   useEffect(() => {
     if (classroom.assignments.length > 0) {
@@ -185,9 +193,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       attendanceRate = (totalPresent / (classroom.attendance.length * totalStudents)) * 100;
     }
 
-    const latestAssignment = selectedAssignmentId
-      ? classroom.assignments.find(a => a.id === selectedAssignmentId)
-      : classroom.assignments[classroom.assignments.length - 1];
+    const latestAssignment = selectedAssignment;
     const distribution = { excellent: 0, good: 0, average: 0, weak: 0 };
     let averageScore = 0;
 
@@ -209,7 +215,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
 
     return { totalStudents, totalAssignments, attendanceRate, distribution, latestAssignment, averageScore: averageScore.toFixed(2) };
-  }, [classroom, selectedAssignmentId]);
+  }, [classroom.students, classroom.attendance, classroom.assignments, selectedAssignment]);
 
   const filteredStudents = useMemo(() => {
     const query = studentSearchQuery.toLowerCase().trim();
@@ -1460,7 +1466,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     </thead>
                     <tbody key={`${selectedAssignmentId}-${evaluationPeriod}`} className="text-xs font-medium text-slate-600">
                       {filteredStudents.map(s => {
-                        const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                        const grade = selectedAssignment?.grades.find(g => g.studentId === s.id);
                         const eval27 = getCircular27Evaluation(grade?.score || '');
                         const finalSubject = manualEvaluations[s.id]?.subject || eval27.subject;
                         const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
