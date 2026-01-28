@@ -124,7 +124,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       // No assignments, so clear selection
       if (selectedAssignmentId) setSelectedAssignmentId('');
     }
-  }, [classroom.assignments]);
+  }, [classroom.assignments, selectedAssignmentId]);
 
   const storageKey = useMemo(() => {
     // Luôn gắn ID bài tập vào key lưu trữ để tách biệt nhận xét cho từng môn/bài
@@ -1008,6 +1008,71 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handlePasteSubjectLevels = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string) => {
+    event.preventDefault();
+    const pasteData = event.clipboardData.getData('text');
+    const lines = pasteData.trim().split(/\r\n|\n|\r/);
+    if (lines.length === 0) return;
+
+    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
+    if (startIndex === -1) return;
+
+    const targetId = selectedAssignment?.id;
+    if (!targetId) return;
+
+    // Prepare a map of students to update
+    const studentsToUpdate: { student: Student, level: string }[] = [];
+    lines.forEach((line, lineIndex) => {
+      const studentIndex = startIndex + lineIndex;
+      if (studentIndex < filteredStudents.length) {
+        const student = filteredStudents[studentIndex];
+        const value = line.trim().toUpperCase();
+
+        let newLevel = '';
+        if (value === 'HTT' || value === 'T') newLevel = 'Hoàn thành tốt';
+        else if (value === 'HT' || value === 'H') newLevel = 'Hoàn thành';
+        else if (value === 'CHT' || value === 'C') newLevel = 'Chưa hoàn thành';
+
+        if (newLevel) {
+          studentsToUpdate.push({ student, level: newLevel });
+        }
+      }
+    });
+
+    if (studentsToUpdate.length === 0) return;
+
+    // Update periodic evaluations
+    const newEvals = { ...manualEvaluations };
+    studentsToUpdate.forEach(({ student, level }) => {
+      const studentData = newEvals[student.id] || {};
+      newEvals[student.id] = { ...studentData, subject: level };
+    });
+    const updatedPeriodicEvals = {
+      ...(classroom.periodicEvaluations || {}),
+      [storageKey]: newEvals
+    };
+
+    // Update assignments with new feedback
+    const updatedAssignments = classroom.assignments.map(assignment => {
+      if (assignment.id === targetId) {
+        const gradesMap = new Map(assignment.grades.map(g => [g.studentId, { ...g }]));
+        studentsToUpdate.forEach(({ student, level }) => {
+          const newComment = getRandomComment('subject', level);
+          const existingGrade = gradesMap.get(student.id);
+          if (existingGrade) {
+            existingGrade.feedback = newComment;
+          } else {
+            gradesMap.set(student.id, { studentId: student.id, score: '', feedback: newComment });
+          }
+        });
+        return { ...assignment, grades: Array.from(gradesMap.values()) };
+      }
+      return assignment;
+    });
+
+    onUpdate({ ...classroom, assignments: updatedAssignments, periodicEvaluations: updatedPeriodicEvals });
+  };
+
   const handlePasteCompetencies = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string, type: 'competence' | 'quality', index: number) => {
     event.preventDefault();
     const pasteData = event.clipboardData.getData('text');
@@ -1096,7 +1161,13 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             const separator = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
             const parts = line.split(separator).map(p => p.trim().replace(/"/g, ''));
             const score = parts[0] || '';
-            const feedback = parts[1] || '';
+            let feedback = parts[1] || '';
+
+            // Tự động tạo nhận xét nếu dán điểm mà không có nhận xét
+            if (score && !feedback) {
+              const evalResult = getCircular27Evaluation(score);
+              feedback = getRandomComment('subject', evalResult.subject);
+            }
 
             const existingGrade = gradesMap.get(student.id);
             if (existingGrade) {
@@ -1610,7 +1681,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                                 placeholder="-"
                               />
                             </td>
-                            <td className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}>
+                            <td
+                              tabIndex={0}
+                              className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100 outline-none focus:bg-indigo-50"
+                              onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}
+                              onPaste={(e) => handlePasteSubjectLevels(e, s.id)}
+                            >
                               <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
                                 {displaySubjectEval}
                               </span>
@@ -1690,19 +1766,19 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                               <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
                               {/* NL Chung */}
                               {[1, 2, 3].map(i => {
-                                const val = manualData.competencies?.[i] || cVal; return <td key={i} onPaste={(e) => handlePasteCompetencies(e, s.id, 'competence', i)} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                                const val = manualData.competencies?.[i] || cVal; return <td key={i} tabIndex={0} onPaste={(e) => handlePasteCompetencies(e, s.id, 'competence', i)} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold outline-none focus:bg-indigo-50 ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                               })}
                               {/* NL Đặc thù */}
                               {[1, 2, 3, 4, 5, 6, 7].map(i => {
                                 // Offset index cho NL đặc thù để không trùng key với NL chung trong state
                                 const realIdx = i + 3;
                                 const val = manualData.competencies?.[realIdx] || cVal;
-                                return <td key={i} onPaste={(e) => handlePasteCompetencies(e, s.id, 'competence', realIdx)} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                                return <td key={i} tabIndex={0} onPaste={(e) => handlePasteCompetencies(e, s.id, 'competence', realIdx)} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold outline-none focus:bg-indigo-50 ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                               })}
                               {/* Phẩm chất */}
                               {[1, 2, 3, 4, 5].map(i => {
                                 const val = manualData.qualities?.[i] || qVal;
-                                return <td key={i} onPaste={(e) => handlePasteCompetencies(e, s.id, 'quality', i)} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                                return <td key={i} tabIndex={0} onPaste={(e) => handlePasteCompetencies(e, s.id, 'quality', i)} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold outline-none focus:bg-indigo-50 ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                               })}
                               {/* Nhận xét */}
                               <td className="py-2 px-2 border border-slate-200 p-0">
