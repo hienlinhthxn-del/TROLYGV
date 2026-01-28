@@ -564,11 +564,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     const qualitiesList = Array.from(selectedQualities).join(', ');
     const competenciesList = Array.from(selectedCompetencies).join(', ');
 
-    return `Bạn là chuyên gia Thông tư 27. Dựa trên dữ liệu được cung cấp, hãy tạo một đối tượng JSON chứa nhận xét cho từng học sinh.
+    return `Bạn là chuyên gia Thông tư 27. Dựa trên dữ liệu được cung cấp (văn bản hoặc hình ảnh), hãy tạo một đối tượng JSON chứa nhận xét cho TẤT CẢ học sinh.
 
     Dữ liệu đầu vào:
     - Thời điểm: ${evaluationPeriod}
-    - Dữ liệu học sinh:
+    - Dữ liệu học sinh (nếu có dạng text):
     ${studentData}
     - Các môn học cần tập trung: ${subjectsList}
     - Các phẩm chất cần tập trung: ${qualitiesList}
@@ -592,6 +592,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
 
     QUY TẮC:
+    - QUAN TRỌNG: Phải xử lý TOÀN BỘ học sinh có trong ảnh/văn bản được cung cấp, không được bỏ sót.
     - Xác định 'studentCode' hoặc 'studentName' từ dữ liệu.
     - 'subjectLevel' phải dựa trên điểm số và suy luận sư phạm.
     - 'competencyLevels' và 'qualityLevels' phải là 'T', 'Đ', hoặc 'C'.
