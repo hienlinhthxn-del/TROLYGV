@@ -8,6 +8,12 @@ interface ClassroomManagerProps {
   onAIAssist?: (prompt: string) => void;
 }
 
+const SUBJECTS_LIST = [
+  'Tiếng Việt', 'Toán', 'Đạo đức', 'Tự nhiên và Xã hội',
+  'Khoa học', 'Lịch sử và Địa lí', 'Tin học', 'Công nghệ',
+  'Giáo dục thể chất', 'Âm nhạc', 'Mỹ thuật', 'Hoạt động trải nghiệm'
+];
+
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
   const [activeTab, setActiveTab] = useState<'students' | 'attendance' | 'assignments' | 'reports'>('students');
   const [newStudentName, setNewStudentName] = useState('');
@@ -23,6 +29,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [tempClassName, setTempClassName] = useState(classroom.name);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
+  const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set(['Tiếng Việt', 'Toán']));
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
@@ -421,6 +428,13 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const toggleSubject = (subj: string) => {
+    const newSet = new Set(selectedSubjects);
+    if (newSet.has(subj)) newSet.delete(subj);
+    else newSet.add(subj);
+    setSelectedSubjects(newSet);
+  };
+
   const handleGenerateAIReview = () => {
     if (!onAIAssist) return;
 
@@ -432,15 +446,26 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       return `- ${s.name} (${s.code}): ${grade ? `Điểm ${grade.score}. ${grade.feedback || ''}` : 'Chưa có điểm'}`;
     }).join('\n');
 
+    const subjectsList = Array.from(selectedSubjects).join(', ');
+
     const prompt = `Dựa trên danh sách điểm số của lớp ${classroom.name}, hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
 
 Dữ liệu học sinh & điểm số (đã sắp xếp):
 ${studentDataText}
 
-Yêu cầu:
-1. Đánh giá mức độ Hoàn thành (HTT/HT/CHT) chính xác theo điểm số.
-2. Viết nhận xét cá nhân hóa, khích lệ sự tiến bộ.
-3. Trình bày rõ ràng theo từng học sinh.`;
+YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
+
+1. CÁC MÔN HỌC VÀ HOẠT ĐỘNG GIÁO DỤC:
+   - Nhận xét tập trung các môn: ${subjectsList}.
+   - Đánh giá mức độ Hoàn thành (HTT/HT/CHT) dựa trên điểm số và suy luận sư phạm.
+   - Nêu rõ sự tiến bộ, kiến thức và kỹ năng đạt được.
+
+2. NĂNG LỰC VÀ PHẨM CHẤT:
+   - Năng lực chung (Tự chủ và tự học, Giao tiếp và hợp tác, Giải quyết vấn đề và sáng tạo).
+   - Phẩm chất chủ yếu (Yêu nước, Nhân ái, Chăm chỉ, Trung thực, Trách nhiệm).
+   - Xếp loại: Tốt / Đạt / Cần cố gắng.
+
+Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
 
     onAIAssist(prompt);
   };
@@ -623,23 +648,39 @@ Yêu cầu:
               </div>
             </div>
 
-            <div className="bg-indigo-600 p-8 rounded-[40px] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl shadow-indigo-200">
-              <div className="flex items-center space-x-5">
-                <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/20">
-                  <i className="fas fa-wand-magic-sparkles text-2xl"></i>
+            <div className="bg-indigo-600 p-8 rounded-[40px] text-white shadow-2xl shadow-indigo-200 space-y-6">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center space-x-5">
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/20">
+                    <i className="fas fa-wand-magic-sparkles text-2xl"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black">Trợ lý Nhận xét AI</h4>
+                    <p className="text-[11px] text-indigo-100 opacity-80 mt-1">Viết nhận xét học bạ Thông tư 27 dựa trên điểm số</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xl font-black">Trợ lý Nhận xét AI</h4>
-                  <p className="text-[11px] text-indigo-100 opacity-80 mt-1">Viết nhận xét học bạ Thông tư 27 dựa trên điểm số vừa tải lên</p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleGenerateAIReview}
                   className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl"
                 >
                   Tạo Nhận xét AI
                 </button>
+              </div>
+
+              <div className="bg-indigo-800/40 p-6 rounded-3xl border border-indigo-400/30">
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-3 flex items-center"><i className="fas fa-check-double mr-2"></i>Chọn môn học & Hoạt động giáo dục cần đánh giá:</p>
+                <div className="flex flex-wrap gap-2">
+                  {SUBJECTS_LIST.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => toggleSubject(s)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${selectedSubjects.has(s) ? 'bg-white text-indigo-600 border-white shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
+                    >
+                      {selectedSubjects.has(s) && <i className="fas fa-check mr-1.5"></i>}
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
