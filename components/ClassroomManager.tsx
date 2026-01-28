@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Classroom, Student, Grade, DailyLogEntry, Attachment } from '../types';
+import { geminiService, FilePart } from '../services/geminiService';
 
 interface ClassroomManagerProps {
   classroom: Classroom;
@@ -53,6 +54,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [studentSortBy, setStudentSortBy] = useState<'name' | 'code'>('name');
   const [isImporting, setIsImporting] = useState(false);
   const [isExportingSMAS, setIsExportingSMAS] = useState(false);
+  const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -534,6 +536,111 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     else setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
   };
 
+  const getAIReviewPrompt = (studentData: string) => {
+    const subjectsList = Array.from(selectedSubjects).join(', ');
+    const qualitiesList = Array.from(selectedQualities).join(', ');
+    const competenciesList = Array.from(selectedCompetencies).join(', ');
+
+    return `Bạn là chuyên gia Thông tư 27. Dựa trên dữ liệu được cung cấp, hãy tạo một đối tượng JSON chứa nhận xét cho từng học sinh.
+
+    Dữ liệu đầu vào:
+    - Thời điểm: ${evaluationPeriod}
+    - Dữ liệu học sinh:
+    ${studentData}
+    - Các môn học cần tập trung: ${subjectsList}
+    - Các phẩm chất cần tập trung: ${qualitiesList}
+    - Các năng lực cần tập trung: ${competenciesList}
+
+    YÊU CẦU VỀ ĐỊNH DẠNG JSON (chỉ trả về JSON, không có markdown):
+    {
+      "evaluations": [
+        {
+          "studentCode": "Mã học sinh (nếu có)",
+          "studentName": "Tên học sinh",
+          "subjectLevel": "Hoàn thành tốt" | "Hoàn thành" | "Chưa hoàn thành",
+          "subjectFeedback": "Nhận xét chi tiết về môn học.",
+          "competencyLevels": ["T", "Đ", "C", ...], // Mảng 10 chuỗi (3 chung, 7 đặc thù)
+          "qualityLevels": ["T", "Đ", "C", ...], // Mảng 5 chuỗi
+          "generalCompetencyComment": "Nhận xét về năng lực chung.",
+          "specificCompetencyComment": "Nhận xét về năng lực đặc thù.",
+          "qualityComment": "Nhận xét về phẩm chất."
+        }
+      ]
+    }
+
+    QUY TẮC:
+    - Xác định 'studentCode' hoặc 'studentName' từ dữ liệu.
+    - 'subjectLevel' phải dựa trên điểm số và suy luận sư phạm.
+    - 'competencyLevels' và 'qualityLevels' phải là 'T', 'Đ', hoặc 'C'.
+    - Các trường nhận xét phải là văn bản súc tích, mang tính xây dựng.`;
+  };
+
+  const processAIReviewResponse = (resultText: string) => {
+    const cleanJson = resultText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(cleanJson);
+
+    if (result && result.evaluations && Array.isArray(result.evaluations)) {
+      const newManualEvaluations = { ...manualEvaluations };
+      const updatedAssignments = [...classroom.assignments];
+      let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+
+      if (!targetAssignment) {
+        updatedAssignments.push({
+          id: Date.now().toString(),
+          title: `Đánh giá ${evaluationPeriod}`,
+          dueDate: new Date().toISOString().split('T')[0],
+          status: 'Đã đóng',
+          submissions: [],
+          grades: []
+        });
+        targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+      }
+
+      result.evaluations.forEach((evaluation: any) => {
+        const student = classroom.students.find(s =>
+          (evaluation.studentCode && s.code === evaluation.studentCode) ||
+          s.name === evaluation.studentName
+        );
+
+        if (student) {
+          const competencyRecord: Record<number, string> = {};
+          evaluation.competencyLevels?.forEach((level: string, index: number) => {
+            if (['T', 'Đ', 'C'].includes(level)) competencyRecord[index + 1] = level;
+          });
+
+          const qualityRecord: Record<number, string> = {};
+          evaluation.qualityLevels?.forEach((level: string, index: number) => {
+            if (['T', 'Đ', 'C'].includes(level)) qualityRecord[index + 1] = level;
+          });
+
+          newManualEvaluations[student.id] = {
+            subject: evaluation.subjectLevel,
+            competencies: competencyRecord,
+            qualities: qualityRecord,
+            compComment: evaluation.generalCompetencyComment,
+            specComment: evaluation.specificCompetencyComment,
+            qualComment: evaluation.qualityComment,
+          };
+
+          const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === student.id);
+          if (gradeIdx > -1) {
+            if (evaluation.subjectFeedback) {
+              targetAssignment.grades[gradeIdx].feedback = evaluation.subjectFeedback;
+            }
+          } else {
+            targetAssignment.grades.push({ studentId: student.id, score: '', feedback: evaluation.subjectFeedback || '' });
+          }
+        }
+      });
+
+      setManualEvaluations(newManualEvaluations);
+      onUpdate({ ...classroom, assignments: updatedAssignments });
+      alert(`Đã tự động điền nhận xét cho ${result.evaluations.length} học sinh.`);
+    } else {
+      throw new Error("AI không trả về dữ liệu nhận xét hợp lệ.");
+    }
+  };
+
   const deleteSelected = () => {
     if (selectedStudents.size === 0) return;
     if (window.confirm(`Thầy Cô chắc chắn muốn xóa ${selectedStudents.size} học sinh đã chọn?`)) {
@@ -564,43 +671,37 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setSelectedCompetencies(newSet);
   };
 
-  const handleGenerateAIReviewFromPaste = () => {
-    if (!onAIAssist) return;
+  const handleGenerateAIReviewFromPaste = async () => {
+    if (isGeneratingReview) return;
     if (!reviewPasteContent.trim() && reviewAttachments.length === 0) return;
 
-    const subjectsList = Array.from(selectedSubjects).join(', ');
-    const qualitiesList = Array.from(selectedQualities).join(', ');
-    const competenciesList = Array.from(selectedCompetencies).join(', ');
+    setIsGeneratingReview(true);
+    const prompt = getAIReviewPrompt(reviewPasteContent);
 
-    const prompt = `Dựa trên dữ liệu điểm số và đánh giá được cung cấp (văn bản hoặc hình ảnh bảng điểm), hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
-
-THÔNG TIN ĐÁNH GIÁ:
-- Thời điểm: ${evaluationPeriod}
-- Dữ liệu học sinh:
-${reviewPasteContent}
-
-YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
-
-1. CÁC MÔN HỌC VÀ HOẠT ĐỘNG GIÁO DỤC:
-   - Nhận xét tập trung các môn: ${subjectsList}.
-   - Đánh giá mức độ Hoàn thành (HTT/HT/CHT) dựa trên điểm số và suy luận sư phạm.
-   - Nêu rõ sự tiến bộ, kiến thức và kỹ năng đạt được.
-
-2. NĂNG LỰC VÀ PHẨM CHẤT:
-   - Tập trung nhận xét các Phẩm chất: ${qualitiesList}.
-   - Tập trung nhận xét các Năng lực: ${competenciesList}.
-   - Xếp loại: Tốt / Đạt / Cần cố gắng.
-
-Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
-
-    onAIAssist(prompt, reviewAttachments);
-    setShowReviewPasteModal(false);
-    setReviewPasteContent('');
-    setReviewAttachments([]);
+    try {
+      const fileParts: FilePart[] = reviewAttachments.map(at => ({
+        inlineData: { data: at.data!, mimeType: at.mimeType! }
+      }));
+      const resultText = await geminiService.generateText(prompt, fileParts);
+      processAIReviewResponse(resultText);
+    } catch (error) {
+      console.error("AI Review Generation Error:", error);
+      alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại hoặc kiểm tra định dạng dữ liệu.");
+    } finally {
+      setIsGeneratingReview(false);
+      setShowReviewPasteModal(false);
+      setReviewPasteContent('');
+      setReviewAttachments([]);
+    }
   };
 
-  const handleGenerateAIReview = () => {
-    if (!onAIAssist) return;
+  const handleGenerateAIReview = async () => {
+    if (isGeneratingReview) return;
+    if (filteredStudents.length === 0) {
+      alert("Chưa có học sinh trong danh sách để tạo nhận xét.");
+      return;
+    }
+    setIsGeneratingReview(true);
 
     const latestAssignment = stats.latestAssignment;
     let studentDataText = '';
@@ -610,32 +711,17 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
       return `- ${s.name} (${s.code}): ${grade ? `Điểm ${grade.score}. ${grade.feedback || ''}` : 'Chưa có điểm'}`;
     }).join('\n');
 
-    const subjectsList = Array.from(selectedSubjects).join(', ');
-    const qualitiesList = Array.from(selectedQualities).join(', ');
-    const competenciesList = Array.from(selectedCompetencies).join(', ');
+    const prompt = getAIReviewPrompt(studentDataText);
 
-    const prompt = `Dựa trên danh sách điểm số của lớp ${classroom.name}, hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
-
-THÔNG TIN ĐÁNH GIÁ:
-- Thời điểm: ${evaluationPeriod}
-- Dữ liệu học sinh & điểm số:
-${studentDataText}
-
-YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
-
-1. CÁC MÔN HỌC VÀ HOẠT ĐỘNG GIÁO DỤC:
-   - Nhận xét tập trung các môn: ${subjectsList}.
-   - Đánh giá mức độ Hoàn thành (HTT/HT/CHT) dựa trên điểm số và suy luận sư phạm.
-   - Nêu rõ sự tiến bộ, kiến thức và kỹ năng đạt được.
-
-2. NĂNG LỰC VÀ PHẨM CHẤT:
-   - Tập trung nhận xét các Phẩm chất: ${qualitiesList}.
-   - Tập trung nhận xét các Năng lực: ${competenciesList}.
-   - Xếp loại: Tốt / Đạt / Cần cố gắng.
-
-Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
-
-    onAIAssist(prompt);
+    try {
+      const resultText = await geminiService.generateText(prompt);
+      processAIReviewResponse(resultText);
+    } catch (error) {
+      console.error("AI Review Generation Error:", error);
+      alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại.");
+    } finally {
+      setIsGeneratingReview(false);
+    }
   };
 
   const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
@@ -968,9 +1054,10 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                   </button>
                   <button
                     onClick={handleGenerateAIReview}
-                    className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl"
+                    disabled={isGeneratingReview}
+                    className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Tạo từ Dữ liệu lớp
+                    {isGeneratingReview ? 'Đang tạo...' : 'Tạo từ Dữ liệu lớp'}
                   </button>
                 </div>
               </div>
@@ -1116,46 +1203,39 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                     </tbody>
                   </table>
                 ) : (
-                  <table className="w-full text-left border-collapse min-w-[1800px]">
+                  <table className="w-full text-left border-collapse min-w-[1400px]">
                     <thead>
                       <tr className="text-[9px] text-slate-600 uppercase tracking-tighter border border-slate-300 bg-slate-100 font-black text-center">
                         <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10">STT</th>
                         <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Mã học sinh</th>
                         <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40">Họ và tên</th>
-                        <th colSpan={3} className="py-2 px-2 border border-slate-300 bg-indigo-50 text-indigo-700">Năng lực chung</th>
-                        <th colSpan={7} className="py-2 px-2 border border-slate-300 bg-sky-50 text-sky-700">Năng lực đặc thù</th>
-                        <th colSpan={5} className="py-2 px-2 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
-                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét NL chung</th>
-                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét NL đặc thù</th>
-                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét phẩm chất</th>
+                        <th colSpan={3} className="py-2 px-1 border border-slate-300 bg-indigo-50 text-indigo-700">NL chung</th>
+                        <th colSpan={7} className="py-2 px-1 border border-slate-300 bg-sky-50 text-sky-700">NL đặc thù</th>
+                        <th colSpan={5} className="py-2 px-1 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL chung</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL đặc thù</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét phẩm chất</th>
                         <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Thời điểm đánh giá</th>
                       </tr>
                       <tr className="text-[8px] text-slate-500 uppercase tracking-tighter border border-slate-300 bg-slate-50 text-center font-bold">
                         {/* NL Chung */}
-                        <th className="py-2 px-1 border border-slate-300 w-16">Tự chủ & Tự học</th>
-                        <th className="py-2 px-1 border border-slate-300 w-16">Giao tiếp & Hợp tác</th>
-                        <th className="py-2 px-1 border border-slate-300 w-16">GQ Vấn đề & Sáng tạo</th>
+                        <th title="Tự chủ & Tự học" className="py-2 px-1 border border-slate-300 w-12">Tự chủ</th>
+                        <th title="Giao tiếp & Hợp tác" className="py-2 px-1 border border-slate-300 w-12">Giao tiếp</th>
+                        <th title="Giải quyết Vấn đề & Sáng tạo" className="py-2 px-1 border border-slate-300 w-12">GQ VĐ</th>
                         {/* NL Đặc thù */}
-                        <th className="py-2 px-1 border border-slate-300 w-14">Ngôn ngữ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Tính toán</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Khoa học</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Công nghệ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Tin học</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Thẩm mĩ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Thể chất</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Ngôn ngữ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Tính toán</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Khoa học</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Công nghệ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Tin học</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Thẩm mĩ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Thể chất</th>
                         {/* Phẩm chất */}
-                        <th className="py-2 px-1 border border-slate-300 w-14">Yêu nước</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Nhân ái</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Chăm chỉ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Trung thực</th>
-                        <th className="py-2 px-1 border border-slate-300 w-14">Trách nhiệm</th>
-                        {/* Nhận xét */}
-                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
-                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
-                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
-                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
-                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
-                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Yêu nước</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Nhân ái</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Chăm chỉ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-12">Trung thực</th>
+                        <th title="Trách nhiệm" className="py-2 px-1 border border-slate-300 w-12">Tr.Nhiệm</th>
                       </tr>
                     </thead>
                     <tbody className="text-[10px] font-medium text-slate-600">
@@ -1189,31 +1269,28 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                               return <td key={i} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
                             })}
                             {/* Nhận xét */}
-                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
                             <td className="py-2 px-2 border border-slate-200 p-0">
                               <textarea
                                 className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
                                 value={manualData.compComment || ''}
                                 onChange={(e) => handleManualCommentChange(s.id, 'compComment', e.target.value)}
-                                placeholder="Nhận xét NL chung..."
+                                placeholder="NX NL chung..."
                               />
                             </td>
-                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
                             <td className="py-2 px-2 border border-slate-200 p-0">
                               <textarea
                                 className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
                                 value={manualData.specComment || ''}
                                 onChange={(e) => handleManualCommentChange(s.id, 'specComment', e.target.value)}
-                                placeholder="Nhận xét NL đặc thù..."
+                                placeholder="NX NL đặc thù..."
                               />
                             </td>
-                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
                             <td className="py-2 px-2 border border-slate-200 p-0">
                               <textarea
                                 className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
                                 value={manualData.qualComment || ''}
                                 onChange={(e) => handleManualCommentChange(s.id, 'qualComment', e.target.value)}
-                                placeholder="Nhận xét phẩm chất..."
+                                placeholder="NX phẩm chất..."
                               />
                             </td>
                             <td className="py-2 px-2 border border-slate-200 text-center">{evaluationPeriod}</td>
@@ -1470,8 +1547,12 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
 
             <div className="flex justify-end space-x-3">
               <button onClick={() => { setShowReviewPasteModal(false); setReviewAttachments([]); }} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
-              <button onClick={handleGenerateAIReviewFromPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
-                <i className="fas fa-wand-magic-sparkles mr-2"></i>Tạo Nhận xét
+              <button onClick={handleGenerateAIReviewFromPaste} disabled={isGeneratingReview} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                {isGeneratingReview ? (
+                  <><i className="fas fa-spinner fa-spin mr-2"></i>Đang xử lý...</>
+                ) : (
+                  <><i className="fas fa-wand-magic-sparkles mr-2"></i>Tạo Nhận xét</>
+                )}
               </button>
             </div>
           </div>
