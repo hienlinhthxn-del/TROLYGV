@@ -124,7 +124,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       // No assignments, so clear selection
       if (selectedAssignmentId) setSelectedAssignmentId('');
     }
-  }, [classroom.assignments, selectedAssignmentId]);
+  }, [classroom.assignments]);
 
   const storageKey = useMemo(() => {
     if (reportViewMode === 'subjects' && selectedAssignmentId) {
