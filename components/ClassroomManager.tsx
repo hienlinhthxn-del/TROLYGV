@@ -1,12 +1,19 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Classroom, Student, Grade, DailyLogEntry, Attachment } from '../types';
+import { Classroom, Student, Grade, DailyLogEntry, Attachment, PeriodicEvaluation } from '../types';
 import { geminiService, FilePart } from '../services/geminiService';
 
 interface ClassroomManagerProps {
   classroom: Classroom;
   onUpdate: (updatedClassroom: Classroom) => void;
   onAIAssist?: (prompt: string, attachments?: Attachment[]) => void;
+}
+
+// Add periodicEvaluations to Classroom type for type safety
+declare module '../types' {
+  interface Classroom {
+    periodicEvaluations?: Record<string, Record<string, PeriodicEvaluation>>;
+  }
 }
 
 const SUBJECTS_LIST = [
@@ -56,6 +63,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [isExportingSMAS, setIsExportingSMAS] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempClassName, setTempClassName] = useState(classroom.name);
@@ -70,15 +78,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [showReviewPasteModal, setShowReviewPasteModal] = useState(false);
   const [reviewPasteContent, setReviewPasteContent] = useState('');
   const [reviewAttachments, setReviewAttachments] = useState<Attachment[]>([]);
-  const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('subjects');
-  const [manualEvaluations, setManualEvaluations] = useState<Record<string, {
-    subject?: string;
-    competencies?: Record<number, string>;
-    qualities?: Record<number, string>;
-    compComment?: string;
-    specComment?: string;
-    qualComment?: string;
-  }>>({});
+  const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('competencies');
+  const [manualEvaluations, setManualEvaluations] = useState<Record<string, PeriodicEvaluation>>({});
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
 
@@ -107,6 +108,25 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Initialize selectedAssignmentId
+  useEffect(() => {
+    if (classroom.assignments.length > 0 && !selectedAssignmentId) {
+      setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
+    }
+  }, [classroom.assignments]);
+
+  const storageKey = useMemo(() => {
+    if (reportViewMode === 'subjects' && selectedAssignmentId) {
+      return `${evaluationPeriod}_${selectedAssignmentId}`;
+    }
+    return evaluationPeriod;
+  }, [evaluationPeriod, selectedAssignmentId, reportViewMode]);
+
+  useEffect(() => {
+    const savedEvals = classroom.periodicEvaluations?.[storageKey] || {};
+    setManualEvaluations(savedEvals);
+  }, [storageKey, classroom.periodicEvaluations]);
 
   useEffect(() => {
     if (activeTab === 'logbook') {
@@ -163,7 +183,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       attendanceRate = (totalPresent / (classroom.attendance.length * totalStudents)) * 100;
     }
 
-    const latestAssignment = classroom.assignments[classroom.assignments.length - 1];
+    const latestAssignment = selectedAssignmentId
+      ? classroom.assignments.find(a => a.id === selectedAssignmentId)
+      : classroom.assignments[classroom.assignments.length - 1];
     const distribution = { excellent: 0, good: 0, average: 0, weak: 0 };
     let averageScore = 0;
 
@@ -185,7 +207,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
 
     return { totalStudents, totalAssignments, attendanceRate, distribution, latestAssignment, averageScore: averageScore.toFixed(2) };
-  }, [classroom]);
+  }, [classroom, selectedAssignmentId]);
 
   const filteredStudents = useMemo(() => {
     const query = studentSearchQuery.toLowerCase().trim();
@@ -317,11 +339,16 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             grades: newGrades
           });
         } else {
-          const lastIdx = updatedAssignments.length - 1;
-          updatedAssignments[lastIdx] = {
-            ...updatedAssignments[lastIdx],
-            grades: [...updatedAssignments[lastIdx].grades, ...newGrades]
-          };
+          const targetIndex = selectedAssignmentId
+            ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
+            : updatedAssignments.length - 1;
+
+          if (targetIndex > -1) {
+            updatedAssignments[targetIndex] = {
+              ...updatedAssignments[targetIndex],
+              grades: [...updatedAssignments[targetIndex].grades, ...newGrades]
+            };
+          }
         }
         onUpdate({ ...classroom, assignments: updatedAssignments });
         alert(`Đã nhập thành công điểm và nhận xét cho ${newGrades.length} học sinh.`);
@@ -520,7 +547,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     const lines = gradePasteContent.trim().split('\n');
     const updatedAssignments = [...classroom.assignments];
-    let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+    let targetAssignment = selectedAssignmentId
+      ? updatedAssignments.find(a => a.id === selectedAssignmentId)
+      : updatedAssignments[updatedAssignments.length - 1];
 
     if (!targetAssignment) {
       updatedAssignments.push({
@@ -532,6 +561,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         grades: []
       });
       targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+      if (!selectedAssignmentId) setSelectedAssignmentId(targetAssignment.id);
     }
 
     let updatedCount = 0;
@@ -811,11 +841,57 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handleExportCompetencies = () => {
+    let csvContent = "\uFEFF"; // BOM for UTF-8 Excel compatibility
+
+    const headers = [
+      "STT", "Mã học sinh", "Họ và tên",
+      "NL - Tự chủ & Tự học", "NL - Giao tiếp & Hợp tác", "NL - GQ VĐ & Sáng tạo",
+      "NL - Ngôn ngữ", "NL - Tính toán", "NL - Khoa học", "NL - Công nghệ", "NL - Tin học", "NL - Thẩm mỹ", "NL - Thể chất",
+      "PC - Yêu nước", "PC - Nhân ái", "PC - Chăm chỉ", "PC - Trung thực", "PC - Trách nhiệm",
+      "Nhận xét NL chung", "Nhận xét NL đặc thù", "Nhận xét phẩm chất",
+      "Thời điểm đánh giá"
+    ];
+    csvContent += headers.map(h => `"${h}"`).join(',') + '\n';
+
+    filteredStudents.forEach((s, idx) => {
+      const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+      const eval27 = getCircular27Evaluation(grade?.score || '');
+      const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : 'C';
+      const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : 'C';
+      const manualData = manualEvaluations[s.id] || {};
+
+      const competencies = Array.from({ length: 10 }, (_, i) => manualData.competencies?.[i + 1] || cVal);
+      const qualities = Array.from({ length: 5 }, (_, i) => manualData.qualities?.[i + 1] || qVal);
+
+      const row = [
+        idx + 1,
+        s.code,
+        s.name,
+        ...competencies,
+        ...qualities,
+        manualData.compComment || '',
+        manualData.specComment || '',
+        manualData.qualComment || '',
+        evaluationPeriod
+      ];
+      csvContent += row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Danh_gia_NLPC_${classroom.name.replace(/\s/g, '_')}_${evaluationPeriod.replace(/\s/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
     let newVal = currentVal;
     let newComment = '';
 
-    // 1. Xác định giá trị mới (Vòng lặp trạng thái)
     if (type === 'subject') {
       if (currentVal === 'Hoàn thành tốt') newVal = 'Hoàn thành';
       else if (currentVal === 'Hoàn thành') newVal = 'Chưa hoàn thành';
@@ -826,46 +902,37 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       newVal = map[currentVal] || 'Đ';
     }
 
-    // 2. Cập nhật State
-    setManualEvaluations(prev => {
-      const studentData = prev[studentId] || {};
+    const newEvals = { ...manualEvaluations };
+    const studentData = newEvals[studentId] || {};
+    let updatedStudentData: PeriodicEvaluation;
 
-      if (type === 'subject') {
-        return { ...prev, [studentId]: { ...studentData, subject: newVal } };
-      } else if (type === 'competence') {
-        const newCompetencies = { ...(studentData.competencies || {}), [index]: newVal };
-
-        // Tự động tạo nhận xét NL Chung (index 1-3) hoặc NL Đặc thù (index > 3)
-        let commentKey = 'compComment';
-        let isSpec = index > 3;
-        if (isSpec) commentKey = 'specComment';
-
-        // Logic đơn giản: Lấy nhận xét theo mức vừa chọn
-        const autoComment = getRandomComment('competence', newVal);
-
-        return {
-          ...prev,
-          [studentId]: {
-            ...studentData,
-            competencies: newCompetencies,
-            [commentKey]: autoComment // Cập nhật nhận xét tương ứng
-          }
-        };
+    if (type === 'subject') {
+      updatedStudentData = { ...studentData, subject: newVal };
+    } else if (type === 'competence') {
+      const newCompetencies = { ...(studentData.competencies || {}), [index]: newVal };
+      const autoComment = getRandomComment('competence', newVal);
+      updatedStudentData = { ...studentData, competencies: newCompetencies };
+      if (index > 3) {
+        updatedStudentData.specComment = autoComment;
       } else {
-        const newQualities = { ...(studentData.qualities || {}), [index]: newVal };
-        const autoComment = getRandomComment('quality', newVal);
-        return {
-          ...prev,
-          [studentId]: {
-            ...studentData,
-            qualities: newQualities,
-            qualComment: autoComment
-          }
-        };
+        updatedStudentData.compComment = autoComment;
       }
-    });
+    } else { // quality
+      const newQualities = { ...(studentData.qualities || {}), [index]: newVal };
+      const autoComment = getRandomComment('quality', newVal);
+      updatedStudentData = { ...studentData, qualities: newQualities, qualComment: autoComment };
+    }
 
-    // 3. Cập nhật feedback cho môn học (lưu vào assignment)
+    newEvals[studentId] = updatedStudentData;
+    setManualEvaluations(newEvals);
+
+    const updatedPeriodicEvals = {
+      ...(classroom.periodicEvaluations || {}),
+      [storageKey]: newEvals
+    };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+
+    // Cập nhật feedback cho môn học (lưu vào assignment)
     if (type === 'subject') {
       handleFeedbackChange(studentId, newComment);
     }
@@ -873,13 +940,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const handleScoreChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
-    const latest = updatedAssignments[updatedAssignments.length - 1];
-    if (latest) {
-      const gradeIdx = latest.grades.findIndex(g => g.studentId === studentId);
+    const targetIndex = selectedAssignmentId
+      ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
+      : updatedAssignments.length - 1;
+
+    if (targetIndex > -1) {
+      const targetAssignment = updatedAssignments[targetIndex];
+      const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === studentId);
       if (gradeIdx > -1) {
-        latest.grades[gradeIdx] = { ...latest.grades[gradeIdx], score: val };
+        targetAssignment.grades[gradeIdx] = { ...targetAssignment.grades[gradeIdx], score: val };
       } else {
-        latest.grades.push({ studentId, score: val, feedback: '' });
+        targetAssignment.grades.push({ studentId, score: val, feedback: '' });
       }
       onUpdate({ ...classroom, assignments: updatedAssignments });
     }
@@ -896,7 +967,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     if (startIndex === -1) return;
 
     const updatedAssignments = [...classroom.assignments];
-    let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+    let targetAssignment = selectedAssignmentId
+      ? updatedAssignments.find(a => a.id === selectedAssignmentId)
+      : updatedAssignments[updatedAssignments.length - 1];
 
     if (!targetAssignment) {
       updatedAssignments.push({
@@ -908,6 +981,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         grades: []
       });
       targetAssignment = updatedAssignments[updatedAssignments.length - 1];
+      if (!selectedAssignmentId) setSelectedAssignmentId(targetAssignment.id);
     }
 
     lines.forEach((line, index) => {
@@ -936,23 +1010,32 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const handleFeedbackChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
-    const latest = updatedAssignments[updatedAssignments.length - 1];
-    if (latest) {
-      const gradeIdx = latest.grades.findIndex(g => g.studentId === studentId);
+    const targetIndex = selectedAssignmentId
+      ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
+      : updatedAssignments.length - 1;
+
+    if (targetIndex > -1) {
+      const targetAssignment = updatedAssignments[targetIndex];
+      const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === studentId);
       if (gradeIdx > -1) {
-        latest.grades[gradeIdx] = { ...latest.grades[gradeIdx], feedback: val };
+        targetAssignment.grades[gradeIdx] = { ...targetAssignment.grades[gradeIdx], feedback: val };
       } else {
-        latest.grades.push({ studentId, score: '', feedback: val });
+        targetAssignment.grades.push({ studentId, score: '', feedback: val });
       }
       onUpdate({ ...classroom, assignments: updatedAssignments });
     }
   };
 
   const handleManualCommentChange = (studentId: string, field: 'compComment' | 'specComment' | 'qualComment', val: string) => {
-    setManualEvaluations(prev => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], [field]: val }
-    }));
+    const newEvals = { ...manualEvaluations };
+    newEvals[studentId] = { ...(newEvals[studentId] || {}), [field]: val };
+    setManualEvaluations(newEvals);
+
+    const updatedPeriodicEvals = {
+      ...(classroom.periodicEvaluations || {}),
+      [storageKey]: newEvals
+    };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
   };
 
   const handleLogChange = (studentId: string, comment: string) => {
@@ -1318,10 +1401,31 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   <h4 className="text-lg font-black text-slate-800">Đánh giá Thông tư 27 (Tự động)</h4>
                   <p className="text-xs text-slate-400 font-medium">Gợi ý xếp loại dựa trên điểm số bài mới nhất</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100">HTT: Hoàn thành tốt</span>
-                  <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold border border-blue-100">HT: Hoàn thành</span>
-                  <span className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold border border-rose-100">CHT: Chưa hoàn thành</span>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Bài:</span>
+                    <select
+                      value={selectedAssignmentId}
+                      onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm max-w-[150px] truncate"
+                    >
+                      {classroom.assignments.map(a => (
+                        <option key={a.id} value={a.id}>{a.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Kỳ:</span>
+                    <select
+                      value={evaluationPeriod}
+                      onChange={(e) => setEvaluationPeriod(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                    >
+                      {EVALUATION_PERIODS.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1393,102 +1497,111 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     </tbody>
                   </table>
                 ) : (
-                  <table className="w-full text-left border-collapse min-w-[1400px]">
-                    <thead>
-                      <tr className="text-[9px] text-slate-600 uppercase tracking-tighter border border-slate-300 bg-slate-100 font-black text-center">
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10">STT</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Mã học sinh</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40">Họ và tên</th>
-                        <th colSpan={3} className="py-2 px-1 border border-slate-300 bg-indigo-50 text-indigo-700">NL chung</th>
-                        <th colSpan={7} className="py-2 px-1 border border-slate-300 bg-sky-50 text-sky-700">NL đặc thù</th>
-                        <th colSpan={5} className="py-2 px-1 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL chung</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL đặc thù</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét phẩm chất</th>
-                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Thời điểm đánh giá</th>
-                      </tr>
-                      <tr className="text-[8px] text-slate-500 uppercase tracking-tighter border border-slate-300 bg-slate-50 text-center font-bold">
-                        {/* NL Chung */}
-                        <th title="Tự chủ & Tự học" className="py-2 px-1 border border-slate-300 w-12">Tự chủ</th>
-                        <th title="Giao tiếp & Hợp tác" className="py-2 px-1 border border-slate-300 w-12">Giao tiếp</th>
-                        <th title="Giải quyết Vấn đề & Sáng tạo" className="py-2 px-1 border border-slate-300 w-12">GQ VĐ</th>
-                        {/* NL Đặc thù */}
-                        <th className="py-2 px-1 border border-slate-300 w-12">Ngôn ngữ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Tính toán</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Khoa học</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Công nghệ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Tin học</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Thẩm mĩ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Thể chất</th>
-                        {/* Phẩm chất */}
-                        <th className="py-2 px-1 border border-slate-300 w-12">Yêu nước</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Nhân ái</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Chăm chỉ</th>
-                        <th className="py-2 px-1 border border-slate-300 w-12">Trung thực</th>
-                        <th title="Trách nhiệm" className="py-2 px-1 border border-slate-300 w-12">Tr.Nhiệm</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[10px] font-medium text-slate-600">
-                      {filteredStudents.map((s, idx) => {
-                        const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
-                        const eval27 = getCircular27Evaluation(grade?.score || '');
-                        const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : eval27.competence === 'Cần cố gắng' ? 'C' : '-';
-                        const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : eval27.quality === 'Cần cố gắng' ? 'C' : '-';
-                        const manualData = manualEvaluations[s.id] || {};
+                  <>
+                    <div className="flex justify-end gap-2 mb-4">
+                      <button
+                        onClick={handleExportCompetencies}
+                        className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-100 transition-all"
+                      >
+                        <i className="fas fa-file-excel mr-2"></i>Xuất ra File (CSV)
+                      </button>
+                    </div>
+                    <table className="w-full text-left border-collapse min-w-[1400px]">
+                      <thead>
+                        <tr className="text-[9px] text-slate-600 uppercase tracking-tighter border border-slate-300 bg-slate-100 font-black text-center">
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10">STT</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Mã học sinh</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40">Họ và tên</th>
+                          <th colSpan={3} className="py-2 px-1 border border-slate-300 bg-indigo-50 text-indigo-700">NL chung</th>
+                          <th colSpan={7} className="py-2 px-1 border border-slate-300 bg-sky-50 text-sky-700">NL đặc thù</th>
+                          <th colSpan={5} className="py-2 px-1 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL chung</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét NL đặc thù</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-28">Nhận xét phẩm chất</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Thời điểm đánh giá</th>
+                        </tr>
+                        <tr className="text-[8px] text-slate-500 uppercase tracking-tighter border border-slate-300 bg-slate-50 text-center font-bold">
+                          {/* NL Chung */}
+                          <th title="Tự chủ & Tự học" className="py-2 px-1 border border-slate-300 w-12">Tự chủ</th>
+                          <th title="Giao tiếp & Hợp tác" className="py-2 px-1 border border-slate-300 w-12">Giao tiếp</th>
+                          <th title="Giải quyết Vấn đề & Sáng tạo" className="py-2 px-1 border border-slate-300 w-12">GQ VĐ</th>
+                          {/* NL Đặc thù */}
+                          <th className="py-2 px-1 border border-slate-300 w-12">Ngôn ngữ</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Tính toán</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Khoa học</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Công nghệ</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Tin học</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Thẩm mĩ</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Thể chất</th>
+                          {/* Phẩm chất */}
+                          <th className="py-2 px-1 border border-slate-300 w-12">Yêu nước</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Nhân ái</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Chăm chỉ</th>
+                          <th className="py-2 px-1 border border-slate-300 w-12">Trung thực</th>
+                          <th title="Trách nhiệm" className="py-2 px-1 border border-slate-300 w-12">Tr.Nhiệm</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[10px] font-medium text-slate-600">
+                        {filteredStudents.map((s, idx) => {
+                          const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                          const eval27 = getCircular27Evaluation(grade?.score || '');
+                          const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : eval27.competence === 'Cần cố gắng' ? 'C' : '-';
+                          const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : eval27.quality === 'Cần cố gắng' ? 'C' : '-';
+                          const manualData = manualEvaluations[s.id] || {};
 
-                        return (
-                          <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                            <td className="py-2 px-2 border border-slate-200 text-center">{idx + 1}</td>
-                            <td className="py-2 px-2 border border-slate-200">{s.code}</td>
-                            <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
-                            {/* NL Chung */}
-                            {[1, 2, 3].map(i => {
-                              const val = manualData.competencies?.[i] || cVal;
-                              return <td key={i} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
-                            })}
-                            {/* NL Đặc thù */}
-                            {[1, 2, 3, 4, 5, 6, 7].map(i => {
-                              // Offset index cho NL đặc thù để không trùng key với NL chung trong state
-                              const realIdx = i + 3;
-                              const val = manualData.competencies?.[realIdx] || cVal;
-                              return <td key={i} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
-                            })}
-                            {/* Phẩm chất */}
-                            {[1, 2, 3, 4, 5].map(i => {
-                              const val = manualData.qualities?.[i] || qVal;
-                              return <td key={i} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
-                            })}
-                            {/* Nhận xét */}
-                            <td className="py-2 px-2 border border-slate-200 p-0">
-                              <textarea
-                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
-                                value={manualData.compComment || ''}
-                                onChange={(e) => handleManualCommentChange(s.id, 'compComment', e.target.value)}
-                                placeholder="NX NL chung..."
-                              />
-                            </td>
-                            <td className="py-2 px-2 border border-slate-200 p-0">
-                              <textarea
-                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
-                                value={manualData.specComment || ''}
-                                onChange={(e) => handleManualCommentChange(s.id, 'specComment', e.target.value)}
-                                placeholder="NX NL đặc thù..."
-                              />
-                            </td>
-                            <td className="py-2 px-2 border border-slate-200 p-0">
-                              <textarea
-                                className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
-                                value={manualData.qualComment || ''}
-                                onChange={(e) => handleManualCommentChange(s.id, 'qualComment', e.target.value)}
-                                placeholder="NX phẩm chất..."
-                              />
-                            </td>
-                            <td className="py-2 px-2 border border-slate-200 text-center">{evaluationPeriod}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                          return (
+                            <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                              <td className="py-2 px-2 border border-slate-200 text-center">{idx + 1}</td>
+                              <td className="py-2 px-2 border border-slate-200">{s.code}</td>
+                              <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
+                              {/* NL Chung */}
+                              {[1, 2, 3].map(i => {
+                                const val = manualData.competencies?.[i] || cVal;
+                                return <td key={i} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                              })}
+                              {/* NL Đặc thù */}
+                              {[1, 2, 3, 4, 5, 6, 7].map(i => {
+                                // Offset index cho NL đặc thù để không trùng key với NL chung trong state
+                                const realIdx = i + 3;
+                                const val = manualData.competencies?.[realIdx] || cVal;
+                                return <td key={i} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                              })}
+                              {/* Phẩm chất */}
+                              {[1, 2, 3, 4, 5].map(i => {
+                                const val = manualData.qualities?.[i] || qVal;
+                                return <td key={i} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                              })}
+                              {/* Nhận xét */}
+                              <td className="py-2 px-2 border border-slate-200 p-0">
+                                <textarea
+                                  className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                  value={manualData.compComment || ''}
+                                  onChange={(e) => handleManualCommentChange(s.id, 'compComment', e.target.value)}
+                                  placeholder="NX NL chung..."
+                                />
+                              </td>
+                              <td className="py-2 px-2 border border-slate-200 p-0">
+                                <textarea
+                                  className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                  value={manualData.specComment || ''}
+                                  onChange={(e) => handleManualCommentChange(s.id, 'specComment', e.target.value)}
+                                  placeholder="NX NL đặc thù..."
+                                />
+                              </td>
+                              <td className="py-2 px-2 border border-slate-200 p-0">
+                                <textarea
+                                  className="w-full h-full min-h-[40px] px-2 py-1 bg-transparent border-none focus:ring-0 text-[10px] resize-none"
+                                  value={manualData.qualComment || ''}
+                                  onChange={(e) => handleManualCommentChange(s.id, 'qualComment', e.target.value)}
+                                  placeholder="NX phẩm chất..."
+                                />
+                              </td>
+                              <td className="py-2 px-2 border border-slate-200 text-center">{evaluationPeriod}</td>
+                            </tr>
+                          );
+                        })}</tbody>
+                    </table>
+                  </>
                 )}
               </div>
             </div>
