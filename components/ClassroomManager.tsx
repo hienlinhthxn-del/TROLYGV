@@ -72,7 +72,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [reviewPasteContent, setReviewPasteContent] = useState('');
   const [reviewAttachments, setReviewAttachments] = useState<Attachment[]>([]);
   const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('competencies');
-  const [manualEvaluations, setManualEvaluations] = useState<Record<string, PeriodicEvaluation>>({});
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
 
@@ -132,10 +131,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     return evaluationPeriod;
   }, [evaluationPeriod, selectedAssignmentId, reportViewMode]);
 
-  useEffect(() => {
-    const savedEvals = classroom.periodicEvaluations?.[storageKey] || {};
-    setManualEvaluations(savedEvals);
-  }, [storageKey, classroom.periodicEvaluations]);
+  const manualEvaluations = useMemo(() => {
+    return classroom.periodicEvaluations?.[storageKey] || {};
+  }, [classroom.periodicEvaluations, storageKey]);
 
   useEffect(() => {
     if (activeTab === 'logbook') {
@@ -702,7 +700,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     const result = JSON.parse(cleanJson);
 
     if (result && result.evaluations && Array.isArray(result.evaluations)) {
-      const newManualEvaluations = { ...manualEvaluations };
       const updatedAssignments = [...classroom.assignments];
       let targetAssignment = updatedAssignments[updatedAssignments.length - 1];
 
@@ -717,6 +714,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         });
         targetAssignment = updatedAssignments[updatedAssignments.length - 1];
       }
+
+      const newManualEvaluations = { ...manualEvaluations };
 
       result.evaluations.forEach((evaluation: any) => {
         const student = classroom.students.find(s =>
@@ -755,8 +754,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         }
       });
 
-      setManualEvaluations(newManualEvaluations);
-      onUpdate({ ...classroom, assignments: updatedAssignments });
+      const updatedPeriodicEvals = {
+        ...(classroom.periodicEvaluations || {}),
+        [storageKey]: newManualEvaluations
+      };
+      onUpdate({ ...classroom, assignments: updatedAssignments, periodicEvaluations: updatedPeriodicEvals });
       alert(`Đã tự động điền nhận xét cho ${result.evaluations.length} học sinh.`);
     } else {
       throw new Error("AI không trả về dữ liệu nhận xét hợp lệ.");
@@ -929,7 +931,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
 
     newEvals[studentId] = updatedStudentData;
-    setManualEvaluations(newEvals);
 
     const updatedPeriodicEvals = {
       ...(classroom.periodicEvaluations || {}),
@@ -1031,7 +1032,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const handleManualCommentChange = (studentId: string, field: 'compComment' | 'specComment' | 'qualComment', val: string) => {
     const newEvals = { ...manualEvaluations };
     newEvals[studentId] = { ...(newEvals[studentId] || {}), [field]: val };
-    setManualEvaluations(newEvals);
 
     const updatedPeriodicEvals = {
       ...(classroom.periodicEvaluations || {}),
@@ -1543,9 +1543,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                           <th title="Trách nhiệm" className="py-2 px-1 border border-slate-300 w-12">Tr.Nhiệm</th>
                         </tr>
                       </thead>
-                      <tbody className="text-[10px] font-medium text-slate-600">
+                      <tbody key={`competencies-${selectedAssignmentId}-${evaluationPeriod}`} className="text-[10px] font-medium text-slate-600">
                         {filteredStudents.map((s, idx) => {
-                          const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                          const grade = selectedAssignment?.grades.find(g => g.studentId === s.id);
                           const eval27 = getCircular27Evaluation(grade?.score || '');
                           const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : eval27.competence === 'Cần cố gắng' ? 'C' : '-';
                           const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : eval27.quality === 'Cần cố gắng' ? 'C' : '-';
