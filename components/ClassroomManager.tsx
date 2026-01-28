@@ -103,26 +103,23 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   }, []);
 
   const selectedAssignment = useMemo(() => {
-    if (!selectedAssignmentId || classroom.assignments.length === 0) {
-      return classroom.assignments.length > 0 ? classroom.assignments[classroom.assignments.length - 1] : undefined;
+    if (classroom.assignments.length === 0) return undefined;
+    if (selectedAssignmentId) {
+      const found = classroom.assignments.find(a => a.id === selectedAssignmentId);
+      if (found) return found;
     }
-    const assignment = classroom.assignments.find(a => a.id === selectedAssignmentId);
-    return assignment || (classroom.assignments.length > 0 ? classroom.assignments[classroom.assignments.length - 1] : undefined);
+    return classroom.assignments[classroom.assignments.length - 1];
   }, [classroom.assignments, selectedAssignmentId]);
 
   // Initialize and validate selectedAssignmentId
   useEffect(() => {
     if (classroom.assignments.length > 0) {
-      if (!selectedAssignmentId) {
+      const currentExists = selectedAssignmentId && classroom.assignments.some(a => a.id === selectedAssignmentId);
+      if (!currentExists) {
         setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
-      } else {
-        const exists = classroom.assignments.find(a => a.id === selectedAssignmentId);
-        if (!exists) {
-          setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
-        }
       }
-    } else {
-      if (selectedAssignmentId) setSelectedAssignmentId('');
+    } else if (selectedAssignmentId) {
+      setSelectedAssignmentId('');
     }
   }, [classroom.assignments, selectedAssignmentId]);
 
@@ -347,9 +344,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             grades: newGrades
           });
         } else {
-          const targetIndex = selectedAssignmentId
-            ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
-            : updatedAssignments.length - 1;
+          const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+          const targetIndex = updatedAssignments.findIndex(a => a.id === targetId);
 
           if (targetIndex > -1) {
             updatedAssignments[targetIndex] = {
@@ -555,9 +551,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     const lines = gradePasteContent.trim().split('\n');
     const updatedAssignments = [...classroom.assignments];
-    let targetAssignment = selectedAssignmentId
-      ? updatedAssignments.find(a => a.id === selectedAssignmentId)
-      : updatedAssignments[updatedAssignments.length - 1];
+    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+    let targetAssignment = updatedAssignments.find(a => a.id === targetId);
 
     if (!targetAssignment) {
       updatedAssignments.push({
@@ -948,9 +943,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const handleScoreChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
-    const targetIndex = selectedAssignmentId
-      ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
-      : updatedAssignments.length - 1;
+    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+    const targetIndex = updatedAssignments.findIndex(a => a.id === targetId);
 
     if (targetIndex > -1) {
       const targetAssignment = updatedAssignments[targetIndex];
@@ -975,9 +969,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     if (startIndex === -1) return;
 
     const updatedAssignments = [...classroom.assignments];
-    let targetAssignment = selectedAssignmentId
-      ? updatedAssignments.find(a => a.id === selectedAssignmentId)
-      : updatedAssignments[updatedAssignments.length - 1];
+    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+    let targetAssignment = updatedAssignments.find(a => a.id === targetId);
 
     if (!targetAssignment) {
       updatedAssignments.push({
@@ -1018,9 +1011,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const handleFeedbackChange = (studentId: string, val: string) => {
     const updatedAssignments = [...classroom.assignments];
-    const targetIndex = selectedAssignmentId
-      ? updatedAssignments.findIndex(a => a.id === selectedAssignmentId)
-      : updatedAssignments.length - 1;
+    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+    const targetIndex = updatedAssignments.findIndex(a => a.id === targetId);
 
     if (targetIndex > -1) {
       const targetAssignment = updatedAssignments[targetIndex];
@@ -1458,7 +1450,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <thead>
                       <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
                         <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
-                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm</th>
+                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">({selectedAssignment?.title})</span></th>
                         <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
                         <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
                         <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
