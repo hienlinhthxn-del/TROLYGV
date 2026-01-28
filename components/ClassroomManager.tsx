@@ -62,6 +62,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [tempClassName, setTempClassName] = useState(classroom.name);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [showGradePasteModal, setShowGradePasteModal] = useState(false);
+  const [showOnlineResultModal, setShowOnlineResultModal] = useState(false);
+  const [onlineResultContent, setOnlineResultContent] = useState('');
   const [gradePasteContent, setGradePasteContent] = useState('');
   const [pasteContent, setPasteContent] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set(['Tiếng Việt', 'Toán']));
@@ -609,6 +611,67 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
   };
 
+  const handleProcessOnlineResults = () => {
+    if (!onlineResultContent.trim()) return;
+
+    const updatedAssignments = [...classroom.assignments];
+    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
+    let targetAssignment = updatedAssignments.find(a => a.id === targetId);
+
+    if (!targetAssignment) {
+      // Nếu chưa chọn bài tập nào, tạo mới
+      const newAssignment = {
+        id: Date.now().toString(),
+        title: `Bài tập Online ${new Date().toLocaleDateString('vi-VN')}`,
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Đã đóng' as const,
+        submissions: [],
+        grades: []
+      };
+      updatedAssignments.push(newAssignment);
+      targetAssignment = newAssignment;
+      if (!selectedAssignmentId) setSelectedAssignmentId(newAssignment.id);
+    }
+
+    let updatedCount = 0;
+    // Regex để bắt chuỗi #EDU_RESULT#:Tên:Điểm:ChiTiết
+    const regex = /#EDU_RESULT#:(.*?):([\d\.]+):/g;
+    let match;
+
+    // Map học sinh để tìm kiếm nhanh
+    const studentMapByName = new Map(classroom.students.map(s => [s.name.trim().toLowerCase(), s]));
+
+    while ((match = regex.exec(onlineResultContent)) !== null) {
+      const name = match[1].trim();
+      const score = match[2];
+
+      // Tìm học sinh theo tên (chấp nhận tên gần đúng hoặc chính xác)
+      const student = studentMapByName.get(name.toLowerCase());
+
+      if (student) {
+        const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === student.id);
+        if (gradeIdx > -1) {
+          targetAssignment.grades[gradeIdx] = {
+            ...targetAssignment.grades[gradeIdx],
+            score: score
+          };
+        } else {
+          targetAssignment.grades.push({
+            studentId: student.id,
+            score: score,
+            feedback: 'Hoàn thành bài tập Online'
+          });
+        }
+        updatedCount++;
+      }
+    }
+
+    onUpdate({ ...classroom, assignments: updatedAssignments });
+    alert(`Đã cập nhật điểm cho ${updatedCount} học sinh từ dữ liệu Online.`);
+    setShowOnlineResultModal(false);
+    setOnlineResultContent('');
+  };
+
   const addStudent = () => {
     if (!newStudentName.trim()) return;
 
@@ -1133,6 +1196,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <i className="fas fa-download mr-1"></i>Mẫu
           </button>
           <button
+            onClick={() => {
+              const newId = Date.now().toString();
+              const newAssignment = { id: newId, title: `Bài tập mới ${new Date().toLocaleDateString('vi-VN')}`, dueDate: new Date().toISOString().split('T')[0], status: 'Đã đóng' as const, submissions: [], grades: [] };
+              onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
+              setSelectedAssignmentId(newId);
+            }}
+            className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-200 hover:bg-indigo-100 transition-all"
+          >
+            <i className="fas fa-plus mr-2"></i>Tạo Bài tập
+          </button>
+          <button
             onClick={() => gradeFileInputRef.current?.click()}
             className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
           >
@@ -1143,6 +1217,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             className="px-4 py-2 rounded-xl bg-sky-50 text-sky-700 text-[10px] font-black uppercase tracking-widest border border-sky-200 hover:bg-sky-100 transition-all"
           >
             <i className="fas fa-paste mr-2"></i>Dán Bảng điểm
+          </button>
+          <button
+            onClick={() => setShowOnlineResultModal(true)}
+            className="px-4 py-2 rounded-xl bg-purple-50 text-purple-700 text-[10px] font-black uppercase tracking-widest border border-purple-200 hover:bg-purple-100 transition-all"
+          >
+            <i className="fas fa-globe mr-2"></i>Nhập KQ Online
           </button>
           <button
             onClick={handleExportSMAS}
@@ -1890,6 +1970,37 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               <button onClick={() => setShowGradePasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleProcessGradePaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
                 <i className="fas fa-file-import mr-2"></i>Xử lý & Nhập điểm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showOnlineResultModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowOnlineResultModal(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Nhập kết quả từ Link Online</h3>
+              <button onClick={() => setShowOnlineResultModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-xs text-slate-500 mb-2 font-medium">Dán toàn bộ tin nhắn chứa mã kết quả (dạng #EDU_RESULT#...) mà học sinh gửi vào đây:</p>
+              <textarea
+                value={onlineResultContent}
+                onChange={(e) => setOnlineResultContent(e.target.value)}
+                placeholder={`Ví dụ:\nEm nộp bài ạ #EDU_RESULT#:Nguyễn Văn An:9.0:18/20\nBài của em đây #EDU_RESULT#:Trần Thị Bình:8.5:17/20`}
+                className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowOnlineResultModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
+              <button onClick={handleProcessOnlineResults} className="px-6 py-3 rounded-xl bg-purple-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-purple-700 transition-all">
+                <i className="fas fa-magic mr-2"></i>Phân tích & Nhập điểm
               </button>
             </div>
           </div>

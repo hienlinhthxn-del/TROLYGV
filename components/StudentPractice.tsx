@@ -18,6 +18,7 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
   const [endTime, setEndTime] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const [studentName, setStudentName] = useState('');
 
   const currentQuestion = questions[currentIdx];
   const progress = ((currentIdx + 1) / questions.length) * 100;
@@ -86,6 +87,16 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     );
   };
 
+  const handleCopyResult = () => {
+    if (!studentName.trim() && isStandalone) {
+      alert("Em vui lòng nhập Họ và tên để Thầy Cô biết nhé!");
+      return;
+    }
+    const score = (results!.correctCount / results!.total * 10).toFixed(1);
+    const resultString = `#EDU_RESULT#:${studentName || 'Học sinh'}:${score}:${results!.correctCount}/${results!.total}`;
+    navigator.clipboard.writeText(resultString).then(() => alert("Đã sao chép kết quả! Em hãy gửi mã này cho Thầy Cô nhé."));
+  };
+
   if (isSubmitted && results) {
     return (
       <div className="h-screen flex flex-col bg-slate-50 animate-in fade-in duration-500 overflow-hidden">
@@ -130,6 +141,26 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
             </div>
 
             <div className="space-y-4 pt-4">
+              <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 text-center space-y-4">
+                <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest">Gửi kết quả cho Giáo viên</h4>
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
+                  <input
+                    type="text"
+                    placeholder="Nhập Họ và tên của em..."
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    className="w-full sm:w-64 px-4 py-3 rounded-xl border border-indigo-200 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <button
+                    onClick={handleCopyResult}
+                    className="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all active:scale-95 whitespace-nowrap"
+                  >
+                    <i className="fas fa-copy mr-2"></i>Sao chép KQ
+                  </button>
+                </div>
+                <p className="text-[10px] text-indigo-400 font-medium">Nhập tên, nhấn Sao chép và gửi (Paste) cho Thầy Cô qua Zalo/Tin nhắn.</p>
+              </div>
+
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-left space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Xem lại chi tiết bài làm</h4>
                 {questions.map((q, idx) => (
