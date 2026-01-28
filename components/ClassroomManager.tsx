@@ -21,6 +21,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempClassName, setTempClassName] = useState(classroom.name);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteContent, setPasteContent] = useState('');
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
@@ -212,7 +214,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
       alert("Hệ thống hiện tại hỗ trợ tệp .csv hoặc .txt. Thầy Cô vui lòng chọn 'Save As' trong Excel và chọn định dạng 'CSV (UTF-8)' để nhập liệu chính xác nhất nhé!");
       if (studentFileInputRef.current) studentFileInputRef.current.value = '';
       return;
@@ -223,6 +226,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
+
+        // Kiểm tra file nhị phân (tránh lỗi khi cố đọc file Excel/Word làm text)
+        if (text.includes('\0')) {
+          throw new Error("Tệp tin có vẻ là định dạng nhị phân (Excel/Word). Vui lòng lưu dưới dạng CSV (UTF-8).");
+        }
+
         // Fix lỗi BOM và chuẩn hóa dòng mới, loại bỏ ký tự lạ
         const cleanText = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
         const lines = cleanText.split('\n').filter(l => l.trim());
@@ -274,7 +283,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           alert("Không tìm thấy dữ liệu hợp lệ. Định dạng chuẩn: Mã HS, Họ và tên, Giới tính");
         }
       } catch (err) {
-        alert("Lỗi khi đọc file. Vui lòng kiểm tra lại định dạng tệp.");
+        alert(`Lỗi khi đọc file: ${err instanceof Error ? err.message : "Định dạng không hợp lệ"}`);
       } finally {
         setIsImporting(false);
         if (studentFileInputRef.current) studentFileInputRef.current.value = '';
@@ -296,6 +305,65 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const handleCancelEditName = () => {
     setTempClassName(classroom.name);
     setIsEditingName(false);
+  };
+
+  const handleProcessPaste = () => {
+    if (!pasteContent.trim()) return;
+
+    try {
+      const text = pasteContent;
+      // Chuẩn hóa dòng mới và loại bỏ BOM
+      const cleanText = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const lines = cleanText.split('\n').filter(l => l.trim());
+
+      const newStudents: Student[] = [];
+      let startIndex = 0;
+
+      // Bỏ qua dòng tiêu đề nếu có
+      if (lines[0].toLowerCase().includes('họ và tên') || lines[0].toLowerCase().includes('mã')) {
+        startIndex = 1;
+      }
+
+      for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cleanLine = line.replace(/"/g, '');
+        // Ưu tiên Tab (Excel) -> Chấm phẩy -> Phẩy
+        const separator = cleanLine.includes('\t') ? '\t' : (cleanLine.includes(';') ? ';' : ',');
+        const parts = cleanLine.split(separator).map(s => s.trim());
+
+        if (parts.length >= 2) {
+          const [code, name, genderRaw] = parts;
+          const gender: 'Nam' | 'Nữ' = (genderRaw?.toLowerCase().includes('nữ') || genderRaw?.toLowerCase() === 'f' || genderRaw?.toLowerCase() === 'nu') ? 'Nữ' : 'Nam';
+
+          newStudents.push({
+            id: (Date.now() + i).toString(),
+            name: name,
+            code: code || `HS${(classroom.students.length + newStudents.length + 1).toString().padStart(3, '0')}`,
+            gender: gender
+          });
+        } else if (parts.length === 1 && parts[0]) {
+          newStudents.push({
+            id: (Date.now() + i).toString(),
+            name: parts[0],
+            code: `HS${(classroom.students.length + newStudents.length + 1).toString().padStart(3, '0')}`,
+            gender: 'Nam'
+          });
+        }
+      }
+
+      if (newStudents.length > 0) {
+        onUpdate({ ...classroom, students: [...classroom.students, ...newStudents] });
+        alert(`Đã thêm thành công ${newStudents.length} học sinh mới.`);
+        setShowPasteModal(false);
+        setPasteContent('');
+      } else {
+        alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra lại (Mã, Tên, Giới tính)");
+      }
+    } catch (e) {
+      alert("Lỗi xử lý dữ liệu.");
+    }
   };
 
   const addStudent = () => {
@@ -650,12 +718,20 @@ Yêu cầu:
               <div className="w-px bg-indigo-100 hidden md:block mx-2"></div>
               <div className="flex flex-col justify-center space-y-2">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nhập danh sách nhanh</h4>
-                <button
-                  onClick={() => studentFileInputRef.current?.click()}
-                  className="px-6 py-3 bg-white text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-400 transition-all flex items-center justify-center"
-                >
-                  <i className="fas fa-users-medical mr-2"></i>Tải lên Danh sách HS
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => studentFileInputRef.current?.click()}
+                    className="px-4 py-3 bg-white text-indigo-600 border-2 border-dashed border-indigo-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-400 transition-all flex items-center justify-center"
+                  >
+                    <i className="fas fa-file-upload mr-2"></i>Tải File
+                  </button>
+                  <button
+                    onClick={() => setShowPasteModal(true)}
+                    className="px-4 py-3 bg-white text-emerald-600 border-2 border-dashed border-emerald-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 hover:border-emerald-400 transition-all flex items-center justify-center"
+                  >
+                    <i className="fas fa-paste mr-2"></i>Dán Text
+                  </button>
+                </div>
                 <div className="flex items-center justify-between px-1">
                   <p className="text-[8px] text-slate-400 font-bold uppercase">Định dạng: Mã HS, Tên, Giới tính</p>
                   <button onClick={handleDownloadSample} className="text-[8px] text-indigo-500 hover:text-indigo-700 font-black uppercase underline decoration-dotted underline-offset-2">Tải file mẫu</button>
@@ -745,6 +821,37 @@ Yêu cầu:
           </div>
         )}
       </div>
+
+      {showPasteModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowPasteModal(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán danh sách học sinh</h3>
+              <button onClick={() => setShowPasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-xs text-slate-500 mb-2 font-medium">Copy từ Excel (Cột Mã, Tên, Giới tính) và dán vào đây:</p>
+              <textarea
+                value={pasteContent}
+                onChange={(e) => setPasteContent(e.target.value)}
+                placeholder={`Ví dụ:\nHS001\tNguyễn Văn A\tNam\nHS002\tTrần Thị B\tNữ`}
+                className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowPasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
+              <button onClick={handleProcessPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
+                <i className="fas fa-file-import mr-2"></i>Xử lý & Thêm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
