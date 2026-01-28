@@ -1,11 +1,11 @@
 
-import React, { useState, useMemo, useRef } from 'react';
-import { Classroom, Student, Grade } from '../types';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Classroom, Student, Grade, DailyLogEntry, Attachment } from '../types';
 
 interface ClassroomManagerProps {
   classroom: Classroom;
   onUpdate: (updatedClassroom: Classroom) => void;
-  onAIAssist?: (prompt: string) => void;
+  onAIAssist?: (prompt: string, attachments?: Attachment[]) => void;
 }
 
 const SUBJECTS_LIST = [
@@ -27,7 +27,7 @@ const EVALUATION_PERIODS = [
 ];
 
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'attendance' | 'assignments' | 'reports'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'logbook' | 'assignments' | 'reports'>('students');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentCode, setNewStudentCode] = useState('');
   const [newStudentGender, setNewStudentGender] = useState<'Nam' | 'Nữ'>('Nam');
@@ -47,15 +47,63 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [evaluationPeriod, setEvaluationPeriod] = useState('Cuối Học kỳ I');
   const [showReviewPasteModal, setShowReviewPasteModal] = useState(false);
   const [reviewPasteContent, setReviewPasteContent] = useState('');
+  const [reviewAttachments, setReviewAttachments] = useState<Attachment[]>([]);
   const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('subjects');
   const [manualEvaluations, setManualEvaluations] = useState<Record<string, {
     subject?: string;
     competencies?: Record<number, string>;
     qualities?: Record<number, string>;
   }>>({});
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (activeTab === 'logbook') {
+      const logsForDate = classroom.dailyLogs?.find(log => log.date === logDate);
+      const initialEntries: Record<string, { comment: string; type: 'praise' | 'mistake' }> = {};
+      if (logsForDate) {
+        logsForDate.entries.forEach(entry => {
+          initialEntries[entry.studentId] = { comment: entry.comment, type: entry.type };
+        });
+      }
+      setCurrentLogEntries(initialEntries);
+    }
+  }, [logDate, activeTab, classroom.dailyLogs]);
+
+  // Xử lý dán ảnh vào modal nhận xét
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!showReviewPasteModal) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64Data = (reader.result as string).split(',')[1];
+              setReviewAttachments(prev => [...prev, {
+                type: 'image',
+                name: `Pasted_Image_${Date.now()}.png`,
+                data: base64Data,
+                mimeType: file.type
+              }]);
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [showReviewPasteModal]);
 
   const stats = useMemo(() => {
     const totalStudents = classroom.students.length;
@@ -490,17 +538,18 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   };
 
   const handleGenerateAIReviewFromPaste = () => {
-    if (!onAIAssist || !reviewPasteContent.trim()) return;
+    if (!onAIAssist) return;
+    if (!reviewPasteContent.trim() && reviewAttachments.length === 0) return;
 
     const subjectsList = Array.from(selectedSubjects).join(', ');
     const qualitiesList = Array.from(selectedQualities).join(', ');
     const competenciesList = Array.from(selectedCompetencies).join(', ');
 
-    const prompt = `Dựa trên dữ liệu điểm số và đánh giá được cung cấp dưới đây, hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
+    const prompt = `Dựa trên dữ liệu điểm số và đánh giá được cung cấp (văn bản hoặc hình ảnh bảng điểm), hãy soạn nhận xét học bạ định kỳ chuẩn Thông tư 27/2020/TT-BGDĐT.
 
 THÔNG TIN ĐÁNH GIÁ:
 - Thời điểm: ${evaluationPeriod}
-- Dữ liệu học sinh (được dán vào):
+- Dữ liệu học sinh:
 ${reviewPasteContent}
 
 YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho từng học sinh):
@@ -517,8 +566,10 @@ YÊU CẦU CẤU TRÚC NHẬN XÉT (Bắt buộc chia 2 phần riêng biệt cho
 
 Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm.`;
 
-    onAIAssist(prompt);
+    onAIAssist(prompt, reviewAttachments);
     setShowReviewPasteModal(false);
+    setReviewPasteContent('');
+    setReviewAttachments([]);
   };
 
   const handleGenerateAIReview = () => {
@@ -598,6 +649,50 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
     }
   };
 
+  const handleLogChange = (studentId: string, comment: string) => {
+    setCurrentLogEntries(prev => ({
+      ...prev,
+      [studentId]: { ...(prev[studentId] || { type: 'mistake', comment: '' }), comment }
+    }));
+  };
+
+  const handleLogTypeChange = (studentId: string, type: 'praise' | 'mistake') => {
+    setCurrentLogEntries(prev => ({
+      ...prev,
+      [studentId]: { ...(prev[studentId] || { comment: '' }), type }
+    }));
+  };
+
+  const handleSaveLogs = () => {
+    const newLogEntriesForDate: DailyLogEntry[] = Object.entries(currentLogEntries)
+      .filter(([_, value]) => value.comment?.trim())
+      .map(([studentId, value]) => ({
+        studentId,
+        comment: value.comment,
+        type: value.type || 'mistake'
+      }));
+
+    const existingLogs = classroom.dailyLogs || [];
+    const logIndex = existingLogs.findIndex(log => log.date === logDate);
+
+    let updatedLogs;
+    if (logIndex > -1) {
+      updatedLogs = [...existingLogs];
+      if (newLogEntriesForDate.length > 0) {
+        updatedLogs[logIndex] = { date: logDate, entries: newLogEntriesForDate };
+      } else {
+        updatedLogs.splice(logIndex, 1);
+      }
+    } else if (newLogEntriesForDate.length > 0) {
+      updatedLogs = [...existingLogs, { date: logDate, entries: newLogEntriesForDate }];
+    } else {
+      updatedLogs = existingLogs;
+    }
+
+    onUpdate({ ...classroom, dailyLogs: updatedLogs });
+    alert('Đã lưu nhận xét ngày ' + new Date(logDate).toLocaleDateString('vi-VN') + ' thành công!');
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       <input type="file" ref={gradeFileInputRef} onChange={handleGradeFileUpload} accept=".csv,.txt" className="hidden" />
@@ -666,14 +761,14 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
 
       {/* Tabs */}
       <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
-        {['students', 'attendance', 'assignments', 'reports'].map(tab => (
+        {['students', 'logbook', 'assignments', 'reports'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
             className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            <i className={`fas fa-${tab === 'students' ? 'users' : tab === 'attendance' ? 'calendar-check' : tab === 'assignments' ? 'tasks' : 'chart-simple'} mr-2`}></i>
-            {tab === 'students' ? 'Học sinh' : tab === 'attendance' ? 'Điểm danh' : tab === 'assignments' ? 'Bài tập' : 'Thống kê'}
+            <i className={`fas fa-${tab === 'students' ? 'users' : tab === 'logbook' ? 'book-medical' : tab === 'assignments' ? 'tasks' : 'chart-simple'} mr-2`}></i>
+            {tab === 'students' ? 'Học sinh' : tab === 'logbook' ? 'Nhật ký lớp' : tab === 'assignments' ? 'Bài tập' : 'Thống kê'}
           </button>
         ))}
       </div>
@@ -1042,6 +1137,54 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
           </div>
         )}
 
+        {activeTab === 'logbook' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
+              <div>
+                <label htmlFor="log-date" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn ngày nhận xét</label>
+                <input
+                  type="date"
+                  id="log-date"
+                  value={logDate}
+                  onChange={e => setLogDate(e.target.value)}
+                  className="mt-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <button onClick={handleSaveLogs} className="w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700 active:scale-95">
+                <i className="fas fa-save mr-2"></i>Lưu nhận xét
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {filteredStudents.map(student => (
+                <div key={student.id} className="p-4 bg-white border border-slate-100 rounded-2xl flex items-start gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div className={`w-10 h-10 rounded-2xl flex-shrink-0 flex items-center justify-center text-[10px] font-black shadow-sm ${student.gender === 'Nam' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                    {student.name.split(' ').pop()?.charAt(0) || student.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <p className="font-bold text-sm text-slate-800">{student.name}</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Ghi nhận xét, lỗi vi phạm..."
+                        value={currentLogEntries[student.id]?.comment || ''}
+                        onChange={e => handleLogChange(student.id, e.target.value)}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button onClick={() => handleLogTypeChange(student.id, 'praise')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'praise' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-emerald-600 border-slate-200'}`} title="Khen thưởng">
+                        <i className="fas fa-award"></i>
+                      </button>
+                      <button onClick={() => handleLogTypeChange(student.id, 'mistake')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'mistake' || !currentLogEntries[student.id]?.type ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-rose-600 border-slate-200'}`} title="Cần nhắc nhở">
+                        <i className="fas fa-flag"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'students' && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row items-stretch gap-4 p-6 bg-indigo-50/50 rounded-[32px] border border-indigo-100">
@@ -1209,13 +1352,23 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
           <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán bảng điểm & Đánh giá</h3>
-              <button onClick={() => setShowReviewPasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
+              <button onClick={() => { setShowReviewPasteModal(false); setReviewAttachments([]); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
             <div className="mb-6">
-              <p className="text-xs text-slate-500 mb-2 font-medium">Copy danh sách từ Excel (Tên, Điểm, Nhận xét...) và dán vào đây để AI xử lý:</p>
+              <p className="text-xs text-slate-500 mb-2 font-medium">Copy danh sách từ Excel hoặc <b>dán ảnh chụp bảng điểm (Ctrl+V)</b> vào đây:</p>
+              {reviewAttachments.length > 0 && (
+                <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                  {reviewAttachments.map((att, idx) => (
+                    <div key={idx} className="relative shrink-0 group">
+                      <img src={`data:${att.mimeType};base64,${att.data}`} className="h-20 w-auto rounded-lg border border-slate-200 shadow-sm" alt="Pasted" />
+                      <button onClick={() => setReviewAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-md hover:bg-rose-600"><i className="fas fa-times"></i></button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <textarea
                 value={reviewPasteContent}
                 onChange={(e) => setReviewPasteContent(e.target.value)}
@@ -1225,7 +1378,7 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
             </div>
 
             <div className="flex justify-end space-x-3">
-              <button onClick={() => setShowReviewPasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
+              <button onClick={() => { setShowReviewPasteModal(false); setReviewAttachments([]); }} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleGenerateAIReviewFromPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
                 <i className="fas fa-wand-magic-sparkles mr-2"></i>Tạo Nhận xét
               </button>

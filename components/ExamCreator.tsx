@@ -38,6 +38,39 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      if (!showImportModal) return;
+
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            event.preventDefault(); // Ngăn trình duyệt dán text (nếu có)
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64Data = (reader.result as string).split(',')[1];
+              setPendingImportFile({
+                type: 'image',
+                name: `Pasted_Image_${Date.now()}.png`,
+                data: base64Data,
+                mimeType: file.type
+              });
+            };
+            reader.readAsDataURL(file);
+            return; // Chỉ xử lý ảnh đầu tiên tìm thấy
+          }
+        }
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [showImportModal]);
+
+  useEffect(() => {
     const strands = SUBJECT_STRANDS[config.subject] || [];
     if (strands.length > 0) {
       const initial: StrandConfig = {};
@@ -694,7 +727,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                     ) : (
                       <>
                         <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn ảnh hoặc PDF đề thi</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn hoặc Dán ảnh/PDF đề thi</p>
                       </>
                     )}
                   </div>

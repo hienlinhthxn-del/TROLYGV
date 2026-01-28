@@ -43,6 +43,28 @@ const WorksheetCreator: React.FC = () => {
 
     const subjects = ['Toán', 'Tiếng Việt', 'Tự nhiên & Xã hội', 'Đạo đức', 'Âm nhạc', 'Mỹ thuật'];
 
+    // Xử lý dán ảnh mẫu trực tiếp
+    useEffect(() => {
+        const handlePaste = (e: ClipboardEvent) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const file = items[i].getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        const reader = new FileReader();
+                        reader.onload = (re) => setSampleImage(re.target?.result as string);
+                        reader.readAsDataURL(file);
+                    }
+                }
+            }
+        };
+        document.addEventListener('paste', handlePaste);
+        return () => document.removeEventListener('paste', handlePaste);
+    }, []);
+
     useEffect(() => {
         const saved = localStorage.getItem('worksheet_history');
         if (saved) setHistory(JSON.parse(saved));
