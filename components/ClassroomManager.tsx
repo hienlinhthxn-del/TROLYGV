@@ -47,6 +47,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [evaluationPeriod, setEvaluationPeriod] = useState('Cuối Học kỳ I');
   const [showReviewPasteModal, setShowReviewPasteModal] = useState(false);
   const [reviewPasteContent, setReviewPasteContent] = useState('');
+  const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('subjects');
+  const [manualEvaluations, setManualEvaluations] = useState<Record<string, {
+    subject?: string;
+    competencies?: Record<number, string>;
+    qualities?: Record<number, string>;
+  }>>({});
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
@@ -554,6 +560,44 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
     onAIAssist(prompt);
   };
 
+  const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
+    setManualEvaluations(prev => {
+      const studentData = prev[studentId] || {};
+      let newVal = currentVal;
+
+      if (type === 'subject') {
+        if (currentVal === 'Hoàn thành tốt') newVal = 'Hoàn thành';
+        else if (currentVal === 'Hoàn thành') newVal = 'Chưa hoàn thành';
+        else newVal = 'Hoàn thành tốt';
+        return { ...prev, [studentId]: { ...studentData, subject: newVal } };
+      } else if (type === 'competence') {
+        const map: Record<string, string> = { 'T': 'Đ', 'Đ': 'C', 'C': 'T', '-': 'Đ' };
+        newVal = map[currentVal] || 'Đ';
+        const newCompetencies = { ...(studentData.competencies || {}), [index]: newVal };
+        return { ...prev, [studentId]: { ...studentData, competencies: newCompetencies } };
+      } else {
+        const map: Record<string, string> = { 'T': 'Đ', 'Đ': 'C', 'C': 'T', '-': 'Đ' };
+        newVal = map[currentVal] || 'Đ';
+        const newQualities = { ...(studentData.qualities || {}), [index]: newVal };
+        return { ...prev, [studentId]: { ...studentData, qualities: newQualities } };
+      }
+    });
+  };
+
+  const handleFeedbackChange = (studentId: string, val: string) => {
+    const updatedAssignments = [...classroom.assignments];
+    const latest = updatedAssignments[updatedAssignments.length - 1];
+    if (latest) {
+      const gradeIdx = latest.grades.findIndex(g => g.studentId === studentId);
+      if (gradeIdx > -1) {
+        latest.grades[gradeIdx] = { ...latest.grades[gradeIdx], feedback: val };
+      } else {
+        latest.grades.push({ studentId, score: '', feedback: val });
+      }
+      onUpdate({ ...classroom, assignments: updatedAssignments });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       <input type="file" ref={gradeFileInputRef} onChange={handleGradeFileUpload} accept=".csv,.txt" className="hidden" />
@@ -848,37 +892,151 @@ Lưu ý: Viết nhận xét cá nhân hóa, khích lệ, giọng văn sư phạm
                 </div>
               </div>
 
+              <div className="flex space-x-2 border-b border-slate-100 pb-1">
+                <button
+                  onClick={() => setReportViewMode('subjects')}
+                  className={`px-4 py-2 text-[11px] font-bold uppercase tracking-widest transition-all rounded-t-xl ${reportViewMode === 'subjects' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Tổng hợp Môn học
+                </button>
+                <button
+                  onClick={() => setReportViewMode('competencies')}
+                  className={`px-4 py-2 text-[11px] font-bold uppercase tracking-widest transition-all rounded-t-xl ${reportViewMode === 'competencies' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Năng lực - Phẩm chất
+                </button>
+              </div>
+
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
-                    <tr className="text-[10px] text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                      <th className="py-3 font-black pl-4">Học sinh</th>
-                      <th className="py-3 font-black text-center">Điểm số</th>
-                      <th className="py-3 font-black text-center">Mức độ HT Môn học</th>
-                      <th className="py-3 font-black text-center">Năng lực chung</th>
-                      <th className="py-3 font-black text-center">Phẩm chất</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-xs font-medium text-slate-600">
-                    {filteredStudents.map(s => {
-                      const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
-                      const eval27 = getCircular27Evaluation(grade?.score || '');
-                      return (
-                        <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3 font-bold text-slate-800 pl-4">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
-                          <td className="py-3 text-center font-black text-indigo-600">{grade?.score || '-'}</td>
-                          <td className="py-3 text-center">
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${eval27.subject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : eval27.subject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : eval27.subject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                              {eval27.subject}
-                            </span>
-                          </td>
-                          <td className="py-3 text-center">{eval27.competence}</td>
-                          <td className="py-3 text-center">{eval27.quality}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                {reportViewMode === 'subjects' ? (
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
+                        <th className="py-3 px-4 font-black border-r border-slate-200">Mã học sinh</th>
+                        <th className="py-3 px-4 font-black border-r border-slate-200">Họ và tên</th>
+                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
+                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mã nhận xét</th>
+                        <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nội dung nhận xét</th>
+                        <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs font-medium text-slate-600">
+                      {filteredStudents.map(s => {
+                        const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                        const eval27 = getCircular27Evaluation(grade?.score || '');
+                        const finalSubject = manualEvaluations[s.id]?.subject || eval27.subject;
+
+                        return (
+                          <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3 px-4 border-r border-slate-100">{s.code}</td>
+                            <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name}</td>
+                            <td className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}>
+                              <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {finalSubject}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center border-r border-slate-100 text-slate-400">-</td>
+                            <td className="py-3 px-4 border-r border-slate-100 p-0">
+                              <input
+                                type="text"
+                                className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-600 placeholder-slate-300"
+                                value={grade?.feedback || ''}
+                                onChange={(e) => handleFeedbackChange(s.id, e.target.value)}
+                                placeholder="Nhập nhận xét..."
+                              />
+                            </td>
+                            <td className="py-3 px-4 text-center">{evaluationPeriod}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-left border-collapse min-w-[1800px]">
+                    <thead>
+                      <tr className="text-[9px] text-slate-600 uppercase tracking-tighter border border-slate-300 bg-slate-100 font-black text-center">
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10">STT</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Mã học sinh</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40">Họ và tên</th>
+                        <th colSpan={3} className="py-2 px-2 border border-slate-300 bg-indigo-50 text-indigo-700">Năng lực chung</th>
+                        <th colSpan={7} className="py-2 px-2 border border-slate-300 bg-sky-50 text-sky-700">Năng lực đặc thù</th>
+                        <th colSpan={5} className="py-2 px-2 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
+                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét NL chung</th>
+                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét NL đặc thù</th>
+                        <th colSpan={2} className="py-2 px-2 border border-slate-300">Nhận xét phẩm chất</th>
+                        <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Thời điểm đánh giá</th>
+                      </tr>
+                      <tr className="text-[8px] text-slate-500 uppercase tracking-tighter border border-slate-300 bg-slate-50 text-center font-bold">
+                        {/* NL Chung */}
+                        <th className="py-2 px-1 border border-slate-300 w-16">Tự chủ & Tự học</th>
+                        <th className="py-2 px-1 border border-slate-300 w-16">Giao tiếp & Hợp tác</th>
+                        <th className="py-2 px-1 border border-slate-300 w-16">GQ Vấn đề & Sáng tạo</th>
+                        {/* NL Đặc thù */}
+                        <th className="py-2 px-1 border border-slate-300 w-14">Ngôn ngữ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Tính toán</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Khoa học</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Công nghệ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Tin học</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Thẩm mĩ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Thể chất</th>
+                        {/* Phẩm chất */}
+                        <th className="py-2 px-1 border border-slate-300 w-14">Yêu nước</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Nhân ái</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Chăm chỉ</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Trung thực</th>
+                        <th className="py-2 px-1 border border-slate-300 w-14">Trách nhiệm</th>
+                        {/* Nhận xét */}
+                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
+                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
+                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
+                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
+                        <th className="py-2 px-1 border border-slate-300 w-10">Mã</th>
+                        <th className="py-2 px-1 border border-slate-300 w-32">Nội dung</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[10px] font-medium text-slate-600">
+                      {filteredStudents.map((s, idx) => {
+                        const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                        const eval27 = getCircular27Evaluation(grade?.score || '');
+                        const cVal = eval27.competence === 'Tốt' ? 'T' : eval27.competence === 'Đạt' ? 'Đ' : eval27.competence === 'Cần cố gắng' ? 'C' : '-';
+                        const qVal = eval27.quality === 'Tốt' ? 'T' : eval27.quality === 'Đạt' ? 'Đ' : eval27.quality === 'Cần cố gắng' ? 'C' : '-';
+
+                        return (
+                          <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                            <td className="py-2 px-2 border border-slate-200 text-center">{idx + 1}</td>
+                            <td className="py-2 px-2 border border-slate-200">{s.code}</td>
+                            <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
+                            {/* NL Chung */}
+                            {[1, 2, 3].map(i => {
+                              const val = manualEvaluations[s.id]?.competencies?.[i] || cVal;
+                              return <td key={i} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                            })}
+                            {/* NL Đặc thù */}
+                            {[1, 2, 3, 4, 5, 6, 7].map(i => {
+                              // Offset index cho NL đặc thù để không trùng key với NL chung trong state
+                              const realIdx = i + 3;
+                              const val = manualEvaluations[s.id]?.competencies?.[realIdx] || cVal;
+                              return <td key={i} onClick={() => handleManualChange(s.id, 'competence', realIdx, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                            })}
+                            {/* Phẩm chất */}
+                            {[1, 2, 3, 4, 5].map(i => {
+                              const val = manualEvaluations[s.id]?.qualities?.[i] || qVal;
+                              return <td key={i} onClick={() => handleManualChange(s.id, 'quality', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
+                            })}
+                            {/* Nhận xét */}
+                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
+                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
+                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 text-center text-slate-300">-</td>
+                            <td className="py-2 px-2 border border-slate-200"></td>
+                            <td className="py-2 px-2 border border-slate-200 text-center">{evaluationPeriod}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
