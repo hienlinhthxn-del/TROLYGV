@@ -973,6 +973,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       newVal = map[currentVal] || 'Đ';
     }
 
+    // Cập nhật feedback cho môn học (lưu vào assignment)
+    if (type === 'subject') {
+      handleFeedbackChange(studentId, newComment);
+    }
+
     const newEvals = { ...manualEvaluations };
     const studentData = newEvals[studentId] || {};
     let updatedStudentData: PeriodicEvaluation;
@@ -1001,76 +1006,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       [storageKey]: newEvals
     };
     onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
-
-    // Cập nhật feedback cho môn học (lưu vào assignment)
-    if (type === 'subject') {
-      handleFeedbackChange(studentId, newComment);
-    }
-  };
-
-  const handlePasteSubjectLevels = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string) => {
-    event.preventDefault();
-    const pasteData = event.clipboardData.getData('text');
-    const lines = pasteData.trim().split(/\r\n|\n|\r/);
-    if (lines.length === 0) return;
-
-    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
-    if (startIndex === -1) return;
-
-    const targetId = selectedAssignment?.id;
-    if (!targetId) return;
-
-    // Prepare a map of students to update
-    const studentsToUpdate: { student: Student, level: string }[] = [];
-    lines.forEach((line, lineIndex) => {
-      const studentIndex = startIndex + lineIndex;
-      if (studentIndex < filteredStudents.length) {
-        const student = filteredStudents[studentIndex];
-        const value = line.trim().toUpperCase();
-
-        let newLevel = '';
-        if (value === 'HTT' || value === 'T') newLevel = 'Hoàn thành tốt';
-        else if (value === 'HT' || value === 'H') newLevel = 'Hoàn thành';
-        else if (value === 'CHT' || value === 'C') newLevel = 'Chưa hoàn thành';
-
-        if (newLevel) {
-          studentsToUpdate.push({ student, level: newLevel });
-        }
-      }
-    });
-
-    if (studentsToUpdate.length === 0) return;
-
-    // Update periodic evaluations
-    const newEvals = { ...manualEvaluations };
-    studentsToUpdate.forEach(({ student, level }) => {
-      const studentData = newEvals[student.id] || {};
-      newEvals[student.id] = { ...studentData, subject: level };
-    });
-    const updatedPeriodicEvals = {
-      ...(classroom.periodicEvaluations || {}),
-      [storageKey]: newEvals
-    };
-
-    // Update assignments with new feedback
-    const updatedAssignments = classroom.assignments.map(assignment => {
-      if (assignment.id === targetId) {
-        const gradesMap = new Map(assignment.grades.map(g => [g.studentId, { ...g }]));
-        studentsToUpdate.forEach(({ student, level }) => {
-          const newComment = getRandomComment('subject', level);
-          const existingGrade = gradesMap.get(student.id);
-          if (existingGrade) {
-            existingGrade.feedback = newComment;
-          } else {
-            gradesMap.set(student.id, { studentId: student.id, score: '', feedback: newComment });
-          }
-        });
-        return { ...assignment, grades: Array.from(gradesMap.values()) };
-      }
-      return assignment;
-    });
-
-    onUpdate({ ...classroom, assignments: updatedAssignments, periodicEvaluations: updatedPeriodicEvals });
   };
 
   const handlePasteCompetencies = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string, type: 'competence' | 'quality', index: number) => {
