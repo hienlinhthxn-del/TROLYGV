@@ -17,6 +17,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [studentSortBy, setStudentSortBy] = useState<'name' | 'code'>('name');
   const [isImporting, setIsImporting] = useState(false);
   const [isExportingSMAS, setIsExportingSMAS] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempClassName, setTempClassName] = useState(classroom.name);
@@ -36,18 +37,26 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     const latestAssignment = classroom.assignments[classroom.assignments.length - 1];
     const distribution = { excellent: 0, good: 0, average: 0, weak: 0 };
+    let averageScore = 0;
 
     if (latestAssignment && latestAssignment.grades.length > 0) {
+      let totalScore = 0;
+      let count = 0;
       latestAssignment.grades.forEach(g => {
         const score = parseFloat(g.score);
-        if (score >= 9) distribution.excellent++;
-        else if (score >= 7) distribution.good++;
-        else if (score >= 5) distribution.average++;
-        else distribution.weak++;
+        if (!isNaN(score)) {
+          totalScore += score;
+          count++;
+          if (score >= 9) distribution.excellent++;
+          else if (score >= 7) distribution.good++;
+          else if (score >= 5) distribution.average++;
+          else distribution.weak++;
+        }
       });
+      if (count > 0) averageScore = totalScore / count;
     }
 
-    return { totalStudents, totalAssignments, attendanceRate, distribution, latestAssignment };
+    return { totalStudents, totalAssignments, attendanceRate, distribution, latestAssignment, averageScore: averageScore.toFixed(2) };
   }, [classroom]);
 
   const filteredStudents = useMemo(() => {
@@ -67,6 +76,27 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     });
     return result;
   }, [classroom.students, studentSearchQuery, studentSortBy]);
+
+  const getCircular27Evaluation = (scoreStr: string) => {
+    const score = parseFloat(scoreStr);
+    if (isNaN(score)) return { subject: '-', competence: '-', quality: '-' };
+
+    let subject = 'Chưa hoàn thành';
+    let competence = 'Cần cố gắng';
+    let quality = 'Cần cố gắng';
+
+    if (score >= 9) {
+      subject = 'Hoàn thành tốt';
+      competence = 'Tốt';
+      quality = 'Tốt';
+    } else if (score >= 5) {
+      subject = 'Hoàn thành';
+      competence = 'Đạt';
+      quality = 'Đạt';
+    }
+
+    return { subject, competence, quality };
+  };
 
   const handleExportSMAS = () => {
     if (classroom.students.length === 0) {
@@ -193,7 +223,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const lines = text.split('\n').filter(l => l.trim());
+        // Fix lỗi BOM và chuẩn hóa dòng mới, loại bỏ ký tự lạ
+        const cleanText = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const lines = cleanText.split('\n').filter(l => l.trim());
 
         const newStudents: Student[] = [];
         let startIndex = 0;
@@ -206,14 +238,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           const line = lines[i].trim();
           if (!line) continue;
 
-          // Tự động nhận diện dấu phân cách , hoặc ;
-          const separator = line.includes(';') ? ';' : ',';
-          const parts = line.split(separator).map(s => s.trim());
+          // Fix lỗi định dạng: Loại bỏ dấu ngoặc kép thừa trong CSV
+          const cleanLine = line.replace(/"/g, '');
+
+          // Tự động nhận diện dấu phân cách , hoặc ; hoặc Tab
+          const separator = cleanLine.includes(';') ? ';' : (cleanLine.includes('\t') ? '\t' : ',');
+          const parts = cleanLine.split(separator).map(s => s.trim());
 
           if (parts.length >= 2) {
             const [code, name, genderRaw] = parts;
             // Xử lý giới tính linh hoạt hơn
-            const gender: 'Nam' | 'Nữ' = (genderRaw?.toLowerCase() === 'nữ' || genderRaw?.toLowerCase() === 'f' || genderRaw?.toLowerCase() === 'nu') ? 'Nữ' : 'Nam';
+            const gender: 'Nam' | 'Nữ' = (genderRaw?.toLowerCase().includes('nữ') || genderRaw?.toLowerCase() === 'f' || genderRaw?.toLowerCase() === 'nu') ? 'Nữ' : 'Nam';
 
             newStudents.push({
               id: (Date.now() + i).toString(),
@@ -294,6 +329,27 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const removeStudent = (id: string) => {
     if (window.confirm('Xóa học sinh này?')) {
       onUpdate({ ...classroom, students: classroom.students.filter(s => s.id !== id) });
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedStudents);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedStudents(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedStudents.size === filteredStudents.length) setSelectedStudents(new Set());
+    else setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
+  };
+
+  const deleteSelected = () => {
+    if (selectedStudents.size === 0) return;
+    if (window.confirm(`Thầy Cô chắc chắn muốn xóa ${selectedStudents.size} học sinh đã chọn?`)) {
+      const remaining = classroom.students.filter(s => !selectedStudents.has(s.id));
+      onUpdate({ ...classroom, students: remaining });
+      setSelectedStudents(new Set());
     }
   };
 
@@ -420,35 +476,82 @@ Yêu cầu:
             <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h4 className="text-lg font-black text-slate-800">Phổ điểm học tập</h4>
-                  <p className="text-xs text-slate-400 font-medium">Biểu đồ đánh giá năng lực học sinh</p>
+                  <h4 className="text-lg font-black text-slate-800">Phổ điểm chi tiết</h4>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {stats.latestAssignment ? `Bài: ${stats.latestAssignment.title}` : 'Chưa có dữ liệu bài tập'}
+                  </p>
                 </div>
-                <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase text-slate-500">
-                  {stats.latestAssignment?.title || 'Chưa có bài tập'}
-                </div>
+                {stats.latestAssignment && (
+                  <div className="flex items-center space-x-4">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-[10px] font-black uppercase text-slate-400">Điểm trung bình</p>
+                      <p className="text-2xl font-black text-indigo-600">{stats.averageScore}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-sm border border-indigo-100">
+                      {stats.averageScore}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-end justify-between h-48 px-4 border-b border-slate-100 mb-4">
+              <div className="flex items-end justify-between h-64 px-4 border-b border-slate-100 mb-8 relative">
+                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+                  {[100, 75, 50, 25, 0].map(p => (
+                    <div key={p} className="w-full border-t border-slate-50 flex items-center">
+                      <span className="text-[8px] text-slate-300 -mt-2 mr-2 w-6 text-right">{p}%</span>
+                    </div>
+                  ))}
+                </div>
+
                 {[
-                  { label: 'Giỏi (9-10)', val: stats.distribution.excellent, color: 'bg-indigo-500' },
-                  { label: 'Khá (7-8)', val: stats.distribution.good, color: 'bg-emerald-500' },
-                  { label: 'TB (5-6)', val: stats.distribution.average, color: 'bg-amber-500' },
-                  { label: 'Yếu (<5)', val: stats.distribution.weak, color: 'bg-rose-500' }
+                  { label: 'Giỏi', sub: '9-10', val: stats.distribution.excellent, color: 'bg-indigo-500', text: 'text-indigo-600' },
+                  { label: 'Khá', sub: '7-8', val: stats.distribution.good, color: 'bg-emerald-500', text: 'text-emerald-600' },
+                  { label: 'Trung bình', sub: '5-6', val: stats.distribution.average, color: 'bg-amber-500', text: 'text-amber-600' },
+                  { label: 'Yếu', sub: '<5', val: stats.distribution.weak, color: 'bg-rose-500', text: 'text-rose-600' }
                 ].map((item, i) => {
-                  const height = stats.totalStudents > 0 ? (item.val / stats.totalStudents) * 100 : 0;
+                  const total = stats.latestAssignment?.grades.length || 1;
+                  const percent = Math.round((item.val / total) * 100);
+
                   return (
-                    <div key={i} className="flex flex-col items-center flex-1 group">
-                      <div className="mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] px-2 py-1 rounded font-bold">
-                        {item.val} HS
+                    <div key={i} className="flex flex-col items-center flex-1 group relative z-10 h-full justify-end px-2 sm:px-6">
+                      <div className="mb-2 opacity-0 group-hover:opacity-100 transition-all absolute bottom-full mb-2 bg-slate-800 text-white text-[10px] px-3 py-1.5 rounded-xl font-bold shadow-xl whitespace-nowrap transform translate-y-2 group-hover:translate-y-0">
+                        {item.val} học sinh ({percent}%)
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1 border-4 border-transparent border-t-slate-800"></div>
                       </div>
-                      <div
-                        className={`w-12 sm:w-16 rounded-t-2xl ${item.color} transition-all duration-1000 shadow-lg`}
-                        style={{ height: `${Math.max(height, 5)}%` }}
-                      ></div>
-                      <span className="mt-3 text-[9px] font-black text-slate-400 uppercase tracking-tighter text-center">{item.label}</span>
+
+                      <div className="w-full flex flex-col justify-end relative" style={{ height: '100%' }}>
+                        <div className="flex justify-center mb-1">
+                          <span className={`text-[10px] font-black ${item.text}`}>{percent}%</span>
+                        </div>
+                        <div
+                          className={`w-full rounded-t-2xl ${item.color} transition-all duration-1000 shadow-lg group-hover:shadow-xl group-hover:brightness-110 relative overflow-hidden`}
+                          style={{ height: `${Math.max(percent, 2)}%` }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 text-center">
+                        <p className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{item.label}</p>
+                        <p className="text-[9px] font-bold text-slate-400">{item.sub}</p>
+                      </div>
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  { label: 'Giỏi', val: stats.distribution.excellent, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                  { label: 'Khá', val: stats.distribution.good, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  { label: 'Trung bình', val: stats.distribution.average, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: 'Yếu', val: stats.distribution.weak, color: 'text-rose-600', bg: 'bg-rose-50' }
+                ].map((stat, i) => (
+                  <div key={i} className={`p-4 rounded-2xl border border-slate-100 ${stat.bg} flex flex-col items-center justify-center`}>
+                    <span className={`text-2xl font-black ${stat.color}`}>{stat.val}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{stat.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -469,6 +572,53 @@ Yêu cầu:
                 >
                   Tạo Nhận xét AI
                 </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-lg font-black text-slate-800">Đánh giá Thông tư 27 (Tự động)</h4>
+                  <p className="text-xs text-slate-400 font-medium">Gợi ý xếp loại dựa trên điểm số bài mới nhất</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100">HTT: Hoàn thành tốt</span>
+                  <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold border border-blue-100">HT: Hoàn thành</span>
+                  <span className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold border border-rose-100">CHT: Chưa hoàn thành</span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="text-[10px] text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                      <th className="py-3 font-black pl-4">Học sinh</th>
+                      <th className="py-3 font-black text-center">Điểm số</th>
+                      <th className="py-3 font-black text-center">Mức độ HT Môn học</th>
+                      <th className="py-3 font-black text-center">Năng lực chung</th>
+                      <th className="py-3 font-black text-center">Phẩm chất</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs font-medium text-slate-600">
+                    {filteredStudents.map(s => {
+                      const grade = stats.latestAssignment?.grades.find(g => g.studentId === s.id);
+                      const eval27 = getCircular27Evaluation(grade?.score || '');
+                      return (
+                        <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 font-bold text-slate-800 pl-4">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
+                          <td className="py-3 text-center font-black text-indigo-600">{grade?.score || '-'}</td>
+                          <td className="py-3 text-center">
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${eval27.subject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : eval27.subject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : eval27.subject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {eval27.subject}
+                            </span>
+                          </td>
+                          <td className="py-3 text-center">{eval27.competence}</td>
+                          <td className="py-3 text-center">{eval27.quality}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -524,6 +674,13 @@ Yêu cầu:
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 rounded-2xl text-[11px] font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
               </div>
+
+              {selectedStudents.size > 0 && (
+                <button onClick={deleteSelected} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-rose-100 hover:bg-rose-100 transition-all animate-in fade-in zoom-in">
+                  <i className="fas fa-trash-alt mr-2"></i>Xóa {selectedStudents.size} HS
+                </button>
+              )}
+
               <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-2xl border border-slate-100">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">Xếp theo:</span>
                 <button
@@ -541,11 +698,28 @@ Yêu cầu:
               </div>
             </div>
 
+            {filteredStudents.length > 0 && (
+              <div className="flex items-center mb-2 px-2">
+                <label className="flex items-center space-x-2 cursor-pointer select-none group">
+                  <input type="checkbox" checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase group-hover:text-indigo-600 transition-colors">Chọn tất cả ({filteredStudents.length})</span>
+                </label>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredStudents.length > 0 ? (
                 filteredStudents.map(s => (
-                  <div key={s.id} className="p-4 bg-white border border-slate-100 rounded-[28px] flex items-center justify-between group hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-50 transition-all animate-in fade-in duration-300">
-                    <div className="flex items-center space-x-3">
+                  <div key={s.id} className={`p-4 bg-white border ${selectedStudents.has(s.id) ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/30' : 'border-slate-100'} rounded-[28px] flex items-center justify-between group hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-50 transition-all animate-in fade-in duration-300 relative`}>
+                    <div className="absolute top-4 left-4 z-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedStudents.has(s.id)}
+                        onChange={() => toggleSelection(s.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-3 pl-8">
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-[10px] font-black shadow-sm ${s.gender === 'Nam' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
                         {s.name.split(' ').pop()?.charAt(0) || s.name.charAt(0)}
                       </div>

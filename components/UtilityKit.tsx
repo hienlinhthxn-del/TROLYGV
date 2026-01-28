@@ -7,6 +7,15 @@ interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
 }
 
+interface SavedLessonPlan {
+  id: string;
+  topic: string;
+  subject: string;
+  grade: string;
+  content: string;
+  timestamp: string;
+}
+
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan'>('games');
   const [subject, setSubject] = useState('Toán');
@@ -18,6 +27,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [result, setResult] = useState<any>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [lessonHistory, setLessonHistory] = useState<SavedLessonPlan[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,6 +42,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     };
     loadVoices();
     if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // Tải lịch sử giáo án
+  useEffect(() => {
+    const saved = localStorage.getItem('edu_lesson_history');
+    if (saved) setLessonHistory(JSON.parse(saved));
   }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -205,6 +222,39 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     }
   };
 
+  const handleSaveLesson = () => {
+    if (!result || activeTab !== 'lesson_plan') return;
+    const newPlan: SavedLessonPlan = {
+      id: Date.now().toString(),
+      topic,
+      subject,
+      grade,
+      content: result,
+      timestamp: new Date().toISOString()
+    };
+    const updated = [newPlan, ...lessonHistory];
+    setLessonHistory(updated);
+    localStorage.setItem('edu_lesson_history', JSON.stringify(updated));
+    alert("✅ Đã lưu giáo án vào lịch sử!");
+  };
+
+  const handleDeleteLesson = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm("Bạn có chắc muốn xóa giáo án này khỏi lịch sử?")) {
+      const updated = lessonHistory.filter(p => p.id !== id);
+      setLessonHistory(updated);
+      localStorage.setItem('edu_lesson_history', JSON.stringify(updated));
+    }
+  };
+
+  const handleSelectLesson = (plan: SavedLessonPlan) => {
+    setTopic(plan.topic);
+    setSubject(plan.subject);
+    setGrade(plan.grade);
+    setResult(plan.content);
+    setShowHistory(false);
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       <div className="flex items-center justify-between">
@@ -258,40 +308,72 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
         <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
           <div className="space-y-4">
             {(activeTab === 'games' || activeTab === 'lesson_plan') && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
-                  <select
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option>Toán</option>
-                    <option>Tiếng Việt</option>
-                    <option>Tiếng Anh</option>
-                    <option>Đạo đức</option>
-                    <option>Tự nhiên & Xã hội</option>
-                    <option>Lịch sử & Địa lí</option>
-                    <option>Khoa học</option>
-                    <option>Công nghệ</option>
-                    <option>Tin học</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
-                  <select
-                    value={grade}
-                    onChange={e => setGrade(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option>Lớp 1</option>
-                    <option>Lớp 2</option>
-                    <option>Lớp 3</option>
-                    <option>Lớp 4</option>
-                    <option>Lớp 5</option>
-                  </select>
-                </div>
-              </div>
+              <>
+                {activeTab === 'lesson_plan' && (
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={() => setShowHistory(!showHistory)}
+                      className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
+                    >
+                      {showHistory ? <><i className="fas fa-times mr-1"></i>Đóng lịch sử</> : <><i className="fas fa-clock-rotate-left mr-1"></i>Lịch sử giáo án</>}
+                    </button>
+                  </div>
+                )}
+
+                {showHistory && activeTab === 'lesson_plan' ? (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                    {lessonHistory.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Chưa có giáo án nào được lưu.</p>
+                    ) : (
+                      lessonHistory.map(plan => (
+                        <div key={plan.id} onClick={() => handleSelectLesson(plan)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all group relative">
+                          <div className="font-bold text-xs text-slate-700 line-clamp-2 mb-1">{plan.topic}</div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] text-slate-400 font-medium uppercase">{plan.subject} - {plan.grade}</span>
+                            <span className="text-[9px] text-slate-400">{new Date(plan.timestamp).toLocaleDateString('vi-VN')}</span>
+                          </div>
+                          <button onClick={(e) => handleDeleteLesson(plan.id, e)} className="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash"></i></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
+                      <select
+                        value={subject}
+                        onChange={e => setSubject(e.target.value)}
+                        className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option>Toán</option>
+                        <option>Tiếng Việt</option>
+                        <option>Tiếng Anh</option>
+                        <option>Đạo đức</option>
+                        <option>Tự nhiên & Xã hội</option>
+                        <option>Lịch sử & Địa lí</option>
+                        <option>Khoa học</option>
+                        <option>Công nghệ</option>
+                        <option>Tin học</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
+                      <select
+                        value={grade}
+                        onChange={e => setGrade(e.target.value)}
+                        className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option>Lớp 1</option>
+                        <option>Lớp 2</option>
+                        <option>Lớp 3</option>
+                        <option>Lớp 4</option>
+                        <option>Lớp 5</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {activeTab === 'images' && (
@@ -330,60 +412,76 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
               </div>
             )}
 
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : 'Văn bản cần đọc'}
-              </label>
-              <textarea
-                value={topic}
-                onChange={e => setTopic(e.target.value)}
-                placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
-                className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
-              />
-            </div>
-
-            <div className="pt-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
-                <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
-                <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 hover:underline">Thêm tệp</button>
-              </label>
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
-              <div className="mt-2 space-y-2">
-                {pendingAttachments.map((at, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
-                    <div className="flex items-center space-x-2 truncate">
-                      <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'}`}></i>
-                      <span className="truncate">{at.name}</span>
-                    </div>
-                    <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
-                      <i className="fas fa-times"></i>
-                    </button>
-                  </div>
-                ))}
+            {!showHistory && (
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : 'Văn bản cần đọc'}
+                </label>
+                <textarea
+                  value={topic}
+                  onChange={e => setTopic(e.target.value)}
+                  placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
+                  className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
+                />
               </div>
-            </div>
+            )}
+
+            {!showHistory && (
+              <div className="pt-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+                  <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
+                  <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 hover:underline">Thêm tệp</button>
+                </label>
+                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+                <div className="mt-2 space-y-2">
+                  {pendingAttachments.map((at, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
+                      <div className="flex items-center space-x-2 truncate">
+                        <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'}`}></i>
+                        <span className="truncate">{at.name}</span>
+                      </div>
+                      <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <button
-            onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : generateTTS}
-            disabled={isProcessing || !topic.trim()}
-            className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
-            {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : 'Bắt đầu sáng tạo'}
-          </button>
+          {!showHistory && (
+            <button
+              onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : generateTTS}
+              disabled={isProcessing || !topic.trim()}
+              className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
+              {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : 'Bắt đầu sáng tạo'}
+            </button>
+          )}
         </div>
 
         <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
           <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
             {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
-              <button
-                onClick={() => onSendToWorkspace(result)}
-                className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
-              >
-                {activeTab === 'lesson_plan' ? 'Đưa vào Giáo án' : 'Đưa vào Soạn thảo'}
-              </button>
+              <div className="flex space-x-2">
+                {activeTab === 'lesson_plan' && (
+                  <button
+                    onClick={handleSaveLesson}
+                    className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
+                  >
+                    <i className="fas fa-save mr-2"></i>Lưu giáo án
+                  </button>
+                )}
+                <button
+                  onClick={() => onSendToWorkspace(result)}
+                  className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                >
+                  {activeTab === 'lesson_plan' ? 'Đưa vào Giáo án' : 'Đưa vào Soạn thảo'}
+                </button>
+              </div>
             )}
           </div>
 
