@@ -288,6 +288,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     setQuestions(prev => prev.filter(q => q.id !== id));
   };
 
+  const addQuestion = () => {
+    const newQ: ExamQuestion = {
+      id: `manual-${Date.now()}`,
+      type: 'Trắc nghiệm',
+      level: 'Thông hiểu',
+      content: 'Câu hỏi mới...',
+      options: ['', '', '', ''],
+      answer: '',
+      explanation: ''
+    };
+    setQuestions(prev => [...prev, newQ]);
+  };
+
   const renderImage = (imageSrc?: string) => {
     if (!imageSrc) return null;
     if (imageSrc.startsWith('<svg')) {
@@ -562,6 +575,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition-all">
               <i className="fas fa-file-import mr-2"></i>Nhập đề cũ
             </button>
+            {questions.length > 0 && (
+              <button onClick={() => { if (window.confirm('Xóa toàn bộ câu hỏi?')) setQuestions([]); }} className="px-4 py-2 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 transition-all">
+                <i className="fas fa-trash-alt mr-2"></i>Xóa
+              </button>
+            )}
             <button onClick={exportText} disabled={questions.length === 0} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700 disabled:opacity-30 transition-all">Xuất bản thảo</button>
           </div>
         </div>
@@ -606,6 +624,18 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             </div>
           ) : (
             <div className="space-y-6">
+              {questions.length > 0 && (
+                <div className="p-6 bg-slate-50 border border-slate-200 rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tiêu đề đề thi</h5>
+                  <textarea
+                    value={examHeader}
+                    onChange={(e) => setExamHeader(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                    rows={3}
+                    placeholder="Nhập tiêu đề đề thi..."
+                  />
+                </div>
+              )}
               {readingPassage && (
                 <div className="p-8 bg-amber-50/30 border border-amber-100 rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
                   <h5 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center">
@@ -619,80 +649,87 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 </div>
               )}
               {questions.length > 0 ? (
-                questions.map((q, idx) => (
-                  <div key={q.id} className={`p-6 border rounded-[32px] transition-all flex items-start space-x-5 ${q.type === 'Tự luận' ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'} hover:bg-white hover:shadow-xl animate-in slide-in-from-bottom-4 duration-300 relative group`}>
-                    <button onClick={() => removeQuestion(q.id)} className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all">
-                      <i className="fas fa-trash-alt"></i>
-                    </button>
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
-                    <div className="flex-1 space-y-4">
-                      <div className="flex items-center space-x-2">
-                        <select
-                          value={q.type}
-                          onChange={(e) => updateQuestionField(q.id, 'type', e.target.value)}
-                          className="text-[9px] font-black px-2 py-1 rounded-lg border border-slate-200 uppercase bg-white outline-none"
-                        >
-                          <option value="Trắc nghiệm">Trắc nghiệm</option>
-                          <option value="Tự luận">Tự luận</option>
-                        </select>
-                        <select
-                          value={q.level}
-                          onChange={(e) => updateQuestionField(q.id, 'level', e.target.value)}
-                          className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-white border border-slate-100 px-2 py-1 rounded-lg outline-none"
-                        >
-                          {COGNITIVE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                        </select>
-                      </div>
-
-                      <textarea
-                        value={q.content}
-                        onChange={(e) => updateQuestionField(q.id, 'content', e.target.value)}
-                        className="w-full bg-transparent border-none focus:ring-0 text-[15px] font-bold text-slate-800 leading-relaxed resize-none p-0"
-                        rows={2}
-                      />
-
-                      {renderImage(q.image)}
-
-                      {q.options && q.options.length > 0 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {q.options.map((opt, i) => (
-                            <div key={i} className="p-3 rounded-2xl border bg-white border-slate-100 text-slate-600 text-[13px] font-medium flex items-center space-x-3">
-                              <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black">{['A', 'B', 'C', 'D'][i]}</span>
-                              <input
-                                value={opt}
-                                onChange={(e) => updateOption(q.id, i, e.target.value)}
-                                className="flex-1 border-none focus:ring-0 p-0 text-[13px] bg-transparent"
-                              />
-                            </div>
-                          ))}
+                <>
+                  {questions.map((q, idx) => (
+                    <div key={q.id} className={`p-6 border rounded-[32px] transition-all flex items-start space-x-5 ${q.type === 'Tự luận' ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'} hover:bg-white hover:shadow-xl animate-in slide-in-from-bottom-4 duration-300 relative group`}>
+                      <button onClick={() => removeQuestion(q.id)} className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all">
+                        <i className="fas fa-trash-alt"></i>
+                      </button>
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
+                      <div className="flex-1 space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={q.type}
+                            onChange={(e) => updateQuestionField(q.id, 'type', e.target.value)}
+                            className="text-[9px] font-black px-2 py-1 rounded-lg border border-slate-200 uppercase bg-white outline-none"
+                          >
+                            <option value="Trắc nghiệm">Trắc nghiệm</option>
+                            <option value="Tự luận">Tự luận</option>
+                          </select>
+                          <select
+                            value={q.level}
+                            onChange={(e) => updateQuestionField(q.id, 'level', e.target.value)}
+                            className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-white border border-slate-100 px-2 py-1 rounded-lg outline-none"
+                          >
+                            {COGNITIVE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
                         </div>
-                      )}
 
-                      <div className={`p-4 rounded-2xl border ${q.type === 'Tự luận' ? 'bg-indigo-100/50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{q.type === 'Tự luận' ? 'Hướng dẫn trả lời / Thang điểm' : 'Đáp án đúng'}</p>
-                        <input
-                          value={q.answer}
-                          onChange={(e) => updateQuestionField(q.id, 'answer', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-bold text-slate-700 p-0"
+                        <textarea
+                          value={q.content}
+                          onChange={(e) => updateQuestionField(q.id, 'content', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-0 text-[15px] font-bold text-slate-800 leading-relaxed resize-none p-0"
+                          rows={2}
                         />
-                        {q.explanation !== undefined && (
-                          <div className="mt-2 pt-2 border-t border-slate-200/50">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Giải thích</p>
-                            <textarea
-                              value={q.explanation || ''}
-                              onChange={(e) => updateQuestionField(q.id, 'explanation', e.target.value)}
-                              className="w-full bg-transparent border-none focus:ring-0 text-[12px] text-slate-500 resize-none p-0"
-                            />
+
+                        {renderImage(q.image)}
+
+                        {q.options && q.options.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {q.options.map((opt, i) => (
+                              <div key={i} className="p-3 rounded-2xl border bg-white border-slate-100 text-slate-600 text-[13px] font-medium flex items-center space-x-3">
+                                <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black">{['A', 'B', 'C', 'D'][i]}</span>
+                                <input
+                                  value={opt}
+                                  onChange={(e) => updateOption(q.id, i, e.target.value)}
+                                  className="flex-1 border-none focus:ring-0 p-0 text-[13px] bg-transparent"
+                                />
+                              </div>
+                            ))}
                           </div>
                         )}
+
+                        <div className={`p-4 rounded-2xl border ${q.type === 'Tự luận' ? 'bg-indigo-100/50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{q.type === 'Tự luận' ? 'Hướng dẫn trả lời / Thang điểm' : 'Đáp án đúng'}</p>
+                          <input
+                            value={q.answer}
+                            onChange={(e) => updateQuestionField(q.id, 'answer', e.target.value)}
+                            className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-bold text-slate-700 p-0"
+                          />
+                          {q.explanation !== undefined && (
+                            <div className="mt-2 pt-2 border-t border-slate-200/50">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Giải thích</p>
+                              <textarea
+                                value={q.explanation || ''}
+                                onChange={(e) => updateQuestionField(q.id, 'explanation', e.target.value)}
+                                className="w-full bg-transparent border-none focus:ring-0 text-[12px] text-slate-500 resize-none p-0"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    </div>))}
+                  <button onClick={addQuestion} className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-[32px] text-indigo-500 font-black uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-300 transition-all">
+                    <i className="fas fa-plus-circle mr-2"></i>Thêm câu hỏi thủ công
+                  </button>
+                </>
               ) : (
                 <div className="h-[400px] flex flex-col items-center justify-center text-center opacity-20">
                   <i className="fas fa-magic text-6xl text-slate-300 mb-6"></i>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Thiết lập ma trận hoặc nhập đề cũ để bắt đầu</p>
+                  <button onClick={addQuestion} className="mt-4 px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 pointer-events-auto">
+                    Hoặc tạo thủ công
+                  </button>
                 </div>
               )}
             </div>

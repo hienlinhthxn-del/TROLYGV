@@ -945,20 +945,23 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   };
 
   const handleScoreChange = (studentId: string, val: string) => {
-    const updatedAssignments = [...classroom.assignments];
-    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
-    const targetIndex = updatedAssignments.findIndex(a => a.id === targetId);
+    const targetId = selectedAssignment?.id;
+    if (!targetId) return;
 
-    if (targetIndex > -1) {
-      const targetAssignment = updatedAssignments[targetIndex];
-      const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === studentId);
-      if (gradeIdx > -1) {
-        targetAssignment.grades[gradeIdx] = { ...targetAssignment.grades[gradeIdx], score: val };
-      } else {
-        targetAssignment.grades.push({ studentId, score: val, feedback: '' });
+    const updatedAssignments = classroom.assignments.map(assignment => {
+      if (assignment.id === targetId) {
+        const newGrades = [...assignment.grades];
+        const gradeIdx = newGrades.findIndex(g => g.studentId === studentId);
+        if (gradeIdx > -1) {
+          newGrades[gradeIdx] = { ...newGrades[gradeIdx], score: val };
+        } else {
+          newGrades.push({ studentId, score: val, feedback: '' });
+        }
+        return { ...assignment, grades: newGrades };
       }
-      onUpdate({ ...classroom, assignments: updatedAssignments });
-    }
+      return assignment;
+    });
+    onUpdate({ ...classroom, assignments: updatedAssignments });
   };
 
   const handlePasteScores = (event: React.ClipboardEvent<HTMLInputElement>, startStudentId: string) => {
@@ -971,62 +974,60 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
     if (startIndex === -1) return;
 
-    const updatedAssignments = [...classroom.assignments];
-    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
-    let targetAssignment = updatedAssignments.find(a => a.id === targetId);
+    const targetId = selectedAssignment?.id;
+    if (!targetId) return;
 
-    if (!targetAssignment) {
-      updatedAssignments.push({
-        id: Date.now().toString(),
-        title: 'Bài tập nhập từ Dán',
-        dueDate: new Date().toISOString().split('T')[0],
-        status: 'Đã đóng',
-        submissions: [],
-        grades: []
-      });
-      targetAssignment = updatedAssignments[updatedAssignments.length - 1];
-      if (!selectedAssignmentId) setSelectedAssignmentId(targetAssignment.id);
-    }
+    const updatedAssignments = classroom.assignments.map(assignment => {
+      if (assignment.id === targetId) {
+        // Create a mutable copy of grades to work with
+        const gradesMap = new Map(assignment.grades.map(g => [g.studentId, { ...g }]));
 
-    lines.forEach((line, index) => {
-      const studentIndex = startIndex + index;
-      if (studentIndex < filteredStudents.length) {
-        const student = filteredStudents[studentIndex];
-        // Tự động nhận diện dấu phân cách (Tab, Phẩy, Chấm phẩy) để hỗ trợ nhiều nguồn copy
-        const separator = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
-        const parts = line.split(separator).map(p => p.trim().replace(/"/g, ''));
+        lines.forEach((line, index) => {
+          const studentIndex = startIndex + index;
+          if (studentIndex < filteredStudents.length) {
+            const student = filteredStudents[studentIndex];
+            const separator = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
+            const parts = line.split(separator).map(p => p.trim().replace(/"/g, ''));
+            const score = parts[0] || '';
+            const feedback = parts[1] || '';
 
-        const score = parts[0] || '';
-        const feedback = parts[1] || '';
+            const existingGrade = gradesMap.get(student.id);
+            if (existingGrade) {
+              if (score) existingGrade.score = score;
+              if (feedback) existingGrade.feedback = feedback;
+            } else {
+              gradesMap.set(student.id, { studentId: student.id, score, feedback });
+            }
+          }
+        });
 
-        const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === student.id);
-        if (gradeIdx > -1) {
-          if (score) targetAssignment.grades[gradeIdx].score = score;
-          if (feedback) targetAssignment.grades[gradeIdx].feedback = feedback;
-        } else {
-          targetAssignment.grades.push({ studentId: student.id, score, feedback });
-        }
+        // Convert map back to array and return new assignment object
+        return { ...assignment, grades: Array.from(gradesMap.values()) };
       }
+      return assignment;
     });
 
     onUpdate({ ...classroom, assignments: updatedAssignments });
   };
 
   const handleFeedbackChange = (studentId: string, val: string) => {
-    const updatedAssignments = [...classroom.assignments];
-    const targetId = selectedAssignmentId || (selectedAssignment ? selectedAssignment.id : '');
-    const targetIndex = updatedAssignments.findIndex(a => a.id === targetId);
+    const targetId = selectedAssignment?.id;
+    if (!targetId) return;
 
-    if (targetIndex > -1) {
-      const targetAssignment = updatedAssignments[targetIndex];
-      const gradeIdx = targetAssignment.grades.findIndex(g => g.studentId === studentId);
-      if (gradeIdx > -1) {
-        targetAssignment.grades[gradeIdx] = { ...targetAssignment.grades[gradeIdx], feedback: val };
-      } else {
-        targetAssignment.grades.push({ studentId, score: '', feedback: val });
+    const updatedAssignments = classroom.assignments.map(assignment => {
+      if (assignment.id === targetId) {
+        const newGrades = [...assignment.grades];
+        const gradeIdx = newGrades.findIndex(g => g.studentId === studentId);
+        if (gradeIdx > -1) {
+          newGrades[gradeIdx] = { ...newGrades[gradeIdx], feedback: val };
+        } else {
+          newGrades.push({ studentId, score: '', feedback: val });
+        }
+        return { ...assignment, grades: newGrades };
       }
-      onUpdate({ ...classroom, assignments: updatedAssignments });
-    }
+      return assignment;
+    });
+    onUpdate({ ...classroom, assignments: updatedAssignments });
   };
 
   const handleManualCommentChange = (studentId: string, field: 'compComment' | 'specComment' | 'qualComment', val: string) => {
