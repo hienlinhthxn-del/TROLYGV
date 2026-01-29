@@ -220,6 +220,13 @@ export class GeminiService {
     return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + " simple cute drawing for kids")}?width=600&height=400&seed=${seed}&nologo=true`;
   }
 
+  public async generateVideo(prompt: string): Promise<string> {
+    const seed = Math.floor(Math.random() * 9999);
+    // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
+    // Đây là một giải pháp tạm thời để có tính năng.
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=video&seed=${seed}&nologo=true`;
+  }
+
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
     if (history.length === 0) return [];
     try {

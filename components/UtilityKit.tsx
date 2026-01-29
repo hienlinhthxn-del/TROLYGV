@@ -17,10 +17,11 @@ interface SavedLessonPlan {
 }
 
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
-  const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video'>('games');
   const [subject, setSubject] = useState('Toán');
   const [grade, setGrade] = useState('Lớp 1');
   const [topic, setTopic] = useState('');
+  const [videoStyle, setVideoStyle] = useState('Hoạt hình đơn giản');
   const [voiceName, setVoiceName] = useState<'Kore' | 'Puck'>('Kore');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,6 +32,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [showHistory, setShowHistory] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Xử lý dán ảnh trực tiếp
@@ -222,6 +224,64 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     }
   };
 
+  const handlePlayWithVoiceover = () => {
+    if (!result || !topic || !videoRef.current) return;
+
+    // Dừng mọi giọng nói đang phát
+    window.speechSynthesis.cancel();
+
+    // Tua video về đầu và phát
+    videoRef.current.currentTime = 0;
+    videoRef.current.play();
+
+    const utterance = new SpeechSynthesisUtterance(topic);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 0.9;
+
+    const voices = window.speechSynthesis.getVoices();
+    const viVoices = voices.filter(v => v.lang.includes('vi'));
+    if (viVoices.length > 0) {
+      // Cố gắng tìm một giọng nữ chuẩn
+      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
+    }
+
+    utterance.onend = () => {
+      // Có thể muốn dừng video khi nói xong, hoặc không. Tạm thời để video chạy tiếp.
+    };
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const generateVideo = async () => {
+    if (!topic.trim()) {
+      alert("Vui lòng nhập kịch bản hoặc mô tả video!");
+      return;
+    }
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      // Dịch và tối ưu prompt sang tiếng Anh để AI video hiểu tốt hơn
+      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt. Style: ${videoStyle}, short animation, simple, for kids, educational. Script: "${topic}"`;
+
+      let optimizedPrompt = topic;
+      try {
+        const translation = await geminiService.generateText(translationPrompt);
+        optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
+      } catch (err) {
+        console.warn("Translation failed, using original topic", err);
+        optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+      }
+
+      const videoUrl = await geminiService.generateVideo(optimizedPrompt);
+      setResult(videoUrl);
+    } catch (error: any) {
+      alert(`Không thể tạo video: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const generateTTS = async () => {
     if (!topic.trim()) {
       alert("Vui lòng nhập văn bản cần đọc!");
@@ -295,7 +355,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
           className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -323,6 +383,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
         >
           <i className="fas fa-volume-up"></i>
           <span>Giọng đọc</span>
+        </button>
+        <button
+          onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          <i className="fas fa-film"></i>
+          <span>Tạo Video</span>
         </button>
       </div>
 
@@ -423,6 +490,21 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
               </div>
             )}
 
+            {activeTab === 'video' && (
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phong cách Video</label>
+                <select
+                  value={videoStyle}
+                  onChange={e => setVideoStyle(e.target.value)}
+                  className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option>Hoạt hình đơn giản</option>
+                  <option>Tranh vẽ màu nước</option>
+                  <option>Phong cách 3D</option>
+                </select>
+              </div>
+            )}
+
             {activeTab === 'tts' && (
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
@@ -446,12 +528,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
             {!showHistory && (
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : 'Văn bản cần đọc'}
+                  {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
                 </label>
                 <textarea
                   value={topic}
                   onChange={e => setTopic(e.target.value)}
-                  placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
+                  placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
                   className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
                 />
               </div>
@@ -483,7 +565,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
           {!showHistory && (
             <button
-              onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : generateTTS}
+              onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
               disabled={isProcessing || !topic.trim()}
               className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
             >
@@ -540,6 +622,34 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                       <a href={result} download="MinhHoa_AI.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
                         Tải hình ảnh (.png)
                       </a>
+                    </div>
+                  </div>
+                ) : activeTab === 'video' ? (
+                  <div className="flex flex-col items-center">
+                    <div className="relative group w-full max-w-lg">
+                      <video
+                        ref={videoRef}
+                        src={result}
+                        controls
+                        loop
+                        className="w-full rounded-[32px] shadow-2xl border-4 border-white"
+                        onPlay={() => window.speechSynthesis.resume()}
+                        onPause={() => window.speechSynthesis.pause()}
+                        onEnded={() => window.speechSynthesis.cancel()}
+                      >
+                        Trình duyệt của bạn không hỗ trợ video.
+                      </video>
+                    </div>
+                    <div className="mt-8 flex flex-col items-center space-y-3">
+                      <div className="flex space-x-3">
+                        <button onClick={handlePlayWithVoiceover} className="px-8 py-4 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 shadow-xl shadow-purple-100 active:scale-95 transition-all">
+                          <i className="fas fa-comment-dots mr-2"></i>Phát kèm Lồng tiếng
+                        </button>
+                        <a href={result} download="Video_AI.mp4" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
+                          <i className="fas fa-download mr-2"></i>Tải Video (Không tiếng)
+                        </a>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium">Lưu ý: Chức năng lồng tiếng sử dụng giọng đọc của trình duyệt.</p>
                     </div>
                   </div>
                 ) : activeTab === 'tts' ? (
@@ -616,7 +726,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                 <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                  <i className={`fas ${activeTab === 'games' ? 'fa-gamepad' : activeTab === 'images' ? 'fa-image' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                  <i className={`fas ${activeTab === 'games' ? 'fa-gamepad' : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : 'fa-microphone'} text-5xl text-slate-300`}></i>
                 </div>
                 <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
               </div>
