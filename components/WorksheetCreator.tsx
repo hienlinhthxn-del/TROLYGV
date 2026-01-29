@@ -33,7 +33,8 @@ const WorksheetCreator: React.FC = () => {
         tf: 2,
         fill: 1,
         match: 1,
-        essay: 2
+        essay: 2,
+        arrange: 1
     });
 
     const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
@@ -75,6 +76,27 @@ const WorksheetCreator: React.FC = () => {
         const newHistory = [updatedWs, ...history.filter(h => h.id !== updatedWs.id)].slice(0, 20);
         setHistory(newHistory);
         localStorage.setItem('worksheet_history', JSON.stringify(newHistory));
+    };
+
+    const handleDeleteFromHistory = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (window.confirm('Bạn có chắc muốn xóa phiếu này khỏi lịch sử?')) {
+            const updated = history.filter(h => h.id !== id);
+            setHistory(updated);
+            localStorage.setItem('worksheet_history', JSON.stringify(updated));
+        }
+    };
+
+    const handleRenameFromHistory = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const item = history.find(h => h.id === id);
+        if (!item) return;
+        const newName = prompt('Nhập tên mới cho phiếu học tập:', item.title);
+        if (newName && newName.trim() !== '') {
+            const updated = history.map(h => h.id === id ? { ...h, title: newName.trim() } : h);
+            setHistory(updated);
+            localStorage.setItem('worksheet_history', JSON.stringify(updated));
+        }
     };
 
     const handleGenerate = async () => {
@@ -228,10 +250,18 @@ const WorksheetCreator: React.FC = () => {
                         <h3 style={{ margin: '0 0 15px 0', color: '#7B1FA2' }}>📋 Danh sách Phiếu đã tạo gần đây:</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' }}>
                             {history.length > 0 ? history.map((ws) => (
-                                <div key={ws.id} onClick={() => { setWorksheet(ws); setShowHistory(false); }} style={{ padding: '15px', background: 'white', borderRadius: '10px', border: '1px solid #ce93d8', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-                                    <div style={{ fontWeight: 'bold', color: '#1976D2', marginBottom: '5px' }}>{ws.title}</div>
+                                <div key={ws.id} onClick={() => { setWorksheet(ws); setShowHistory(false); }} style={{ padding: '15px', background: 'white', borderRadius: '10px', border: '1px solid #ce93d8', cursor: 'pointer', transition: 'all 0.2s', position: 'relative' }} className="group" onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                                    <div style={{ fontWeight: 'bold', color: '#1976D2', marginBottom: '5px', paddingRight: '30px' }} className="line-clamp-1">{ws.title}</div>
                                     <div style={{ fontSize: '11px', color: '#888' }}>Môn: {ws.subject} - {ws.questions.length} câu</div>
                                     <div style={{ fontSize: '10px', color: '#aaa', marginTop: '5px' }}>{ws.lastModified ? new Date(ws.lastModified).toLocaleString('vi-VN') : ''}</div>
+                                    <div className="absolute top-3 right-3 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={(e) => handleRenameFromHistory(ws.id!, e)} title="Đổi tên" className="w-7 h-7 flex items-center justify-center bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-full border border-slate-200 transition-all">
+                                            <i className="fas fa-pen text-xs"></i>
+                                        </button>
+                                        <button onClick={(e) => handleDeleteFromHistory(ws.id!, e)} title="Xóa" className="w-7 h-7 flex items-center justify-center bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600 rounded-full border border-slate-200 transition-all">
+                                            <i className="fas fa-trash-alt text-xs"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             )) : <p style={{ fontSize: '13px', color: '#888' }}>Chưa có phiếu học tập nào được lưu.</p>}
                         </div>
@@ -275,7 +305,8 @@ const WorksheetCreator: React.FC = () => {
                                     { id: 'tf', label: 'Đúng / Sai', color: '#2196F3' },
                                     { id: 'fill', label: 'Điền khuyết (....)', color: '#FF9800' },
                                     { id: 'match', label: 'Nối cột', color: '#9C27B0' },
-                                    { id: 'essay', label: 'Tự luận / Tô màu', color: '#F44336' }
+                                    { id: 'essay', label: 'Tự luận / Tô màu', color: '#F44336' },
+                                    { id: 'arrange', label: 'Sắp xếp câu', color: '#673AB7' }
                                 ].map(type => (
                                     <div key={type.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', background: '#F5F5F5', borderRadius: '8px' }}>
                                         <span style={{ fontSize: '13px', fontWeight: 'bold' }}>{type.label}</span>
