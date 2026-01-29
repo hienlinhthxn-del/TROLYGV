@@ -4,6 +4,7 @@ import { geminiService, FilePart } from '../services/geminiService';
 import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
+import Crossword from './Crossword';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -21,6 +22,7 @@ interface SavedLessonPlan {
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant'>('games');
   const [subject, setSubject] = useState('Toán');
+  const [gameType, setGameType] = useState<'idea' | 'crossword' | 'quiz'>('idea');
   const [grade, setGrade] = useState('Lớp 1');
   const [topic, setTopic] = useState('');
   const [videoStyle, setVideoStyle] = useState('Hoạt hình đơn giản');
@@ -243,6 +245,48 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     } catch (error: any) {
       console.error("Image generation error:", error);
       alert(`Không thể tạo hình ảnh: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateCrossword = async () => {
+    if (!topic.trim()) {
+      alert("Vui lòng nhập chủ đề cho ô chữ!");
+      return;
+    }
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      const crosswordData = await geminiService.generateCrossword(topic);
+      if (crosswordData && crosswordData.words && crosswordData.words.length > 0) {
+        setResult(crosswordData);
+      } else {
+        throw new Error("AI không thể tạo ô chữ với chủ đề này. Vui lòng thử một chủ đề khác tổng quát hơn.");
+      }
+    } catch (error: any) {
+      alert(`Không thể tạo ô chữ: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const generateQuiz = async () => {
+    if (!topic.trim()) {
+      alert("Vui lòng nhập chủ đề cho Quiz!");
+      return;
+    }
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      const quizContent = await geminiService.generateQuiz(topic);
+      setResult(quizContent);
+    } catch (error: any) {
+      alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
     } finally {
       setIsProcessing(false);
     }
@@ -534,7 +578,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       ) : (
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
           <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 flex flex-col">
               {(activeTab === 'games' || activeTab === 'lesson_plan') && (
                 <>
                   {activeTab === 'lesson_plan' && (
@@ -658,12 +702,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
               {!showHistory && (
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                    {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? 'Chủ đề bài học' : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
+                    {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
                   </label>
                   <textarea
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
-                    placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? "VD: Phép nhân số có 1 chữ số..." : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
+                    placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? (gameType === 'crossword' ? 'VD: Động vật hoang dã' : gameType === 'quiz' ? 'VD: Lịch sử Việt Nam' : 'VD: Phép nhân số có 1 chữ số...') : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
                     className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
                   />
                 </div>
@@ -695,12 +739,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
             {!showHistory && (
               <button
-                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? generateGame : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
+                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? generateQuiz : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
                 disabled={isProcessing || !topic.trim()}
                 className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
-                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : 'Bắt đầu sáng tạo'}
+                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo')}
               </button>
             )}
           </div>
@@ -742,7 +786,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                 </div>
               ) : result ? (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  {activeTab === 'images' ? (
+                  {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
+                    <Crossword data={result} />
+                  ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">
                         <img src={result} alt="AI Visual" className="w-full max-w-lg rounded-[32px] shadow-2xl border-4 border-white" />
@@ -750,7 +796,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                       </div>
                       <div className="mt-8 flex space-x-3">
                         <a href={result} download="MinhHoa_AI.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
-                          Tải hình ảnh (.png)
+                          <i className="fas fa-download mr-2"></i>Tải hình ảnh (.png)
                         </a>
                       </div>
                     </div>
@@ -775,7 +821,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                           <button onClick={handlePlayWithVoiceover} className="px-8 py-4 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 shadow-xl shadow-purple-100 active:scale-95 transition-all">
                             <i className="fas fa-comment-dots mr-2"></i>Phát kèm Lồng tiếng
                           </button>
-                          <a href={result} download="Video_AI.mp4" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
+                          <a href={result} download="Video_AI.mp4" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
                             <i className="fas fa-download mr-2"></i>Tải Video (Không tiếng)
                           </a>
                         </div>
@@ -848,7 +894,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                   ) : (
                     <div className="p-4">
                       <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
-                        {result}
+                        {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
                       </div>
                     </div>
                   )}
@@ -856,7 +902,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? 'fa-gamepad' : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : 'fa-microphone'} text-5xl text-slate-300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>

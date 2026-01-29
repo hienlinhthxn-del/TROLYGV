@@ -206,6 +206,62 @@ export class GeminiService {
     return this.generateExamQuestionsStructured(prompt, fileParts);
   }
 
+  public async generateCrossword(topic: string, size: number = 12, wordCount: number = 10): Promise<any> {
+    await this.ensureInitialized();
+    this.setStatus("Đang tạo ô chữ...");
+
+    const prompt = `Tạo một trò chơi ô chữ cho học sinh tiểu học với chủ đề "${topic}".
+    
+    YÊU CẦU:
+    1.  Tạo một lưới ${size}x${size}.
+    2.  Tạo khoảng ${wordCount} từ liên quan đến chủ đề. Các từ không quá dài (tối đa ${size} chữ cái), không có dấu và viết hoa.
+    3.  Sắp xếp các từ vào lưới sao cho chúng giao nhau hợp lệ.
+    4.  Cung cấp gợi ý (clue) đơn giản, dễ hiểu cho mỗi từ.
+    5.  Trả về DUY NHẤT một đối tượng JSON, không có văn bản giải thích nào khác.
+    
+    CẤU TRÚC JSON BẮT BUỘC:
+    {
+      "size": ${size},
+      "words": [
+        {
+          "word": "TUVUNG",
+          "clue": "Gợi ý cho từ này",
+          "direction": "across" | "down",
+          "row": 0, // 0-indexed
+          "col": 0  // 0-indexed
+        }
+      ]
+    }`;
+
+    try {
+      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+      const jsonModel = this.genAI!.getGenerativeModel({
+        model: activeModelName,
+        generationConfig: { responseMimeType: "application/json" }
+      }, { apiVersion: 'v1beta' });
+
+      const result = await jsonModel.generateContent(prompt);
+      const text = result.response.text();
+      return this.parseJSONSafely(text);
+    } catch (error: any) {
+      console.error("Lỗi tạo ô chữ:", error);
+      return this.handleError(error, () => this.generateCrossword(topic, size, wordCount));
+    }
+  }
+
+  public async generateQuiz(topic: string, count: number = 5): Promise<string> {
+    await this.ensureInitialized();
+    this.setStatus("Đang soạn câu hỏi Quiz...");
+    const prompt = `Soạn ${count} câu hỏi trắc nghiệm dạng quiz game về chủ đề "${topic}" cho học sinh tiểu học.
+    Mỗi câu hỏi có 4 đáp án và chỉ 1 đáp án đúng.
+    Câu hỏi và đáp án phải ngắn gọn, vui nhộn.
+    Định dạng:
+    Câu 1: [Nội dung câu hỏi]
+    A. [Đáp án A] | B. [Đáp án B] | C. [Đáp án C] | D. [Đáp án D]
+    => Đáp án đúng: [A/B/C/D]`;
+    return this.generateText(prompt);
+  }
+
   // --- HÌNH ẢNH & GỢI Ý ---
 
   public async generateSpeech(text: string, voice: string): Promise<string | null> {
