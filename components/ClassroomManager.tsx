@@ -78,6 +78,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('competencies');
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
+  const [notificationTitle, setNotificationTitle] = useState('Thông báo từ Giáo viên Chủ nhiệm');
+  const [notificationContent, setNotificationContent] = useState('Kính gửi Quý Phụ huynh em {ten_hoc_sinh},\n\nEm xin thông báo về tình hình học tập của con như sau:\n\nTrân trọng,\nGVCN.');
+  const [generatedNotifications, setGeneratedNotifications] = useState<string | null>(null);
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
@@ -1404,6 +1407,27 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     alert('Đã lưu nhận xét ngày ' + new Date(logDate).toLocaleDateString('vi-VN') + ' thành công!');
   };
 
+  const handleGenerateNotifications = () => {
+    const studentsToSend = selectedStudents.size > 0
+      ? classroom.students.filter(s => selectedStudents.has(s.id))
+      : filteredStudents;
+
+    if (studentsToSend.length === 0) {
+      alert("Vui lòng chọn ít nhất một học sinh để gửi thông báo.");
+      return;
+    }
+
+    const allMessages = studentsToSend.map(student => {
+      const message = notificationContent
+        .replace(/{ten_hoc_sinh}/g, student.name)
+        .replace(/{ma_hoc_sinh}/g, student.code);
+
+      return `--- THÔNG BÁO CHO PHỤ HUYNH EM ${student.name} ---\n${notificationTitle}\n\n${message}`;
+    }).join('\n\n');
+
+    setGeneratedNotifications(allMessages);
+  };
+
   const handleAttendance = (studentId: string) => {
     const today = new Date().toISOString().split('T')[0];
     const existingRecordIndex = classroom.attendance.findIndex(a => a.date === today);
@@ -1535,6 +1559,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             { id: 'logbook', label: 'Nhật ký lớp', icon: 'fa-book' },
             { id: 'attendance', label: 'Điểm danh', icon: 'fa-calendar-check' },
             { id: 'assignments', label: 'Bài tập', icon: 'fa-tasks' },
+            { id: 'notifications', label: 'Thông báo PH', icon: 'fa-bullhorn' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1927,6 +1952,100 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {section === 'daily' && activeTab === 'notifications' && (
+          <div className="space-y-6 animate-in fade-in">
+            {generatedNotifications ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-black text-slate-800">Kết quả Thông báo hàng loạt</h4>
+                  <button onClick={() => setGeneratedNotifications(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-200">
+                    <i className="fas fa-arrow-left mr-2"></i>Soạn lại
+                  </button>
+                </div>
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                  <p className="text-xs text-slate-500 mb-2 font-medium">Nội dung đã được tạo cho <b>{selectedStudents.size > 0 ? selectedStudents.size : filteredStudents.length}</b> phụ huynh. Thầy/Cô hãy sao chép và gửi qua Zalo, SMS...</p>
+                  <textarea
+                    readOnly
+                    value={generatedNotifications}
+                    className="w-full h-96 p-4 bg-white border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedNotifications);
+                      alert('Đã sao chép toàn bộ nội dung thông báo!');
+                    }}
+                    className="mt-4 w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700"
+                  >
+                    <i className="fas fa-copy mr-2"></i>Sao chép toàn bộ
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tiêu đề thông báo</label>
+                    <input
+                      type="text"
+                      value={notificationTitle}
+                      onChange={e => setNotificationTitle(e.target.value)}
+                      className="w-full mt-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nội dung thông báo</label>
+                    <p className="text-[9px] text-slate-400 font-medium ml-1">Sử dụng <code className="bg-slate-100 px-1 rounded">{`{ten_hoc_sinh}`}</code> và <code className="bg-slate-100 px-1 rounded">{`{ma_hoc_sinh}`}</code> để cá nhân hóa.</p>
+                    <textarea
+                      value={notificationContent}
+                      onChange={e => setNotificationContent(e.target.value)}
+                      className="w-full mt-1 bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-64 resize-none leading-relaxed"
+                    />
+                  </div>
+                  <button
+                    onClick={handleGenerateNotifications}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700"
+                  >
+                    <i className="fas fa-paper-plane mr-2"></i>Tạo nội dung thông báo
+                  </button>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-full flex flex-col">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Chọn người nhận</h4>
+                  <p className="text-[9px] text-slate-400 font-medium mb-3">Nếu không chọn học sinh nào, thông báo sẽ được tạo cho tất cả học sinh trong danh sách.</p>
+                  <div className="flex items-center mb-3 px-2">
+                    <label className="flex items-center space-x-2 cursor-pointer select-none group">
+                      <input type="checkbox" checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase group-hover:text-indigo-600 transition-colors">Chọn tất cả ({filteredStudents.length})</span>
+                    </label>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {filteredStudents.map(s => (
+                      <div
+                        key={s.id}
+                        onClick={() => toggleSelection(s.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center space-x-3 ${selectedStudents.has(s.id) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          readOnly
+                          checked={selectedStudents.has(s.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black ${s.gender === 'Nam' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}`}>
+                          {s.name.split(' ').pop()?.charAt(0) || s.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{s.name}</p>
+                          <p className="text-[9px] text-slate-400 font-medium">{s.code}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
