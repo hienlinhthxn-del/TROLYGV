@@ -109,28 +109,46 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setActiveTab(section === 'daily' ? 'students' : 'reports');
   }, [section]);
 
+  const { periodicAssignments, dailyAssignments } = useMemo(() => {
+    const periodic: any[] = [];
+    const daily: any[] = [];
+    const periodicKeywords = ['gki', 'cki', 'gkii', 'ckii', 'giữa kỳ', 'cuối kỳ', 'định kỳ', 'kiểm tra'];
+
+    classroom.assignments.forEach(assignment => {
+      const titleLower = assignment.title.toLowerCase();
+      if (periodicKeywords.some(keyword => titleLower.includes(keyword))) {
+        periodic.push(assignment);
+      } else {
+        daily.push(assignment);
+      }
+    });
+
+    return { periodicAssignments, dailyAssignments };
+  }, [classroom.assignments]);
+
   const selectedAssignment = useMemo(() => {
-    if (classroom.assignments.length === 0) return undefined;
-    if (selectedAssignmentId) {
-      const found = classroom.assignments.find(a => a.id === selectedAssignmentId);
-      if (found) return found;
+    const assignmentsForSection = section === 'periodic' ? periodicAssignments : dailyAssignments;
+    const assignment = classroom.assignments.find(a => a.id === selectedAssignmentId);
+
+    if (assignment && assignmentsForSection.some(a => a.id === assignment.id)) {
+      return assignment;
     }
-    return classroom.assignments[classroom.assignments.length - 1];
-  }, [classroom.assignments, selectedAssignmentId]);
+
+    return undefined;
+  }, [classroom.assignments, selectedAssignmentId, section, periodicAssignments, dailyAssignments]);
 
   // Initialize and validate selectedAssignmentId
   useEffect(() => {
-    if (classroom.assignments.length > 0) {
-      // If there's no selection OR the selected one is no longer valid
-      const currentSelectionIsValid = classroom.assignments.some(a => a.id === selectedAssignmentId);
-      if (!selectedAssignmentId || !currentSelectionIsValid) {
-        setSelectedAssignmentId(classroom.assignments[classroom.assignments.length - 1].id);
-      }
-    } else {
-      // No assignments, so clear selection
-      if (selectedAssignmentId) setSelectedAssignmentId('');
+    const assignmentsForCurrentSection = section === 'periodic' ? periodicAssignments : dailyAssignments;
+
+    const isSelectionValidForSection = assignmentsForCurrentSection.some(a => a.id === selectedAssignmentId);
+
+    if (assignmentsForCurrentSection.length > 0 && !isSelectionValidForSection) {
+      setSelectedAssignmentId(assignmentsForCurrentSection[assignmentsForCurrentSection.length - 1].id);
+    } else if (classroom.assignments.length === 0 && selectedAssignmentId) {
+      setSelectedAssignmentId('');
     }
-  }, [classroom.assignments, selectedAssignmentId]);
+  }, [section, periodicAssignments, dailyAssignments, selectedAssignmentId, classroom.assignments]);
 
   const storageKey = useMemo(() => {
     // Luôn gắn ID bài tập vào key lưu trữ để tách biệt nhận xét cho từng môn/bài
@@ -1622,7 +1640,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
                       className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm max-w-[150px] truncate"
                     >
-                      {classroom.assignments.map(a => (
+                      {periodicAssignments.map(a => (
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
                     </select>
@@ -2068,7 +2086,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             </div>
 
             <div className="space-y-3">
-              {classroom.assignments.length > 0 ? classroom.assignments.slice().reverse().map(assign => (
+              {dailyAssignments.length > 0 ? dailyAssignments.slice().reverse().map(assign => (
                 <div key={assign.id} className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-center justify-between hover:shadow-md transition-all">
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
