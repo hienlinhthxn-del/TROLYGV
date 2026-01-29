@@ -123,7 +123,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       }
     });
 
-    return { periodicAssignments, dailyAssignments };
+    return { periodicAssignments: periodic, dailyAssignments: daily };
   }, [classroom.assignments]);
 
   const selectedAssignment = useMemo(() => {
