@@ -1116,10 +1116,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       if (studentIndex < filteredStudents.length) {
         const student = filteredStudents[studentIndex];
         const value = line.trim();
+        const vUpper = value.toUpperCase();
         let subjectLevel = '';
-        if (value.toUpperCase() === 'T' || value === 'Hoàn thành tốt') subjectLevel = 'Hoàn thành tốt';
-        else if (value.toUpperCase() === 'H' || value === 'Hoàn thành') subjectLevel = 'Hoàn thành';
-        else if (value.toUpperCase() === 'C' || value === 'Chưa hoàn thành') subjectLevel = 'Chưa hoàn thành';
+        if (vUpper === 'T' || vUpper === 'HTT' || value === 'Hoàn thành tốt' || value === 'Tốt') subjectLevel = 'Hoàn thành tốt';
+        else if (vUpper === 'H' || vUpper === 'HT' || value === 'Hoàn thành' || value === 'Đạt') subjectLevel = 'Hoàn thành';
+        else if (vUpper === 'C' || vUpper === 'CHT' || value === 'Chưa hoàn thành' || value === 'Cần cố gắng') subjectLevel = 'Chưa hoàn thành';
 
         if (subjectLevel) {
           const studentData = { ...(newEvals[student.id] || {}) };
@@ -1132,6 +1133,36 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     });
     const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
     onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
+  const handleExportSubjectData = () => {
+    let csvContent = "\uFEFF";
+    const isScoreSubject = ['Toán', 'Tiếng Việt'].includes(selectedPeriodicSubject);
+    const headers = ["STT", "Mã học sinh", "Họ và tên", isScoreSubject ? "Điểm số" : null, "Mức đạt được", "Nhận xét", "Thời điểm"].filter(Boolean);
+    csvContent += headers.map(h => `"${h}"`).join(',') + '\n';
+
+    filteredStudents.forEach((s, idx) => {
+      const studentEval = manualEvaluations[s.id] || {};
+      const score = studentEval.score || '';
+      const feedback = studentEval.feedback || '';
+      const finalSubject = studentEval.subject || getCircular27Evaluation(score).subject;
+      const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
+
+      const row = [
+        idx + 1, s.code, s.name, isScoreSubject ? score : null, displaySubjectEval, feedback, evaluationPeriod
+      ].filter(item => item !== null);
+
+      csvContent += row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Danh_gia_${selectedPeriodicSubject.replace(/\s/g, '_')}_${evaluationPeriod.replace(/\s/g, '_')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
@@ -1622,128 +1653,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               </div>
             </div>
 
-            <div className="bg-indigo-600 p-8 rounded-[40px] text-white shadow-2xl shadow-indigo-200 space-y-6">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex items-center space-x-5">
-                  <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/20">
-                    <i className="fas fa-wand-magic-sparkles text-2xl"></i>
-                  </div>
-                  <div>
-                    <h4 className="text-xl font-black">Trợ lý Nhận xét AI</h4>
-                    <p className="text-[11px] text-indigo-100 opacity-80 mt-1">Viết nhận xét học bạ Thông tư 27 chuẩn xác</p>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={() => setShowReviewPasteModal(true)}
-                    className="px-6 py-4 bg-indigo-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-400 transition-all active:scale-95 shadow-lg border border-indigo-400"
-                  >
-                    <i className="fas fa-paste mr-2"></i>Dán bảng điểm
-                  </button>
-                  <button
-                    onClick={handleGenerateAIReview}
-                    disabled={isGeneratingReview}
-                    className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingReview ? 'Đang tạo...' : 'Tạo từ Dữ liệu lớp'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-indigo-800/40 p-6 rounded-3xl border border-indigo-400/30 space-y-6">
-                {/* Thời điểm đánh giá */}
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2 flex items-center"><i className="fas fa-clock mr-2"></i>Thời điểm đánh giá:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {EVALUATION_PERIODS.map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setEvaluationPeriod(p)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${evaluationPeriod === p ? 'bg-amber-400 text-indigo-900 border-amber-400 shadow-sm' : 'bg-transparent text-indigo-200 border-indigo-400/50 hover:border-white/50 hover:text-white'}`}
-                      >
-                        {evaluationPeriod === p && <i className="fas fa-check mr-1.5"></i>}
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-indigo-400/30">
-                  {/* Subjects */}
-                  <div className="relative" ref={subjectDropdownRef}>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-book-open mr-1.5"></i>Môn học ({selectedSubjects.size})</label>
-                    <button
-                      onClick={() => setOpenSubjectSelect(!openSubjectSelect)}
-                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
-                    >
-                      <span className="truncate">{selectedSubjects.size > 0 ? Array.from(selectedSubjects).join(', ') : 'Chọn môn học...'}</span>
-                      <i className={`fas fa-chevron-${openSubjectSelect ? 'up' : 'down'} ml-2`}></i>
-                    </button>
-                    {openSubjectSelect && (
-                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
-                        {SUBJECTS_LIST.map(s => (
-                          <div key={s} onClick={() => toggleSubject(s)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedSubjects.has(s) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
-                              {selectedSubjects.has(s) && <i className="fas fa-check text-white text-[8px]"></i>}
-                            </div>
-                            <span className={`text-xs font-medium ${selectedSubjects.has(s) ? 'text-indigo-700 font-bold' : 'text-slate-600'}`}>{s}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Qualities */}
-                  <div className="relative" ref={qualityDropdownRef}>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-heart mr-1.5"></i>Phẩm chất ({selectedQualities.size})</label>
-                    <button
-                      onClick={() => setOpenQualitySelect(!openQualitySelect)}
-                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
-                    >
-                      <span className="truncate">{selectedQualities.size > 0 ? Array.from(selectedQualities).join(', ') : 'Chọn phẩm chất...'}</span>
-                      <i className={`fas fa-chevron-${openQualitySelect ? 'up' : 'down'} ml-2`}></i>
-                    </button>
-                    {openQualitySelect && (
-                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
-                        {QUALITIES_LIST.map(q => (
-                          <div key={q} onClick={() => toggleQuality(q)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedQualities.has(q) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
-                              {selectedQualities.has(q) && <i className="fas fa-check text-white text-[8px]"></i>}
-                            </div>
-                            <span className={`text-xs font-medium ${selectedQualities.has(q) ? 'text-emerald-700 font-bold' : 'text-slate-600'}`}>{q}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Competencies */}
-                  <div className="relative" ref={competenceDropdownRef}>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1 block"><i className="fas fa-brain mr-1.5"></i>Năng lực ({selectedCompetencies.size})</label>
-                    <button
-                      onClick={() => setOpenCompetenceSelect(!openCompetenceSelect)}
-                      className="w-full bg-indigo-900/50 border border-indigo-400/50 rounded-xl px-4 py-3 text-left text-xs font-bold text-white flex items-center justify-between hover:bg-indigo-900/70 transition-all"
-                    >
-                      <span className="truncate">{selectedCompetencies.size > 0 ? Array.from(selectedCompetencies).join(', ') : 'Chọn năng lực...'}</span>
-                      <i className={`fas fa-chevron-${openCompetenceSelect ? 'up' : 'down'} ml-2`}></i>
-                    </button>
-                    {openCompetenceSelect && (
-                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
-                        {COMPETENCIES_LIST.map(c => (
-                          <div key={c} onClick={() => toggleCompetence(c)} className="flex items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 shrink-0 ${selectedCompetencies.has(c) ? 'bg-sky-600 border-sky-600' : 'border-slate-300'}`}>
-                              {selectedCompetencies.has(c) && <i className="fas fa-check text-white text-[8px]"></i>}
-                            </div>
-                            <span className={`text-xs font-medium ${selectedCompetencies.has(c) ? 'text-sky-700 font-bold' : 'text-slate-600'}`}>{c}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
@@ -1794,67 +1703,74 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
               <div className="overflow-x-auto">
                 {reportViewMode === 'subjects' ? (
-                  <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead>
-                      <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
-                        <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
-                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">(Toán, TV)</span></th>
-                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
-                        <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
-                        <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
-                      </tr>
-                    </thead>
-                    <tbody key={`${storageKey}`} className="text-xs font-medium text-slate-600">
-                      {filteredStudents.map(s => {
-                        const studentEval = manualEvaluations[s.id] || {};
-                        const score = studentEval.score || '';
-                        const feedback = studentEval.feedback || '';
-                        const finalSubject = studentEval.subject || getCircular27Evaluation(score).subject;
-                        const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
-                        const isScoreSubject = ['Toán', 'Tiếng Việt'].includes(selectedPeriodicSubject);
+                  <>
+                    <div className="flex justify-end gap-2 mb-4">
+                      <button onClick={handleExportSubjectData} className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-100 transition-all">
+                        <i className="fas fa-file-excel mr-2"></i>Xuất File (CSV)
+                      </button>
+                    </div>
+                    <table className="w-full text-left border-collapse min-w-[800px]">
+                      <thead>
+                        <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
+                          <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
+                          <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">(Toán, TV)</span></th>
+                          <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
+                          <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
+                          <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
+                        </tr>
+                      </thead>
+                      <tbody key={`${storageKey}`} className="text-xs font-medium text-slate-600">
+                        {filteredStudents.map(s => {
+                          const studentEval = manualEvaluations[s.id] || {};
+                          const score = studentEval.score || '';
+                          const feedback = studentEval.feedback || '';
+                          const finalSubject = studentEval.subject || getCircular27Evaluation(score).subject;
+                          const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
+                          const isScoreSubject = ['Toán', 'Tiếng Việt'].includes(selectedPeriodicSubject);
 
-                        return (
-                          <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                            <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
-                            <td className="p-0 border-r border-slate-100">
-                              {isScoreSubject ? (
+                          return (
+                            <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
+                              <td className="p-0 border-r border-slate-100">
+                                {isScoreSubject ? (
+                                  <input
+                                    type="text"
+                                    className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
+                                    value={score}
+                                    onChange={(e) => handlePeriodicScoreChange(s.id, e.target.value)}
+                                    onPaste={(e) => handlePastePeriodicScores(e, s.id)}
+                                    placeholder="Điểm"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full px-4 py-3 text-center text-slate-300 italic text-xs">Không áp dụng</div>
+                                )}
+                              </td>
+                              <td
+                                tabIndex={0}
+                                className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100 outline-none focus:bg-indigo-50"
+                                onClick={() => handlePeriodicLevelChange(s.id, finalSubject)}
+                                onPaste={(e) => handlePastePeriodicLevels(e, s.id)}
+                              >
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {displaySubjectEval}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 border-r border-slate-100 p-0">
                                 <input
                                   type="text"
-                                  className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
-                                  value={score}
-                                  onChange={(e) => handlePeriodicScoreChange(s.id, e.target.value)}
-                                  onPaste={(e) => handlePastePeriodicScores(e, s.id)}
-                                  placeholder="Điểm"
+                                  className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-600 placeholder-slate-300"
+                                  value={feedback}
+                                  onChange={(e) => handlePeriodicFeedbackChange(s.id, e.target.value)}
+                                  placeholder="Nhận xét tự động..."
                                 />
-                              ) : (
-                                <div className="w-full h-full px-4 py-3 text-center text-slate-300 italic text-xs">Không áp dụng</div>
-                              )}
-                            </td>
-                            <td
-                              tabIndex={0}
-                              className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100 outline-none focus:bg-indigo-50"
-                              onClick={() => handlePeriodicLevelChange(s.id, finalSubject)}
-                              onPaste={(e) => handlePastePeriodicLevels(e, s.id)}
-                            >
-                              <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                                {displaySubjectEval}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 border-r border-slate-100 p-0">
-                              <input
-                                type="text"
-                                className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-600 placeholder-slate-300"
-                                value={feedback}
-                                onChange={(e) => handlePeriodicFeedbackChange(s.id, e.target.value)}
-                                placeholder="Nhận xét tự động..."
-                              />
-                            </td>
-                            <td className="py-3 px-4 text-center">{evaluationPeriod}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              </td>
+                              <td className="py-3 px-4 text-center">{evaluationPeriod}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </>
                 ) : (
                   <>
                     <div className="flex justify-end gap-2 mb-4">
