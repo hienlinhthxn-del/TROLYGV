@@ -46,7 +46,8 @@ const COMMENTS_BANK = {
 };
 
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'logbook' | 'assignments' | 'reports'>('students');
+  const [section, setSection] = useState<'daily' | 'periodic'>('daily');
+  const [activeTab, setActiveTab] = useState<string>('students');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentCode, setNewStudentCode] = useState('');
   const [newStudentGender, setNewStudentGender] = useState<'Nam' | 'Nữ'>('Nam');
@@ -102,6 +103,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Reset active tab when switching sections
+  useEffect(() => {
+    setActiveTab(section === 'daily' ? 'students' : 'reports');
+  }, [section]);
 
   const selectedAssignment = useMemo(() => {
     if (classroom.assignments.length === 0) return undefined;
@@ -959,6 +965,39 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     document.body.removeChild(link);
   };
 
+  const handlePasteSubjectLevels = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string) => {
+    event.preventDefault();
+    const pasteData = event.clipboardData.getData('text');
+    const lines = pasteData.trim().split(/\r\n|\n|\r/);
+    if (lines.length === 0) return;
+
+    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
+    if (startIndex === -1) return;
+
+    const newEvals = { ...manualEvaluations };
+
+    lines.forEach((line, lineIndex) => {
+      const studentIndex = startIndex + lineIndex;
+      if (studentIndex < filteredStudents.length) {
+        const student = filteredStudents[studentIndex];
+        const value = line.trim();
+        let subjectLevel = '';
+        if (value.toUpperCase() === 'T' || value === 'Hoàn thành tốt') subjectLevel = 'Hoàn thành tốt';
+        else if (value.toUpperCase() === 'H' || value === 'Hoàn thành') subjectLevel = 'Hoàn thành';
+        else if (value.toUpperCase() === 'C' || value === 'Chưa hoàn thành') subjectLevel = 'Chưa hoàn thành';
+
+        if (subjectLevel) {
+          const studentData = newEvals[student.id] || {};
+          const updatedStudentData: PeriodicEvaluation = { ...studentData, subject: subjectLevel };
+          newEvals[student.id] = updatedStudentData;
+        }
+      }
+    });
+
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
   const handleManualChange = (studentId: string, type: 'subject' | 'competence' | 'quality', index: number = 0, currentVal: string) => {
     let newVal = currentVal;
     let newComment = '';
@@ -1198,6 +1237,33 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     alert('Đã lưu nhận xét ngày ' + new Date(logDate).toLocaleDateString('vi-VN') + ' thành công!');
   };
 
+  const handleAttendance = (studentId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const existingRecordIndex = classroom.attendance.findIndex(a => a.date === today);
+
+    let newAttendance = [...classroom.attendance];
+
+    if (existingRecordIndex === -1) {
+      // Tạo mới cho hôm nay
+      newAttendance.push({
+        date: today,
+        present: [studentId],
+        absent: []
+      });
+    } else {
+      const record = { ...newAttendance[existingRecordIndex] };
+      if (record.present.includes(studentId)) {
+        record.present = record.present.filter(id => id !== studentId);
+        record.absent = [...record.absent, studentId];
+      } else {
+        record.absent = record.absent.filter(id => id !== studentId);
+        record.present = [...record.present, studentId];
+      }
+      newAttendance[existingRecordIndex] = record;
+    }
+    onUpdate({ ...classroom, attendance: newAttendance });
+  };
+
   return (
     <div className="flex flex-col h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       <input type="file" ref={gradeFileInputRef} onChange={handleGradeFileUpload} accept=".csv,.txt" className="hidden" />
@@ -1246,24 +1312,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <i className="fas fa-download mr-1"></i>Mẫu
           </button>
           <button
-            onClick={() => {
-              const newId = Date.now().toString();
-              const newAssignment = {
-                id: newId,
-                title: `Bài tập mới ${new Date().toLocaleDateString('vi-VN')}`,
-                dueDate: new Date().toISOString().split('T')[0],
-                status: 'Đang mở' as const,
-                submissions: [],
-                grades: []
-              };
-              onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
-              setSelectedAssignmentId(newId);
-            }}
-            className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-200 hover:bg-indigo-100 transition-all"
-          >
-            <i className="fas fa-plus mr-2"></i>Tạo Bài tập
-          </button>
-          <button
             onClick={() => gradeFileInputRef.current?.click()}
             className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
           >
@@ -1294,22 +1342,47 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
-        {['students', 'logbook', 'assignments', 'reports'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <i className={`fas fa-${tab === 'students' ? 'users' : tab === 'logbook' ? 'book' : tab === 'assignments' ? 'tasks' : 'chart-simple'} mr-2`}></i>
-            {tab === 'students' ? 'Học sinh' : tab === 'logbook' ? 'Nhật ký lớp' : tab === 'assignments' ? 'Bài tập' : 'Thống kê'}
-          </button>
-        ))}
+      {/* Section Toggle */}
+      <div className="flex p-2 bg-slate-100 border-y border-slate-200">
+        <button
+          onClick={() => setSection('daily')}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${section === 'daily' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
+        >
+          <i className="fas fa-sun"></i>
+          Hoạt động Hàng ngày
+        </button>
+        <button
+          onClick={() => setSection('periodic')}
+          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${section === 'periodic' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
+        >
+          <i className="fas fa-award"></i>
+          Đánh giá Định kỳ (TT27)
+        </button>
       </div>
 
+      {/* Daily Tabs */}
+      {section === 'daily' && (
+        <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
+          {[
+            { id: 'students', label: 'Học sinh', icon: 'fa-users' },
+            { id: 'logbook', label: 'Nhật ký lớp', icon: 'fa-book' },
+            { id: 'attendance', label: 'Điểm danh', icon: 'fa-calendar-check' },
+            { id: 'assignments', label: 'Bài tập', icon: 'fa-tasks' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <i className={`fas ${tab.icon} mr-2`}></i>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-        {activeTab === 'reports' && (
+        {section === 'periodic' && (
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-100">
@@ -1752,7 +1825,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           </div>
         )}
 
-        {activeTab === 'logbook' && (
+        {section === 'daily' && activeTab === 'logbook' && (
           <div className="space-y-6 animate-in fade-in">
             <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
               <div>
@@ -1800,7 +1873,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           </div>
         )}
 
-        {activeTab === 'students' && (
+        {section === 'daily' && activeTab === 'students' && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row items-stretch gap-4 p-6 bg-indigo-50/50 rounded-[32px] border border-indigo-100">
               <div className="flex-1 space-y-3">
@@ -1923,6 +1996,109 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <i className="fas fa-users-slash text-2xl"></i>
                   </div>
                   <p className="text-[11px] font-black uppercase tracking-[0.3em]">Danh sách học sinh đang trống</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {section === 'daily' && activeTab === 'attendance' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+              <div>
+                <h4 className="text-sm font-black text-emerald-800 uppercase tracking-widest">Điểm danh hôm nay</h4>
+                <p className="text-xs text-emerald-600 font-medium">{new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+              <div className="px-4 py-2 bg-white rounded-xl shadow-sm text-emerald-600 font-black text-xl">
+                {(() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  const record = classroom.attendance.find(a => a.date === today);
+                  return record ? `${record.present.length}/${classroom.students.length}` : `0/${classroom.students.length}`;
+                })()}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredStudents.map(s => {
+                const today = new Date().toISOString().split('T')[0];
+                const record = classroom.attendance.find(a => a.date === today);
+                const isPresent = record ? record.present.includes(s.id) : false;
+
+                return (
+                  <div key={s.id} onClick={() => handleAttendance(s.id)} className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${isPresent ? 'bg-white border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-70'}`}>
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black ${isPresent ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
+                        {s.code.slice(-3)}
+                      </div>
+                      <div>
+                        <p className={`text-sm font-bold ${isPresent ? 'text-slate-800' : 'text-slate-500'}`}>{s.name}</p>
+                        <p className="text-[10px] uppercase font-bold text-slate-400">{isPresent ? 'Có mặt' : 'Vắng mặt'}</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 ${isPresent ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 bg-white'}`}>
+                      {isPresent && <i className="fas fa-check text-[10px]"></i>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {section === 'daily' && activeTab === 'assignments' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  const newId = Date.now().toString();
+                  const newAssignment = {
+                    id: newId,
+                    title: `Bài tập ngày ${new Date().toLocaleDateString('vi-VN')}`,
+                    dueDate: new Date().toISOString().split('T')[0],
+                    status: 'Đang mở' as const,
+                    submissions: [],
+                    grades: []
+                  };
+                  onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
+              >
+                <i className="fas fa-plus mr-2"></i>Giao bài tập mới
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {classroom.assignments.length > 0 ? classroom.assignments.slice().reverse().map(assign => (
+                <div key={assign.id} className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-center justify-between hover:shadow-md transition-all">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                      <i className="fas fa-file-pen"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-800">{assign.title}</h4>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">Hạn nộp: {new Date(assign.dueDate).toLocaleDateString('vi-VN')} • {assign.grades.length} đã chấm</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${assign.status === 'Đang mở' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                      {assign.status}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Xóa bài tập này?')) {
+                          onUpdate({ ...classroom, assignments: classroom.assignments.filter(a => a.id !== assign.id) });
+                        }
+                      }}
+                      className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                    >
+                      <i className="fas fa-trash-alt"></i>
+                    </button>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-12 text-slate-400">
+                  <i className="fas fa-clipboard-list text-4xl mb-3 opacity-20"></i>
+                  <p className="text-xs font-bold uppercase tracking-widest">Chưa có bài tập nào</p>
                 </div>
               )}
             </div>
