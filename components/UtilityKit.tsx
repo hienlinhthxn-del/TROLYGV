@@ -581,6 +581,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
             <div className="space-y-4 flex-1 flex flex-col">
               {(activeTab === 'games' || activeTab === 'lesson_plan') && (
                 <>
+                  {activeTab === 'games' && (
+                    <div className="mb-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
+                      <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
+                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Soạn Ý tưởng</button>
+                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
+                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
+                      </div>
+                    </div>
+                  )}
                   {activeTab === 'lesson_plan' && (
                     <div className="flex justify-end mb-2">
                       <button
