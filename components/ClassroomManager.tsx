@@ -57,6 +57,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [isExportingSMAS, setIsExportingSMAS] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [viewingAssignmentId, setViewingAssignmentId] = useState<string | null>(null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
 
   const [isEditingName, setIsEditingName] = useState(false);
@@ -113,6 +114,35 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setActiveTab(section === 'daily' ? 'students' : 'reports');
   }, [section]);
 
+  // Reset detail view when switching tabs
+  useEffect(() => {
+    if (activeTab !== 'assignments') {
+      setViewingAssignmentId(null);
+    }
+  }, [activeTab]);
+
+  const handleRemindUnsubmitted = () => {
+    if (!assignmentToView) return;
+
+    const submittedStudentIds = new Set(assignmentToView.grades.map(g => g.studentId));
+    const unsubmittedStudents = filteredStudents.filter(s => !submittedStudentIds.has(s.id));
+
+    if (unsubmittedStudents.length === 0) {
+      alert("Tất cả học sinh đã nộp bài!");
+      return;
+    }
+
+    const names = unsubmittedStudents.map((s, i) => `${i + 1}. ${s.name}`).join('\n');
+    const message = `Danh sách các em chưa nộp bài "${assignmentToView.title}":\n\n${names}`;
+
+    navigator.clipboard.writeText(message).then(() => {
+      alert("Đã sao chép danh sách học sinh chưa nộp bài vào clipboard!\n\n" + message);
+    }).catch(err => {
+      console.error('Could not copy text: ', err);
+      alert("Lỗi khi sao chép. Danh sách:\n\n" + message);
+    });
+  };
+
   const { periodicAssignments, dailyAssignments } = useMemo(() => {
     const periodic: any[] = [];
     const daily: any[] = [];
@@ -140,6 +170,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     return undefined;
   }, [classroom.assignments, selectedAssignmentId, section, periodicAssignments, dailyAssignments]);
+
+  const assignmentToView = useMemo(() => {
+    if (!viewingAssignmentId) return null;
+    return dailyAssignments.find(a => a.id === viewingAssignmentId);
+  }, [viewingAssignmentId, dailyAssignments]);
 
   // Initialize and validate selectedAssignmentId
   useEffect(() => {
@@ -2222,62 +2257,119 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         )}
 
         {section === 'daily' && activeTab === 'assignments' && (
-          <div className="space-y-6 animate-in fade-in">
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  const newId = Date.now().toString();
-                  const newAssignment = {
-                    id: newId,
-                    title: `Bài tập ngày ${new Date().toLocaleDateString('vi-VN')}`,
-                    dueDate: new Date().toISOString().split('T')[0],
-                    status: 'Đang mở' as const,
-                    submissions: [],
-                    grades: []
-                  };
-                  onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
-                }}
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
-              >
-                <i className="fas fa-plus mr-2"></i>Giao bài tập mới
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {dailyAssignments.length > 0 ? dailyAssignments.slice().reverse().map(assign => (
-                <div key={assign.id} className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-center justify-between hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
-                      <i className="fas fa-file-pen"></i>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black text-slate-800">{assign.title}</h4>
-                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">Hạn nộp: {new Date(assign.dueDate).toLocaleDateString('vi-VN')} • {assign.grades.length} đã chấm</p>
-                    </div>
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {assignmentToView ? (
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h4 className="text-lg font-black text-slate-800">Chi tiết: {assignmentToView.title}</h4>
+                    <p className="text-xs text-slate-400 font-medium">
+                      {assignmentToView.grades.length} / {classroom.students.length} học sinh đã nộp bài.
+                    </p>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${assign.status === 'Đang mở' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                      {assign.status}
-                    </span>
+                  <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => {
-                        if (window.confirm('Xóa bài tập này?')) {
-                          onUpdate({ ...classroom, assignments: classroom.assignments.filter(a => a.id !== assign.id) });
-                        }
-                      }}
-                      className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      onClick={handleRemindUnsubmitted}
+                      className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
                     >
-                      <i className="fas fa-trash-alt"></i>
+                      <i className="fas fa-bell mr-2"></i>Nhắc nhở
+                    </button>
+                    <button
+                      onClick={() => setViewingAssignmentId(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-200"
+                    >
+                      <i className="fas fa-arrow-left mr-2"></i>Quay lại
                     </button>
                   </div>
                 </div>
-              )) : (
-                <div className="text-center py-12 text-slate-400">
-                  <i className="fas fa-clipboard-list text-4xl mb-3 opacity-20"></i>
-                  <p className="text-xs font-bold uppercase tracking-widest">Chưa có bài tập nào</p>
+                <div className="space-y-2">
+                  {filteredStudents.map(student => {
+                    const grade = assignmentToView.grades.find(g => g.studentId === student.id);
+                    const hasSubmitted = !!grade;
+                    return (
+                      <div key={student.id} className={`p-4 rounded-2xl border flex items-center justify-between ${hasSubmitted ? 'bg-white border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black ${student.gender === 'Nam' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}`}>
+                            {student.name.split(' ').pop()?.charAt(0) || student.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{student.name}</p>
+                            <p className="text-[9px] text-slate-400 font-medium">{student.code}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          {hasSubmitted && (
+                            <span className="text-xs font-bold text-slate-600">Điểm: <span className="text-indigo-600 font-black">{grade.score}</span></span>
+                          )}
+                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${hasSubmitted ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {hasSubmitted ? 'Đã nộp' : 'Chưa nộp'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const newId = Date.now().toString();
+                      const newAssignment = {
+                        id: newId,
+                        title: `Bài tập ngày ${new Date().toLocaleDateString('vi-VN')}`,
+                        dueDate: new Date().toISOString().split('T')[0],
+                        status: 'Đang mở' as const,
+                        submissions: [],
+                        grades: []
+                      };
+                      onUpdate({ ...classroom, assignments: [...classroom.assignments, newAssignment] });
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all"
+                  >
+                    <i className="fas fa-plus mr-2"></i>Giao bài tập mới
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {dailyAssignments.length > 0 ? dailyAssignments.slice().reverse().map(assign => (
+                    <div key={assign.id} onClick={() => setViewingAssignmentId(assign.id)} className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-center justify-between hover:shadow-md transition-all cursor-pointer">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                          <i className="fas fa-file-pen"></i>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800">{assign.title}</h4>
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">Hạn nộp: {new Date(assign.dueDate).toLocaleDateString('vi-VN')} • {assign.grades.length} / {classroom.students.length} đã nộp</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${assign.status === 'Đang mở' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {assign.status}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Xóa bài tập này?')) {
+                              onUpdate({ ...classroom, assignments: classroom.assignments.filter(a => a.id !== assign.id) });
+                            }
+                          }}
+                          className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                          <i className="fas fa-trash-alt"></i>
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="text-center py-12 text-slate-400">
+                      <i className="fas fa-clipboard-list text-4xl mb-3 opacity-20"></i>
+                      <p className="text-xs font-bold uppercase tracking-widest">Chưa có bài tập nào</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
