@@ -45,6 +45,17 @@ const COMMENTS_BANK = {
   }
 };
 
+const COMMON_LOGS = {
+  praise: [
+    'Tích cực phát biểu', 'Hoàn thành tốt bài tập', 'Giúp đỡ bạn bè',
+    'Có tiến bộ trong học tập', 'Lễ phép với thầy cô', 'Giữ gìn vệ sinh chung',
+  ],
+  mistake: [
+    'Nói chuyện riêng', 'Không tập trung', 'Chưa làm bài tập',
+    'Đi học muộn', 'Quên sách vở', 'Gây mất trật tự',
+  ]
+};
+
 const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate, onAIAssist }) => {
   const [section, setSection] = useState<'daily' | 'periodic'>('daily');
   const [activeTab, setActiveTab] = useState<string>('students');
@@ -1412,6 +1423,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }));
   };
 
+  const handleSelectLogComment = (studentId: string, comment: string, type: 'praise' | 'mistake') => {
+    setCurrentLogEntries(prev => {
+      const existingComment = prev[studentId]?.comment || '';
+      const newComment = existingComment ? `${existingComment}, ${comment.toLowerCase()}` : comment;
+      return {
+        ...prev,
+        [studentId]: { comment: newComment, type }
+      };
+    });
+  };
+
   const handleSaveLogs = () => {
     const newLogEntriesForDate: DailyLogEntry[] = Object.entries(currentLogEntries)
       .filter(([_, value]) => value.comment?.trim())
@@ -1440,6 +1462,30 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     onUpdate({ ...classroom, dailyLogs: updatedLogs });
     alert('Đã lưu nhận xét ngày ' + new Date(logDate).toLocaleDateString('vi-VN') + ' thành công!');
+  };
+
+  const handleBulkAttendance = (status: 'present' | 'absent') => {
+    const today = new Date().toISOString().split('T')[0];
+    const studentIds = filteredStudents.map(s => s.id);
+    const existingRecordIndex = classroom.attendance.findIndex(a => a.date === today);
+
+    let newAttendance = [...classroom.attendance];
+    let newRecord;
+
+    if (status === 'present') {
+      newRecord = { date: today, present: studentIds, absent: [] };
+    } else { // absent
+      newRecord = { date: today, present: [], absent: studentIds };
+    }
+
+    if (existingRecordIndex > -1) {
+      newAttendance[existingRecordIndex] = newRecord;
+    } else {
+      newAttendance.push(newRecord);
+    }
+
+    onUpdate({ ...classroom, attendance: newAttendance });
+    alert(`Đã điểm danh hàng loạt: Tất cả học sinh ${status === 'present' ? 'có mặt' : 'vắng mặt'}.`);
   };
 
   const handleGenerateNotifications = () => {
@@ -1976,12 +2022,32 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                         onChange={e => handleLogChange(student.id, e.target.value)}
                         className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                       />
-                      <button onClick={() => handleLogTypeChange(student.id, 'praise')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'praise' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-emerald-600 border-slate-200'}`} title="Khen thưởng">
+                      <button onClick={() => handleLogTypeChange(student.id, 'praise')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'praise' ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' : 'bg-white text-emerald-600 border-slate-200'}`} title="Khen thưởng">
                         <i className="fas fa-award"></i>
                       </button>
-                      <button onClick={() => handleLogTypeChange(student.id, 'mistake')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'mistake' || !currentLogEntries[student.id]?.type ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-rose-600 border-slate-200'}`} title="Cần nhắc nhở">
+                      <button onClick={() => handleLogTypeChange(student.id, 'mistake')} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${currentLogEntries[student.id]?.type === 'mistake' || !currentLogEntries[student.id]?.type ? 'bg-rose-500 text-white border-rose-500 shadow-sm' : 'bg-white text-rose-600 border-slate-200'}`} title="Cần nhắc nhở">
                         <i className="fas fa-flag"></i>
                       </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {COMMON_LOGS.praise.map(log => (
+                        <button
+                          key={`praise-${log}`}
+                          onClick={() => handleSelectLogComment(student.id, log, 'praise')}
+                          className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-all"
+                        >
+                          <i className="fas fa-plus-circle text-emerald-400 mr-1.5"></i>{log}
+                        </button>
+                      ))}
+                      {COMMON_LOGS.mistake.map(log => (
+                        <button
+                          key={`mistake-${log}`}
+                          onClick={() => handleSelectLogComment(student.id, log, 'mistake')}
+                          className="px-2.5 py-1 bg-rose-50 text-rose-700 text-[9px] font-bold rounded-lg border border-rose-100 hover:bg-rose-100 transition-all"
+                        >
+                          <i className="fas fa-plus-circle text-rose-400 mr-1.5"></i>{log}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -2227,6 +2293,21 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   return record ? `${record.present.length}/${classroom.students.length}` : `0/${classroom.students.length}`;
                 })()}
               </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => handleBulkAttendance('present')}
+                className="px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-200 transition-all"
+              >
+                <i className="fas fa-check-double mr-2"></i>Tất cả có mặt
+              </button>
+              <button
+                onClick={() => handleBulkAttendance('absent')}
+                className="px-4 py-2 rounded-xl bg-rose-100 text-rose-700 text-[10px] font-black uppercase tracking-widest border border-rose-200 hover:bg-rose-200 transition-all"
+              >
+                <i className="fas fa-user-slash mr-2"></i>Tất cả vắng mặt
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
