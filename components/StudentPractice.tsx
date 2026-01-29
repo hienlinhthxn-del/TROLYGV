@@ -55,17 +55,45 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     if (!isSubmitted) return null;
     let correctCount = 0;
     const details = questions.map(q => {
-      if (q.type !== 'Trắc nghiệm') return { id: q.id, isCorrect: true }; // Tự luận coi như đúng hoặc bỏ qua chấm điểm tự động
-
-      const userAnswer = (answers[q.id] || '').trim().toUpperCase();
-      let correctAnswer = (q.answer || '').trim().toUpperCase();
-
-      // Nếu câu trả lời gốc là "A. Nội dung", chỉ lấy chữ "A"
-      if (correctAnswer.length > 1 && (correctAnswer[1] === '.' || correctAnswer[1] === ':')) {
-        correctAnswer = correctAnswer[0];
+      if (q.type !== 'Trắc nghiệm' || !q.options || q.options.length === 0) {
+        // Tự luận coi như đúng hoặc bỏ qua chấm điểm tự động
+        // Hoặc nếu câu trắc nghiệm không có options
+        return { id: q.id, isCorrect: true, correctAnswer: q.answer, userAnswer: answers[q.id] };
       }
 
-      const isCorrect = userAnswer === correctAnswer;
+      // Lấy câu trả lời của người dùng ('A', 'B', 'C', 'D')
+      const userAnswerLabel = (answers[q.id] || '').trim().toUpperCase();
+
+      // --- Logic chấm điểm mới, mạnh mẽ hơn ---
+
+      // 1. Trích xuất nội dung text của đáp án đúng từ trường 'answer'
+      let correctAnswerText = (q.answer || '').trim();
+      const answerPrefixMatch = correctAnswerText.match(/^[A-D][\.\:]\s*/i);
+      if (answerPrefixMatch) {
+        correctAnswerText = correctAnswerText.substring(answerPrefixMatch[0].length).trim();
+      }
+
+      // 2. Tìm index của lựa chọn (option) khớp với text đáp án đúng
+      // Điều này xử lý trường hợp các options cũng có thể chứa prefix "A.", "B."
+      const correctOptionIndex = q.options.findIndex(opt => {
+        let cleanOptionText = (opt || '').trim();
+        const optionPrefixMatch = cleanOptionText.match(/^[A-D][\.\:]\s*/i);
+        if (optionPrefixMatch) {
+          cleanOptionText = cleanOptionText.substring(optionPrefixMatch[0].length).trim();
+        }
+        // So sánh không phân biệt hoa thường
+        return cleanOptionText.toLowerCase() === correctAnswerText.toLowerCase();
+      });
+
+      // 3. So sánh câu trả lời của người dùng với vị trí đáp án đúng
+      let isCorrect = false;
+      if (correctOptionIndex !== -1) {
+        const correctLabel = String.fromCharCode('A'.charCodeAt(0) + correctOptionIndex);
+        if (userAnswerLabel === correctLabel) {
+          isCorrect = true;
+        }
+      }
+
       if (isCorrect) correctCount++;
       return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id] };
     });
