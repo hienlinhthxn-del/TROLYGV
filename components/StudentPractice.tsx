@@ -6,11 +6,12 @@ interface StudentPracticeProps {
   subject: string;
   grade: string;
   questions: ExamQuestion[];
+  assignmentId: string | null;
   onExit: () => void;
   isStandalone?: boolean;
 }
 
-const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, questions, onExit, isStandalone = false }) => {
+const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, questions, assignmentId, onExit, isStandalone = false }) => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -87,14 +88,32 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     );
   };
 
-  const handleCopyResult = () => {
+  const handleGenerateSubmission = () => {
     if (!studentName.trim() && isStandalone) {
       alert("Em vui lòng nhập Họ và tên để Thầy Cô biết nhé!");
       return;
     }
-    const score = (results!.correctCount / results!.total * 10).toFixed(1);
-    const resultString = `#EDU_RESULT#:${studentName || 'Học sinh'}:${score}:${results!.correctCount}/${results!.total}`;
-    navigator.clipboard.writeText(resultString).then(() => alert("Đã sao chép kết quả! Em hãy gửi mã này cho Thầy Cô nhé."));
+
+    const score = (results!.correctCount / questions.length * 10).toFixed(1);
+
+    // Nếu có assignmentId, tạo link nộp bài tự động
+    if (assignmentId) {
+      const submissionData = {
+        aid: assignmentId,
+        sid: studentName || 'Học sinh không tên',
+        sc: score,
+      };
+      const encodedSubmission = btoa(JSON.stringify(submissionData));
+      const submissionUrl = `${window.location.origin}${window.location.pathname}?submission=${encodedSubmission}`;
+
+      navigator.clipboard.writeText(submissionUrl).then(() => {
+        alert("✅ Đã sao chép LINK NỘP BÀI!\n\nEm hãy gửi link này cho Thầy Cô để được ghi điểm tự động nhé.");
+      });
+    } else {
+      // Fallback: Nếu không có assignmentId (link đề cũ), dùng phương pháp copy mã
+      const resultString = `#EDU_RESULT#:${studentName || 'Học sinh'}:${score}:${results!.correctCount}/${questions.length}`;
+      navigator.clipboard.writeText(resultString).then(() => alert("✅ Đã sao chép KẾT QUẢ!\n\nEm hãy gửi mã này cho Thầy Cô nhé."));
+    }
   };
 
   if (isSubmitted && results) {
@@ -141,24 +160,24 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
             </div>
 
             <div className="space-y-4 pt-4">
-              <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 text-center space-y-4">
-                <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest">Gửi kết quả cho Giáo viên</h4>
+              <div className={`p-6 rounded-3xl border text-center space-y-4 ${assignmentId ? 'bg-indigo-50 border-indigo-100' : 'bg-amber-50 border-amber-100'}`}>
+                <h4 className={`text-xs font-black uppercase tracking-widest ${assignmentId ? 'text-indigo-600' : 'text-amber-700'}`}>{assignmentId ? 'Nộp bài tự động' : 'Gửi kết quả thủ công'}</h4>
                 <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
                   <input
                     type="text"
                     placeholder="Nhập Họ và tên của em..."
                     value={studentName}
                     onChange={(e) => setStudentName(e.target.value)}
-                    className="w-full sm:w-64 px-4 py-3 rounded-xl border border-indigo-200 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className={`w-full sm:w-64 px-4 py-3 rounded-xl border text-sm font-bold outline-none ${assignmentId ? 'border-indigo-200 focus:ring-2 focus:ring-indigo-500' : 'border-amber-200 focus:ring-2 focus:ring-amber-500'}`}
                   />
                   <button
-                    onClick={handleCopyResult}
-                    className="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all active:scale-95 whitespace-nowrap"
+                    onClick={handleGenerateSubmission}
+                    className={`w-full sm:w-auto px-6 py-3 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 whitespace-nowrap ${assignmentId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'}`}
                   >
-                    <i className="fas fa-copy mr-2"></i>Sao chép KQ
+                    <i className="fas fa-paper-plane mr-2"></i>{assignmentId ? 'Lấy Link Nộp Bài' : 'Sao chép KQ'}
                   </button>
                 </div>
-                <p className="text-[10px] text-indigo-400 font-medium">Nhập tên, nhấn Sao chép và gửi (Paste) cho Thầy Cô qua Zalo/Tin nhắn.</p>
+                <p className={`text-[10px] font-medium ${assignmentId ? 'text-indigo-400' : 'text-amber-500'}`}>{assignmentId ? 'Nhập tên, nhấn nút và gửi LINK cho Thầy Cô qua Zalo/Tin nhắn.' : 'Nhập tên, nhấn nút và gửi MÃ cho Thầy Cô qua Zalo/Tin nhắn.'}</p>
               </div>
 
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-left space-y-4">

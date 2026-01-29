@@ -48,7 +48,7 @@ const App: React.FC = () => {
     return new URLSearchParams(window.location.search).has('exam') || !!localStorage.getItem('shared_exam_data');
   });
 
-  const [practiceData, setPracticeData] = useState<{ subject: string, grade: string, questions: ExamQuestion[] } | null>(null);
+  const [practiceData, setPracticeData] = useState<{ subject: string, grade: string, questions: ExamQuestion[], assignmentId: string | null } | null>(null);
 
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -128,6 +128,56 @@ const App: React.FC = () => {
 
   // Xử lý link chia sẻ đề thi
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const submissionParam = urlParams.get('submission');
+
+    if (submissionParam) {
+      try {
+        const decodedData = JSON.parse(atob(submissionParam));
+        const { aid, sid, sc } = decodedData;
+
+        if (!aid || !sid || !sc) throw new Error("Dữ liệu nộp bài không đầy đủ.");
+
+        // Tải dữ liệu lớp học mới nhất từ localStorage để cập nhật
+        const savedClass = localStorage.getItem('edu_classroom_data');
+        const currentClassroomData: Classroom = savedClass ? JSON.parse(savedClass) : classroom;
+
+        const assignmentIndex = currentClassroomData.assignments.findIndex(a => a.id === aid);
+        if (assignmentIndex === -1) throw new Error("Không tìm thấy bài tập tương ứng.");
+
+        const student = currentClassroomData.students.find(s => s.name.trim().toLowerCase() === sid.trim().toLowerCase());
+        if (!student) throw new Error(`Không tìm thấy học sinh tên "${sid}" trong lớp.`);
+
+        const updatedAssignments = [...currentClassroomData.assignments];
+        const targetAssignment = { ...updatedAssignments[assignmentIndex] };
+        const gradeIndex = targetAssignment.grades.findIndex(g => g.studentId === student.id);
+        const newGrade = { studentId: student.id, score: sc, feedback: 'Nộp bài tự động qua link.' };
+
+        if (gradeIndex > -1) {
+          targetAssignment.grades[gradeIndex] = newGrade;
+        } else {
+          targetAssignment.grades.push(newGrade);
+        }
+        updatedAssignments[assignmentIndex] = targetAssignment;
+
+        const updatedClassroomData = { ...currentClassroomData, assignments: updatedAssignments };
+
+        // Cập nhật cả state và localStorage
+        setClassroom(updatedClassroomData);
+        localStorage.setItem('edu_classroom_data', JSON.stringify(updatedClassroomData));
+
+        alert(`✅ Đã cập nhật điểm ${sc} cho em ${student.name} vào bài tập "${targetAssignment.title}".`);
+
+        // Dọn dẹp URL và chuyển hướng người dùng
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setView('classroom');
+        return; // Dừng xử lý để không chạy checkSharedExam
+      } catch (e) {
+        alert(`Lỗi khi xử lý link nộp bài: ${e instanceof Error ? e.message : 'Dữ liệu không hợp lệ.'}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
     const checkSharedExam = async () => {
       const urlParams = new URLSearchParams(window.location.search);
       const sharedExam = urlParams.get('exam');
@@ -243,7 +293,8 @@ const App: React.FC = () => {
               setPracticeData({
                 subject: data.s || data.subject || 'Chưa rõ',
                 grade: data.g || data.grade || '?',
-                questions: inflatedQuestions
+                questions: inflatedQuestions,
+                assignmentId: data.aid || null
               });
 
               setView('practice');
@@ -310,7 +361,7 @@ const App: React.FC = () => {
     localStorage.setItem('edu_classroom_data', JSON.stringify(updated));
   };
 
-  const handleCreateAssignmentFromExam = (title: string) => {
+  const handleCreateAssignmentFromExam = (title: string): string => {
     const newAssignment: Assignment = {
       id: Date.now().toString(),
       title: title,
@@ -321,7 +372,8 @@ const App: React.FC = () => {
     };
     const updatedClassroom = { ...classroom, assignments: [...classroom.assignments, newAssignment] };
     updateClassroom(updatedClassroom);
-    alert(`✅ Đã tạo bài tập "${title}" trong Quản lý lớp học!\n\nThầy Cô có thể vào mục "Quản lý lớp học" -> "Nhập KQ Online" để cập nhật điểm số khi học sinh nộp bài.`);
+    alert(`✅ Đã tạo bài tập "${title}" trong Quản lý lớp học!`);
+    return newAssignment.id;
   };
 
   const sendToWorkspace = (content: string) => {
@@ -532,6 +584,7 @@ const App: React.FC = () => {
           subject={practiceData.subject}
           grade={practiceData.grade}
           questions={practiceData.questions}
+          assignmentId={practiceData.assignmentId}
           onExit={() => { setPracticeData(null); setView('exam'); }}
           isStandalone={true}
         />
