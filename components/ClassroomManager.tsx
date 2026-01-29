@@ -72,6 +72,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [selectedCompetencies, setSelectedCompetencies] = useState<Set<string>>(new Set(COMPETENCIES_LIST));
   const [evaluationPeriod, setEvaluationPeriod] = useState('Cuối Học kỳ I');
   const [showReviewPasteModal, setShowReviewPasteModal] = useState(false);
+  const [selectedPeriodicSubject, setSelectedPeriodicSubject] = useState<string>('Toán');
   const [reviewPasteContent, setReviewPasteContent] = useState('');
   const [reviewAttachments, setReviewAttachments] = useState<Attachment[]>([]);
   const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('competencies');
@@ -152,11 +153,14 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   const storageKey = useMemo(() => {
     // Luôn gắn ID bài tập vào key lưu trữ để tách biệt nhận xét cho từng môn/bài
+    if (section === 'periodic' && reportViewMode === 'subjects') {
+      return `_periodic_${evaluationPeriod}_${selectedPeriodicSubject}`;
+    }
     if (selectedAssignmentId) {
       return `${evaluationPeriod}_${selectedAssignmentId}`;
     }
     return evaluationPeriod;
-  }, [evaluationPeriod, selectedAssignmentId]);
+  }, [evaluationPeriod, selectedAssignmentId, section, reportViewMode, selectedPeriodicSubject]);
 
   const manualEvaluations = useMemo(() => {
     return classroom.periodicEvaluations?.[storageKey] || {};
@@ -415,6 +419,86 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handlePeriodicScoreChange = (studentId: string, score: string) => {
+    const newEvals = { ...manualEvaluations };
+    const studentData = { ...(newEvals[studentId] || {}) };
+
+    const evalResult = getCircular27Evaluation(score);
+    const newFeedback = getRandomComment('subject', evalResult.subject);
+
+    studentData.score = score;
+    studentData.subject = evalResult.subject;
+    studentData.feedback = newFeedback;
+
+    newEvals[studentId] = studentData;
+
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
+  const handlePeriodicLevelChange = (studentId: string, currentVal: string) => {
+    let newVal = currentVal;
+    if (currentVal === 'Hoàn thành tốt') newVal = 'Hoàn thành';
+    else if (currentVal === 'Hoàn thành') newVal = 'Chưa hoàn thành';
+    else newVal = 'Hoàn thành tốt';
+
+    const newFeedback = getRandomComment('subject', newVal);
+
+    const newEvals = { ...manualEvaluations };
+    const studentData = { ...(newEvals[studentId] || {}) };
+    studentData.subject = newVal;
+    studentData.feedback = newFeedback;
+    if (studentData.score) {
+      studentData.score = '';
+    }
+
+    newEvals[studentId] = studentData;
+
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
+  const handlePeriodicFeedbackChange = (studentId: string, feedback: string) => {
+    const newEvals = { ...manualEvaluations };
+    const studentData = { ...(newEvals[studentId] || {}) };
+    studentData.feedback = feedback;
+    newEvals[studentId] = studentData;
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
+  const handlePastePeriodicScores = (event: React.ClipboardEvent<HTMLInputElement>, startStudentId: string) => {
+    event.preventDefault();
+    const pasteData = event.clipboardData.getData('text');
+    const lines = pasteData.trim().split(/\r\n|\n|\r/);
+    if (lines.length === 0) return;
+
+    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
+    if (startIndex === -1) return;
+
+    const newEvals = { ...manualEvaluations };
+
+    lines.forEach((line, lineIndex) => {
+      const studentIndex = startIndex + lineIndex;
+      if (studentIndex < filteredStudents.length) {
+        const student = filteredStudents[studentIndex];
+        const score = line.trim().split(/[\t,;]/)[0];
+        if (score) {
+          const studentData = { ...(newEvals[student.id] || {}) };
+          const evalResult = getCircular27Evaluation(score);
+          const newFeedback = getRandomComment('subject', evalResult.subject);
+          studentData.score = score;
+          studentData.subject = evalResult.subject;
+          studentData.feedback = newFeedback;
+          newEvals[student.id] = studentData;
+        }
+      }
+    });
+
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
   };
 
   const handleStudentListUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1012,6 +1096,40 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       }
     });
 
+    const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
+    onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
+  };
+
+  const handlePastePeriodicLevels = (event: React.ClipboardEvent<HTMLTableCellElement>, startStudentId: string) => {
+    event.preventDefault();
+    const pasteData = event.clipboardData.getData('text');
+    const lines = pasteData.trim().split(/\r\n|\n|\r/);
+    if (lines.length === 0) return;
+
+    const startIndex = filteredStudents.findIndex(s => s.id === startStudentId);
+    if (startIndex === -1) return;
+
+    const newEvals = { ...manualEvaluations };
+
+    lines.forEach((line, lineIndex) => {
+      const studentIndex = startIndex + lineIndex;
+      if (studentIndex < filteredStudents.length) {
+        const student = filteredStudents[studentIndex];
+        const value = line.trim();
+        let subjectLevel = '';
+        if (value.toUpperCase() === 'T' || value === 'Hoàn thành tốt') subjectLevel = 'Hoàn thành tốt';
+        else if (value.toUpperCase() === 'H' || value === 'Hoàn thành') subjectLevel = 'Hoàn thành';
+        else if (value.toUpperCase() === 'C' || value === 'Chưa hoàn thành') subjectLevel = 'Chưa hoàn thành';
+
+        if (subjectLevel) {
+          const studentData = { ...(newEvals[student.id] || {}) };
+          studentData.subject = subjectLevel;
+          studentData.feedback = getRandomComment('subject', subjectLevel);
+          studentData.score = '';
+          newEvals[student.id] = studentData;
+        }
+      }
+    });
     const updatedPeriodicEvals = { ...(classroom.periodicEvaluations || {}), [storageKey]: newEvals };
     onUpdate({ ...classroom, periodicEvaluations: updatedPeriodicEvals });
   };
@@ -1629,34 +1747,33 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-lg font-black text-slate-800">Đánh giá Thông tư 27 (Tự động)</h4>
-                  <p className="text-xs text-slate-400 font-medium">Gợi ý xếp loại dựa trên điểm số bài mới nhất</p>
+                  <h4 className="text-lg font-black text-slate-800">Đánh giá Môn học (TT27)</h4>
+                  <p className="text-xs text-slate-400 font-medium">Chọn môn học để nhập điểm hoặc đánh giá mức độ.</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Bài:</span>
-                    <select
-                      value={selectedAssignmentId}
-                      onChange={(e) => setSelectedAssignmentId(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm max-w-[150px] truncate"
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Kỳ:</span>
+                  <select
+                    value={evaluationPeriod}
+                    onChange={(e) => setEvaluationPeriod(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  >
+                    {EVALUATION_PERIODS.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="border-b border-slate-100 -mx-8 px-8 pb-4">
+                <div className="flex space-x-2 overflow-x-auto custom-scrollbar pb-2">
+                  {SUBJECTS_LIST.map(subj => (
+                    <button
+                      key={subj}
+                      onClick={() => setSelectedPeriodicSubject(subj)}
+                      className={`px-4 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border ${selectedPeriodicSubject === subj ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                     >
-                      {periodicAssignments.map(a => (
-                        <option key={a.id} value={a.id}>{a.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Kỳ:</span>
-                    <select
-                      value={evaluationPeriod}
-                      onChange={(e) => setEvaluationPeriod(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                    >
-                      {EVALUATION_PERIODS.map(p => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
+                      {subj}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1681,37 +1798,43 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <thead>
                       <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
                         <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
-                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">({selectedAssignment?.title})</span></th>
+                        <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">(Toán, TV)</span></th>
                         <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
                         <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
                         <th className="py-3 px-4 font-black text-center">Thời điểm đánh giá</th>
                       </tr>
                     </thead>
-                    <tbody key={`${selectedAssignmentId}-${evaluationPeriod}`} className="text-xs font-medium text-slate-600">
+                    <tbody key={`${storageKey}`} className="text-xs font-medium text-slate-600">
                       {filteredStudents.map(s => {
-                        const grade = selectedAssignment?.grades.find(g => g.studentId === s.id);
-                        const eval27 = getCircular27Evaluation(grade?.score || '');
-                        const finalSubject = manualEvaluations[s.id]?.subject || eval27.subject;
+                        const studentEval = manualEvaluations[s.id] || {};
+                        const score = studentEval.score || '';
+                        const feedback = studentEval.feedback || '';
+                        const finalSubject = studentEval.subject || getCircular27Evaluation(score).subject;
                         const displaySubjectEval = finalSubject === 'Hoàn thành tốt' ? 'T' : finalSubject === 'Hoàn thành' ? 'H' : finalSubject === 'Chưa hoàn thành' ? 'C' : '-';
+                        const isScoreSubject = ['Toán', 'Tiếng Việt'].includes(selectedPeriodicSubject);
 
                         return (
                           <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
                             <td className="p-0 border-r border-slate-100">
-                              <input
-                                type="text"
-                                className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
-                                value={grade?.score || ''}
-                                onChange={(e) => handleScoreChange(s.id, e.target.value)}
-                                onPaste={(e) => handlePasteScores(e, s.id)}
-                                placeholder="-"
-                              />
+                              {isScoreSubject ? (
+                                <input
+                                  type="text"
+                                  className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-center font-black text-indigo-600 placeholder-slate-300"
+                                  value={score}
+                                  onChange={(e) => handlePeriodicScoreChange(s.id, e.target.value)}
+                                  onPaste={(e) => handlePastePeriodicScores(e, s.id)}
+                                  placeholder="Điểm"
+                                />
+                              ) : (
+                                <div className="w-full h-full px-4 py-3 text-center text-slate-300 italic text-xs">Không áp dụng</div>
+                              )}
                             </td>
                             <td
                               tabIndex={0}
                               className="py-3 px-4 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100 outline-none focus:bg-indigo-50"
-                              onClick={() => handleManualChange(s.id, 'subject', 0, finalSubject)}
-                              onPaste={(e) => handlePasteSubjectLevels(e, s.id)}
+                              onClick={() => handlePeriodicLevelChange(s.id, finalSubject)}
+                              onPaste={(e) => handlePastePeriodicLevels(e, s.id)}
                             >
                               <span className={`px-2 py-1 rounded-lg text-[10px] font-bold select-none ${finalSubject === 'Hoàn thành tốt' ? 'bg-emerald-100 text-emerald-700' : finalSubject === 'Hoàn thành' ? 'bg-blue-100 text-blue-700' : finalSubject === 'Chưa hoàn thành' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
                                 {displaySubjectEval}
@@ -1721,9 +1844,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                               <input
                                 type="text"
                                 className="w-full h-full px-4 py-3 bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-600 placeholder-slate-300"
-                                value={grade?.feedback || ''}
-                                onChange={(e) => handleFeedbackChange(s.id, e.target.value)}
-                                placeholder="Nhập nhận xét..."
+                                value={feedback}
+                                onChange={(e) => handlePeriodicFeedbackChange(s.id, e.target.value)}
+                                placeholder="Nhận xét tự động..."
                               />
                             </td>
                             <td className="py-3 px-4 text-center">{evaluationPeriod}</td>
