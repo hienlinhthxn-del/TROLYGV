@@ -224,7 +224,8 @@ export class GeminiService {
     const seed = Math.floor(Math.random() * 9999);
     // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
     // Đây là một giải pháp tạm thời để có tính năng.
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=video&seed=${seed}&nologo=true`;
+    // Thêm width và height để tăng độ ổn định cho việc tạo video.
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=video&width=1024&height=576&seed=${seed}&nologo=true`;
   }
 
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
