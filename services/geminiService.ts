@@ -224,8 +224,10 @@ export class GeminiService {
     const seed = Math.floor(Math.random() * 9999);
     // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
     // Đây là một giải pháp tạm thời để có tính năng.
-    // Bỏ width và height vì có thể gây ra lỗi trả về ảnh thay vì video.
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=video&seed=${seed}&nologo=true`;
+    // Thêm các từ khóa "video, animation" để tăng khả năng AI hiểu đúng yêu cầu,
+    // ngay cả khi prompt đầu vào là tiếng Việt.
+    const finalPrompt = `${prompt}, video, animation, cinematic`;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=video&seed=${seed}&nologo=true`;
   }
 
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
