@@ -22,6 +22,15 @@ const COGNITIVE_LEVELS: CognitiveLevel[] = ['Nhận biết', 'Thông hiểu', 'V
 interface LevelConfig { mcq: number; essay: number; }
 interface StrandConfig { [strandName: string]: { [level in CognitiveLevel]: LevelConfig; }; }
 
+interface SavedExam {
+  id: string;
+  name: string;
+  questions: ExamQuestion[];
+  readingPassage: string;
+  examHeader: string;
+  timestamp: string;
+}
+
 const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartPractice, onCreateAssignment }) => {
   const [config, setConfig] = useState({ subject: 'Toán', grade: '1', topic: '' });
   const [strandMatrix, setStrandMatrix] = useState<StrandConfig>({});
@@ -36,6 +45,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [savedExams, setSavedExams] = useState<SavedExam[]>([]);
   const [pendingImportFile, setPendingImportFile] = useState<Attachment | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +82,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
+  }, [showImportModal]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('edu_exam_history');
+    if (saved) {
+      setSavedExams(JSON.parse(saved));
+    }
   }, [showImportModal]);
 
   useEffect(() => {
@@ -285,6 +303,85 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     text += "---------------------------------------------------------------\nĐÁP ÁN VÀ HƯỚNG DẪN CHẤM\n\n";
     questions.forEach((q, i) => text += `Câu ${i + 1}: ${q.answer}\n${q.explanation ? `(Giải thích: ${q.explanation})\n` : ''}\n`);
     onExportToWorkspace(text);
+  };
+
+  const handleShuffleQuestions = () => {
+    if (questions.length < 2) return;
+    setQuestions(prev => {
+      const shuffled = [...prev];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    });
+    alert("Đã xáo trộn thứ tự các câu hỏi.");
+  };
+
+  const handleShuffleAnswers = () => {
+    setQuestions(prev => {
+      const newQuestions = prev.map(q => {
+        if (q.type !== 'Trắc nghiệm' || !q.options || q.options.length < 2) {
+          return q;
+        }
+
+        const answerPrefixMatch = q.answer.match(/^[A-D][\.\:]\s*/);
+        const correctAnswerText = answerPrefixMatch
+          ? q.answer.substring(answerPrefixMatch[0].length)
+          : q.answer;
+
+        const originalOption = q.options.find(opt => opt.trim() === correctAnswerText.trim());
+        if (!originalOption) {
+          return q;
+        }
+
+        const shuffledOptions = [...q.options];
+        for (let i = shuffledOptions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+        }
+
+        const newCorrectIndex = shuffledOptions.findIndex(opt => opt.trim() === originalOption.trim());
+        if (newCorrectIndex === -1) return q;
+
+        const newAnswerLetter = String.fromCharCode('A'.charCodeAt(0) + newCorrectIndex);
+        const newAnswer = `${newAnswerLetter}. ${originalOption}`;
+
+        return { ...q, options: shuffledOptions, answer: newAnswer };
+      });
+      return newQuestions;
+    });
+    alert("Đã xáo trộn các đáp án trắc nghiệm.");
+  };
+
+  const handleSaveExam = () => {
+    if (questions.length === 0) return;
+    const examName = prompt("Nhập tên để lưu đề thi này:", examHeader.split('\n')[0] || `Đề thi ngày ${new Date().toLocaleDateString()}`);
+    if (!examName) return;
+
+    const newExam: SavedExam = {
+      id: Date.now().toString(), name: examName, questions, readingPassage, examHeader, timestamp: new Date().toISOString(),
+    };
+
+    const updatedHistory = [newExam, ...savedExams.filter(e => e.id !== newExam.id)].slice(0, 20);
+    setSavedExams(updatedHistory);
+    localStorage.setItem('edu_exam_history', JSON.stringify(updatedHistory));
+    alert("Đã lưu đề thi thành công!");
+  };
+
+  const handleLoadExam = (exam: SavedExam) => {
+    if (questions.length > 0 && !window.confirm("Thao tác này sẽ thay thế đề thi hiện tại. Bạn có chắc chắn?")) return;
+    setQuestions(exam.questions);
+    setReadingPassage(exam.readingPassage);
+    setExamHeader(exam.examHeader);
+    setShowHistory(false);
+  };
+
+  const handleDeleteExam = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = savedExams.filter(p => p.id !== id);
+    setSavedExams(updated);
+    localStorage.setItem('edu_exam_history', JSON.stringify(updated));
   };
 
   const handleCreateAssignment = () => {
@@ -588,6 +685,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           <div className="flex items-center space-x-2">
             {questions.length > 0 && (
               <>
+                <button onClick={handleShuffleQuestions} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-slate-100 transition-all" title="Xáo trộn thứ tự các câu hỏi">
+                  <i className="fas fa-random mr-2"></i>Xáo câu
+                </button>
+                <button onClick={handleShuffleAnswers} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-slate-100 transition-all" title="Xáo trộn thứ tự các đáp án trắc nghiệm">
+                  <i className="fas fa-shuffle mr-2"></i>Xáo đáp án
+                </button>
+                <button onClick={handleSaveExam} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition-all">
+                  <i className="fas fa-save mr-2"></i>Lưu đề
+                </button>
+              </>
+            )}
+            {questions.length > 0 && (
+              <>
                 <div className="flex space-x-1">
                   <button onClick={() => handleShareLink('link')} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-l-xl rounded-r-none text-[10px] font-black uppercase border border-rose-100 hover:bg-rose-100 transition-all border-r-0">
                     <i className="fas fa-share-nodes mr-2"></i>Chia sẻ Link
@@ -608,6 +718,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 )}
               </>
             )}
+            <button onClick={() => setShowHistory(true)} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-slate-100 transition-all">
+              <i className="fas fa-clock-rotate-left mr-2"></i>Đề đã lưu
+            </button>
             <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase border border-emerald-100 hover:bg-emerald-100 transition-all">
               <i className="fas fa-file-import mr-2"></i>Nhập đề cũ
             </button>
@@ -931,6 +1044,36 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                   {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ File)</span></>}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHistory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 p-8 animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-6 shrink-0">
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-800">Lịch sử đề đã lưu</h3>
+              <button onClick={() => setShowHistory(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+              {savedExams.length > 0 ? (
+                savedExams.map(exam => (
+                  <div key={exam.id} onClick={() => handleLoadExam(exam)} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all group relative">
+                    <div className="font-bold text-sm text-slate-800 line-clamp-1 mb-1">{exam.name}</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-slate-400 font-medium uppercase">{exam.questions.length} câu hỏi</span>
+                      <span className="text-[10px] text-slate-400">{new Date(exam.timestamp).toLocaleString('vi-VN')}</span>
+                    </div>
+                    <button onClick={(e) => handleDeleteExam(exam.id, e)} className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-rose-50">
+                      <i className="fas fa-trash-alt text-xs"></i>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-10">Chưa có đề thi nào được lưu.</p>
+              )}
             </div>
           </div>
         </div>
