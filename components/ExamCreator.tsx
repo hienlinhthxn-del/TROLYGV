@@ -5,8 +5,8 @@ import { geminiService, FilePart } from '../services/geminiService';
 
 interface ExamCreatorProps {
   onExportToWorkspace: (content: string) => void;
-  onStartPractice?: (subject: string, grade: string, questions: ExamQuestion[]) => void;
-  onCreateAssignment?: (title: string) => void;
+  onStartPractice?: (subject: string, grade: string, questions: ExamQuestion[], assignmentId: string | null) => void;
+  onCreateAssignment?: (title: string) => string; // Returns the new assignment ID
 }
 
 const SUBJECT_STRANDS: Record<string, string[]> = {
@@ -31,6 +31,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [viewMode, setViewMode] = useState<'config' | 'matrix'>('config');
   const [examHeader, setExamHeader] = useState<string>('');
   const [editingStrand, setEditingStrand] = useState<string | null>(null);
+  const [createdAssignmentId, setCreatedAssignmentId] = useState<string | null>(null);
   const [tempStrandName, setTempStrandName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -290,6 +291,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     if (onCreateAssignment) {
       const title = examHeader.split('\n')[0] || `Bài kiểm tra ${config.subject}`;
       onCreateAssignment(title);
+      const newId = onCreateAssignment(title);
+      setCreatedAssignmentId(newId);
     }
   };
 
@@ -352,6 +355,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         return {
           s: config.subject,
           g: config.grade,
+          aid: createdAssignmentId,
           q: questions.map(q => {
             // [type, content, options, answer, explanation, image]
             let explanation = q.explanation || '';
@@ -593,12 +597,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                   </button>
                 </div>
                 {onCreateAssignment && (
-                  <button onClick={handleCreateAssignment} className="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase border border-purple-100 hover:bg-purple-100 transition-all" title="Tạo cột điểm trong Quản lý lớp để theo dõi kết quả">
-                    <i className="fas fa-list-check mr-2"></i>Tạo bài tập
+                  <button onClick={handleCreateAssignment} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${createdAssignmentId ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-purple-50 text-purple-600 border-purple-100 hover:bg-purple-100'}`} title="Tạo cột điểm trong Quản lý lớp để theo dõi kết quả">
+                    <i className={`fas ${createdAssignmentId ? 'fa-check-circle' : 'fa-list-check'} mr-2`}></i>{createdAssignmentId ? 'Đã tạo' : 'Tạo bài tập'}
                   </button>
                 )}
                 {onStartPractice && (
-                  <button onClick={() => onStartPractice(config.subject, config.grade, questions)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
+                  <button onClick={() => onStartPractice(config.subject, config.grade, questions, createdAssignmentId)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-100 transition-all">
                     <i className="fas fa-play mr-2"></i>Luyện tập ngay
                   </button>
                 )}

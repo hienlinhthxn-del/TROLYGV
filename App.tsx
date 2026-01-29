@@ -382,8 +382,8 @@ const App: React.FC = () => {
     localStorage.setItem('edu_workspace_content', content);
   };
 
-  const startPractice = (subject: string, grade: string, questions: ExamQuestion[]) => {
-    setPracticeData({ subject, grade, questions });
+  const startPractice = (subject: string, grade: string, questions: ExamQuestion[], assignmentId: string | null) => {
+    setPracticeData({ subject, grade, questions, assignmentId });
     setView('practice');
   };
 
