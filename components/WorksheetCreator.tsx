@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { generateWorksheetContentDetailed } from '../services/geminiService';
-import { generate_image } from '../services/imageService';
+import { generateWorksheetContentDetailed, geminiService } from '../services/geminiService';
 
 interface WorksheetQuestion {
     id: string;
@@ -144,7 +143,7 @@ const WorksheetCreator: React.FC = () => {
                     }
                     setProgress(`Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
                     try {
-                        const imageUrl = await generate_image(promptToUse);
+                        const imageUrl = await geminiService.generateImage(promptToUse);
                         updatedQuestions[i].imageUrl = imageUrl;
                         setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
                     } catch (error) {
@@ -166,7 +165,7 @@ const WorksheetCreator: React.FC = () => {
         const promptToRetry = q.imagePrompt || q.question;
         setProgress(`Đang vẽ lại hình minh họa câu ${index + 1}...`);
         try {
-            const imageUrl = await generate_image(promptToRetry);
+            const imageUrl = await geminiService.generateImage(promptToRetry);
             updatedQuestions[index].imageUrl = imageUrl;
             setWorksheet({ ...worksheet, questions: updatedQuestions });
             setProgress('Đã vẽ lại ảnh mới!');
