@@ -20,12 +20,17 @@ interface SavedLessonPlan {
 }
 
 // Component Quiz Player nội bộ
-const QuizPlayer: React.FC<{ data: any[] }> = ({ data }) => {
+const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onShare }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showScore, setShowScore] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [timeLeft, setTimeLeft] = useState(15);
+
+  useEffect(() => {
+    setTimeLeft(15);
+  }, [currentIndex]);
 
   const handleAnswerClick = (option: string) => {
     if (selectedOption) return; // Chặn click nhiều lần
@@ -35,7 +40,7 @@ const QuizPlayer: React.FC<{ data: any[] }> = ({ data }) => {
     setIsCorrect(correct);
 
     if (correct) {
-      setScore(score + 1);
+      setScore(prev => prev + 1);
     }
 
     // Tự động chuyển câu sau 2s
@@ -51,12 +56,28 @@ const QuizPlayer: React.FC<{ data: any[] }> = ({ data }) => {
     }, 2000);
   };
 
+  useEffect(() => {
+    if (showScore || selectedOption) return;
+
+    if (timeLeft === 0) {
+      handleAnswerClick('TIMEOUT');
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, showScore, selectedOption]);
+
   const restartQuiz = () => {
     setCurrentIndex(0);
     setScore(0);
     setShowScore(false);
     setSelectedOption(null);
     setIsCorrect(null);
+    setTimeLeft(15);
   };
 
   if (showScore) {
@@ -78,7 +99,18 @@ const QuizPlayer: React.FC<{ data: any[] }> = ({ data }) => {
     <div className="flex flex-col h-full p-4">
       <div className="flex justify-between items-center mb-6">
         <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Câu hỏi {currentIndex + 1}/{data.length}</span>
-        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
+        <div className={`flex items-center space-x-1 px-3 py-1 rounded-full border ${timeLeft <= 5 ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+          <i className="fas fa-clock text-xs"></i>
+          <span className="text-xs font-black w-5 text-center">{timeLeft}s</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          {onShare && (
+            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center">
+              <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
+            </button>
+          )}
+          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
@@ -396,6 +428,52 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
       alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleShareQuiz = async () => {
+    if (!result || !Array.isArray(result)) return;
+
+    try {
+      const quizData = {
+        s: subject,
+        g: grade,
+        q: result.map((q: any) => ([
+          1, // MCQ type
+          q.question,
+          q.options,
+          q.answer,
+          q.explanation,
+          '' // Image
+        ]))
+      };
+
+      const json = JSON.stringify(quizData);
+      let finalCode = '';
+
+      // @ts-ignore
+      if (window.CompressionStream) {
+        const stream = new Blob([json]).stream();
+        // @ts-ignore
+        const compressed = stream.pipeThrough(new CompressionStream('gzip'));
+        const response = new Response(compressed);
+        const blob = await response.blob();
+        const buffer = await blob.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      } else {
+        const utf8Bytes = new TextEncoder().encode(json);
+        let binary = '';
+        utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
+        finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      await navigator.clipboard.writeText(url);
+      alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
+    } catch (e) {
+      console.error("Share error", e);
+      alert("Lỗi khi tạo link chia sẻ.");
     }
   };
 
@@ -935,7 +1013,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
                   ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
-                    <QuizPlayer data={result} />
+                    <QuizPlayer data={result} onShare={handleShareQuiz} />
                   ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">
