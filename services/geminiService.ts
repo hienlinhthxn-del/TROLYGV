@@ -94,6 +94,59 @@ export class GeminiService {
     if (!this.genAI) throw new Error("Chưa có API Key. Thầy/Cô hãy kiểm tra lại cấu hình nhé!");
   }
 
+  // --- FALLBACK PROVIDERS (OpenAI / Claude) ---
+
+  private getOtherApiKey(provider: 'openai' | 'anthropic'): string {
+    const keyName = provider === 'openai' ? 'VITE_OPENAI_API_KEY' : 'VITE_ANTHROPIC_API_KEY';
+    const localKey = localStorage.getItem(provider + '_api_key');
+    if (localKey) return localKey;
+    return (import.meta as any).env?.[keyName] || (window as any)[keyName] || '';
+  }
+
+  private async fallbackToOtherProviders(prompt: string, isJson: boolean = false): Promise<string> {
+    // 1. Thử OpenAI (GPT-4o-mini)
+    const openaiKey = this.getOtherApiKey('openai');
+    if (openaiKey) {
+      this.setStatus("Đang chuyển sang OpenAI (GPT)...");
+      try {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: isJson ? { type: "json_object" } : undefined
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        return data.choices[0].message.content;
+      } catch (e) { console.warn("OpenAI Fallback Error:", e); }
+    }
+
+    // 2. Thử Anthropic (Claude 3 Haiku)
+    const anthropicKey = this.getOtherApiKey('anthropic');
+    if (anthropicKey) {
+      this.setStatus("Đang chuyển sang Claude...");
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'dangerously-allow-browser': 'true' },
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 4096,
+            messages: [{ role: 'user', content: prompt + (isJson ? "\n\nIMPORTANT: Respond with valid JSON only." : "") }]
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        return data.content[0].text;
+      } catch (e) { console.warn("Anthropic Fallback Error:", e); }
+    }
+
+    throw new Error("Hết lượt dùng Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude). Thầy Cô vui lòng đợi 1-2 phút hoặc nhập Key cá nhân.");
+  }
+
   // --- TRÒ CHUYỆN (Chat & Streaming) ---
 
   public async initChat(instruction: string) {
@@ -138,7 +191,11 @@ export class GeminiService {
       ]);
       return result.response.text();
     } catch (error: any) {
-      return this.handleError(error, () => this.generateText(prompt));
+      try {
+        return await this.handleError(error, () => this.generateText(prompt));
+      } catch (finalError) {
+        return this.fallbackToOtherProviders(`${this.currentInstruction}\n\nYêu cầu: ${prompt}`);
+      }
     }
   }
 
@@ -196,7 +253,13 @@ export class GeminiService {
       return json;
     } catch (error: any) {
       console.error("Lỗi AI:", error);
-      return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
+      try {
+        return await this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
+      } catch (finalError) {
+        if (fileParts && fileParts.length > 0) throw finalError; // Fallback chưa hỗ trợ file
+        const text = await this.fallbackToOtherProviders(fullPrompt, true);
+        return this.parseJSONSafely(text);
+      }
     }
   }
 
@@ -244,7 +307,12 @@ export class GeminiService {
       return this.parseJSONSafely(text);
     } catch (error: any) {
       console.error("Lỗi tạo ô chữ:", error);
-      return this.handleError(error, () => this.generateCrossword(topic, size, wordCount));
+      try {
+        return await this.handleError(error, () => this.generateCrossword(topic, size, wordCount));
+      } catch (finalError) {
+        const text = await this.fallbackToOtherProviders(prompt, true);
+        return this.parseJSONSafely(text);
+      }
     }
   }
 
@@ -280,7 +348,12 @@ export class GeminiService {
       return this.parseJSONSafely(text);
     } catch (error: any) {
       console.error("Lỗi tạo Quiz:", error);
-      return this.handleError(error, () => this.generateQuiz(topic, count));
+      try {
+        return await this.handleError(error, () => this.generateQuiz(topic, count));
+      } catch (finalError) {
+        const text = await this.fallbackToOtherProviders(prompt, true);
+        return this.parseJSONSafely(text);
+      }
     }
   }
 
