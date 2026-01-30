@@ -184,6 +184,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [useTemplateMode, setUseTemplateMode] = useState(false);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [planFile, setPlanFile] = useState<File | null>(null);
+  const [additionalPrompt, setAdditionalPrompt] = useState('');
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -334,12 +335,36 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           setIsProcessing(false);
           return;
         }
-        prompt = `Hãy soạn một GIÁO ÁN CHI TIẾT theo đúng quy định của CÔNG VĂN 2345/BGDĐT-GDTH cho cấp Tiểu học. 
+        prompt = `Hãy soạn một GIÁO ÁN CHI TIẾT theo đúng quy định của CÔNG VĂN 2345/BGDĐT-GDTH cho cấp Tiểu học.
         Môn học: ${subject}. Lớp: ${grade}. 
         Tên bài dạy: "${topic}".
         
+        ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN:
+        "${additionalPrompt}"` : ''}
+
+        YÊU CẦU VỀ HÌNH THỨC VÀ TRÌNH BÀY (BẮT BUỘC):
+        - **Phông chữ & Định dạng:** Soạn thảo nội dung với tư duy sử dụng phông chữ **Times New Roman**, cỡ chữ 13-14 (chuẩn văn bản hành chính Việt Nam).
+        - **Trình bày:** Văn bản phải khoa học, các mục lớn (I, II, III...) in đậm rõ ràng, tách biệt.
+        - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm chuẩn mực, trong sáng, súc tích.
+        - **Kỹ thuật:** Trình bày dưới dạng Markdown chuẩn để khi copy sang Word không bị lỗi định dạng.
+        
         Yêu cầu cấu trúc giáo án phải có đầy đủ các mục:
-        I. MỤC TIÊU: ... (như cũ) ...
+        I. MỤC TIÊU:
+        1. Kiến thức: Nêu cụ thể kiến thức đạt được.
+        2. Năng lực: (Năng lực chung và năng lực đặc thù môn học).
+        3. Phẩm chất: (Yêu nước, nhân ái, chăm chỉ, trung thực, trách nhiệm).
+        
+        II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU:
+        - Liệt kê đồ dùng của giáo viên và học sinh.
+        
+        III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU:
+        1. Hoạt động Khởi động (Mở đầu): Ổn định và kết nối kiến thức cũ.
+        2. Hoạt động Hình thành kiến thức mới (Khám phá): Tiến trình tổ chức cụ thể.
+        3. Hoạt động Luyện tập, thực hành: Các bài tập củng cố.
+        4. Hoạt động Vận dụng, trải nghiệm: Gắn liền thực tiễn.
+        
+        IV. ĐIỀU CHỈNH SAU BÀI DẠY (Nếu có).
+
         Lưu ý: Nội dung phải sáng tạo, sinh động, phù hợp tâm sinh lý lứa tuổi tiểu học.`;
       }
 
@@ -1037,6 +1062,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     onChange={e => setTopic(e.target.value)}
                     placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? (gameType === 'crossword' ? 'VD: Động vật hoang dã' : gameType === 'quiz' ? 'VD: Lịch sử Việt Nam' : 'VD: Phép nhân số có 1 chữ số...') : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
                     className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
+                  />
+                </div>
+              )}
+
+              {!showHistory && activeTab === 'lesson_plan' && !useTemplateMode && (
+                <div className="mt-3">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
+                  <textarea
+                    value={additionalPrompt}
+                    onChange={e => setAdditionalPrompt(e.target.value)}
+                    placeholder="VD: Soạn kỹ phần khởi động, thêm trò chơi, chú trọng phẩm chất nhân ái..."
+                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none leading-relaxed"
                   />
                 </div>
               )}
