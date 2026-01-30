@@ -311,6 +311,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           Đóng vai trò là một chuyên gia sư phạm và trợ lý giáo viên đắc lực.
           Nhiệm vụ của bạn là soạn thảo một GIÁO ÁN CHI TIẾT (Kế hoạch bài dạy) dựa trên hai nguồn thông tin đầu vào sau đây:
 
+          ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN:
+          "${additionalPrompt}"` : ''}
+
           1. CẤU TRÚC VÀ ĐỊNH DẠNG (FILE MẪU):
           Hãy tuân thủ chặt chẽ cấu trúc các mục, các phần trình bày trong văn bản dưới đây:
           """
@@ -1066,7 +1069,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && activeTab === 'lesson_plan' && !useTemplateMode && (
+              {!showHistory && activeTab === 'lesson_plan' && (
                 <div className="mt-3">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
                   <textarea
