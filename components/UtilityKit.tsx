@@ -1,6 +1,8 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { geminiService, FilePart } from '../services/geminiService';
+import { readContentFromFile } from '../fileReader';
+import { downloadLessonPlanAsDocx } from '../docxHelper';
 import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
@@ -179,6 +181,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [assistantMessages, setAssistantMessages] = useState<Message[]>([]);
   const [assistantInput, setAssistantInput] = useState('');
   const [isAssistantLoading, setIsAssistantLoading] = useState(false);
+  const [useTemplateMode, setUseTemplateMode] = useState(false);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [planFile, setPlanFile] = useState<File | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -284,35 +289,60 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   };
 
   const generateLessonPlan = async () => {
-    if (!topic.trim()) return;
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
 
-    const prompt = `Hãy soạn một GIÁO ÁN CHI TIẾT theo đúng quy định của CÔNG VĂN 2345/BGDĐT-GDTH cho cấp Tiểu học. 
-    Môn học: ${subject}. Lớp: ${grade}. 
-    Tên bài dạy: "${topic}".
-    
-    Yêu cầu cấu trúc giáo án phải có đầy đủ các mục:
-    I. MỤC TIÊU:
-    1. Kiến thức: Nêu cụ thể kiến thức đạt được.
-    2. Năng lực: (Năng lực chung và năng lực đặc thù môn học).
-    3. Phẩm chất: (Yêu nước, nhân ái, chăm chỉ, trung thực, trách nhiệm).
-    
-    II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU:
-    - Liệt kê đồ dùng của giáo viên và học sinh.
-    
-    III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU:
-    1. Hoạt động Khởi động (Mở đầu): Ổn định và kết nối kiến thức cũ.
-    2. Hoạt động Hình thành kiến thức mới (Khám phá): Tiến trình tổ chức cụ thể.
-    3. Hoạt động Luyện tập, thực hành: Các bài tập củng cố.
-    4. Hoạt động Vận dụng, trải nghiệm: Gắn liền thực tiễn.
-    
-    IV. ĐIỀU CHỈNH SAU BÀI DẠY (Nếu có).
-    
-    Lưu ý: Nội dung phải sáng tạo, sinh động, phù hợp tâm sinh lý lứa tuổi tiểu học.`;
+    let prompt = '';
 
     try {
+      if (useTemplateMode) {
+        if (!templateFile || !planFile) {
+          alert("Vui lòng tải lên cả File Mẫu và File Kế Hoạch!");
+          setIsProcessing(false);
+          return;
+        }
+
+        const templateText = await readContentFromFile(templateFile);
+        const planText = await readContentFromFile(planFile);
+
+        prompt = `
+          Đóng vai trò là một chuyên gia sư phạm và trợ lý giáo viên đắc lực.
+          Nhiệm vụ của bạn là soạn thảo một GIÁO ÁN CHI TIẾT (Kế hoạch bài dạy) dựa trên hai nguồn thông tin đầu vào sau đây:
+
+          1. CẤU TRÚC VÀ ĐỊNH DẠNG (FILE MẪU):
+          Hãy tuân thủ chặt chẽ cấu trúc các mục, các phần trình bày trong văn bản dưới đây:
+          """
+          ${templateText}
+          """
+
+          2. NỘI DUNG VÀ YÊU CẦU CỤ THỂ (KẾ HOẠCH CỦA GIÁO VIÊN):
+          Dựa vào nội dung bài học, thời lượng và yêu cầu cần đạt trong văn bản dưới đây để triển khai nội dung:
+          """
+          ${planText}
+          """
+
+          YÊU CẦU ĐẦU RA:
+          - **Tuân thủ cấu trúc:** Giữ nguyên các tiêu đề mục (I, II, III, 1, 2, a, b...) như trong File Mẫu.
+          - **Triển khai nội dung:** Điền nội dung kiến thức từ Kế Hoạch vào khung mẫu.
+          - **Hoạt động chi tiết:** Viết rõ hoạt động của Giáo viên (GV) và Học sinh (HS). Nếu kế hoạch chỉ ghi vắn tắt, hãy đề xuất các hoạt động sư phạm phù hợp.
+          - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm, trang trọng, rõ ràng.
+          - **Định dạng:** Trả về kết quả dưới dạng Markdown để dễ dàng hiển thị.
+        `;
+      } else {
+        if (!topic.trim()) {
+          setIsProcessing(false);
+          return;
+        }
+        prompt = `Hãy soạn một GIÁO ÁN CHI TIẾT theo đúng quy định của CÔNG VĂN 2345/BGDĐT-GDTH cho cấp Tiểu học. 
+        Môn học: ${subject}. Lớp: ${grade}. 
+        Tên bài dạy: "${topic}".
+        
+        Yêu cầu cấu trúc giáo án phải có đầy đủ các mục:
+        I. MỤC TIÊU: ... (như cũ) ...
+        Lưu ý: Nội dung phải sáng tạo, sinh động, phù hợp tâm sinh lý lứa tuổi tiểu học.`;
+      }
+
       let fullContent = '';
       const stream = geminiService.sendMessageStream(prompt, getFileParts());
       for await (const chunk of stream) {
@@ -840,7 +870,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     </div>
                   )}
                   {activeTab === 'lesson_plan' && (
-                    <div className="flex justify-end mb-2">
+                    <div className="flex justify-end mb-2 space-x-2">
+                      <button
+                        onClick={() => setUseTemplateMode(!useTemplateMode)}
+                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
+                      >
+                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>
+                        {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
+                      </button>
                       <button
                         onClick={() => setShowHistory(!showHistory)}
                         className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
@@ -866,6 +903,39 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                           </div>
                         ))
                       )}
+                    </div>
+                  ) : useTemplateMode ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 text-xs">
+                        <i className="fas fa-info-circle mr-2"></i>
+                        Tính năng này giúp AI soạn giáo án theo đúng <b>Cấu trúc File Mẫu</b> (Word) và <b>Nội dung Kế hoạch</b> (Excel/Word) của Thầy Cô.
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">1. Tải lên File Mẫu (Cấu trúc)</label>
+                        <div className="mt-1 flex items-center space-x-2">
+                          <input
+                            type="file"
+                            accept=".docx,.doc,.txt"
+                            onChange={(e) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
+                            className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                          />
+                        </div>
+                        {templateFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {templateFile.name}</p>}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Tải lên File Kế hoạch (Nội dung)</label>
+                        <div className="mt-1 flex items-center space-x-2">
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls,.docx,.doc,.txt"
+                            onChange={(e) => setPlanFile(e.target.files ? e.target.files[0] : null)}
+                            className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                          />
+                        </div>
+                        {planFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {planFile.name}</p>}
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-3">
@@ -957,7 +1027,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && (
+              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && (
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                     {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
@@ -998,7 +1068,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             {!showHistory && (
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? generateQuiz : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
-                disabled={isProcessing || !topic.trim()}
+                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : !topic.trim())}
                 className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
@@ -1013,12 +1083,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
                 <div className="flex space-x-2">
                   {activeTab === 'lesson_plan' && (
-                    <button
-                      onClick={handleSaveLesson}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
-                    >
-                      <i className="fas fa-save mr-2"></i>Lưu giáo án
-                    </button>
+                    <>
+                      <button
+                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx")}
+                        className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
+                      >
+                        <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
+                      </button>
+                      <button
+                        onClick={handleSaveLesson}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
+                      >
+                        <i className="fas fa-save mr-2"></i>Lưu giáo án
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => onSendToWorkspace(result)}

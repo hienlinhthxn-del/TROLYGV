@@ -2458,15 +2458,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       {showPasteModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowPasteModal(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 p-8 pb-0 shrink-0">
               <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán danh sách học sinh</h3>
               <button onClick={() => setShowPasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-6 overflow-y-auto px-8">
               <p className="text-xs text-slate-500 mb-2 font-medium">Copy từ Excel (Cột Mã, Tên, Giới tính) và dán vào đây:</p>
               <textarea
                 value={pasteContent}
@@ -2476,7 +2476,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               />
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 mt-auto p-8 pt-0 shrink-0">
               <button onClick={() => setShowPasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleProcessPaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
                 <i className="fas fa-file-import mr-2"></i>Xử lý & Thêm
@@ -2489,15 +2489,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       {showReviewPasteModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowReviewPasteModal(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 p-8 pb-0 shrink-0">
               <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán bảng điểm & Đánh giá</h3>
               <button onClick={() => { setShowReviewPasteModal(false); setReviewAttachments([]); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-6 overflow-y-auto px-8">
               <p className="text-xs text-slate-500 mb-2 font-medium">Copy danh sách từ Excel hoặc <b>dán ảnh chụp bảng điểm (Ctrl+V)</b> vào đây:</p>
               {reviewAttachments.length > 0 && (
                 <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
@@ -2517,7 +2517,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               />
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 mt-auto p-8 pt-0 shrink-0">
               <button onClick={() => { setShowReviewPasteModal(false); setReviewAttachments([]); }} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleGenerateAIReviewFromPaste} disabled={isGeneratingReview} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 {isGeneratingReview ? (
@@ -2534,15 +2534,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       {showGradePasteModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowGradePasteModal(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 p-8 pb-0 shrink-0">
               <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Dán Bảng điểm & Nhận xét</h3>
               <button onClick={() => setShowGradePasteModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-6 overflow-y-auto px-8">
               <p className="text-xs text-slate-500 mb-2 font-medium">Copy từ Excel (Cột Mã HS/Tên, Điểm, Nhận xét) và dán vào đây:</p>
               <textarea
                 value={gradePasteContent}
@@ -2552,7 +2552,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               />
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 mt-auto p-8 pt-0 shrink-0">
               <button onClick={() => setShowGradePasteModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleProcessGradePaste} className="px-6 py-3 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
                 <i className="fas fa-file-import mr-2"></i>Xử lý & Nhập điểm
@@ -2565,15 +2565,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       {showOnlineResultModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowOnlineResultModal(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl p-8 relative z-10 animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 p-8 pb-0 shrink-0">
               <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Nhập kết quả từ Link Online</h3>
               <button onClick={() => setShowOnlineResultModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-500 transition-all">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-6 overflow-y-auto px-8">
               <p className="text-xs text-slate-500 mb-2 font-medium">Dán toàn bộ tin nhắn chứa mã kết quả (dạng #EDU_RESULT#...) mà học sinh gửi vào đây:</p>
               <textarea
                 value={onlineResultContent}
@@ -2583,7 +2583,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
               />
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 mt-auto p-8 pt-0 shrink-0">
               <button onClick={() => setShowOnlineResultModal(false)} className="px-6 py-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all">Hủy bỏ</button>
               <button onClick={handleProcessOnlineResults} className="px-6 py-3 rounded-xl bg-purple-600 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:bg-purple-700 transition-all">
                 <i className="fas fa-magic mr-2"></i>Phân tích & Nhập điểm

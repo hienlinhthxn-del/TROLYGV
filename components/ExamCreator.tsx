@@ -928,15 +928,15 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       {showImportModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isImporting && setShowImportModal(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 overflow-hidden p-8 animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between mb-8">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-8 p-8 pb-0 shrink-0">
               <div>
                 <h3 className="text-lg font-black uppercase tracking-widest text-slate-800">Số hóa đề thi cũ</h3>
                 <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Bóc tách câu hỏi và hình ảnh từ ảnh/PDF</p>
               </div>
               <button onClick={() => setShowImportModal(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-6 overflow-y-auto p-8 pt-0">
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
@@ -1052,12 +1052,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       {showHistory && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
-          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 p-8 animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between mb-6 shrink-0">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative z-10 animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-6 shrink-0 p-8 pb-4">
               <h3 className="text-lg font-black uppercase tracking-widest text-slate-800">Lịch sử đề đã lưu</h3>
               <button onClick={() => setShowHistory(false)} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times-circle text-2xl"></i></button>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto space-y-3 px-8 pb-8 custom-scrollbar">
               {savedExams.length > 0 ? (
                 savedExams.map(exam => (
                   <div key={exam.id} onClick={() => handleLoadExam(exam)} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all group relative">
