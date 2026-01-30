@@ -8,6 +8,7 @@ import Crossword from './Crossword';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
+  onSaveToLibrary: (name: string, content: string) => void;
 }
 
 interface SavedLessonPlan {
@@ -158,7 +159,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
   );
 };
 
-const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
+const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibrary }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant'>('games');
   const [subject, setSubject] = useState('Toán');
   const [gameType, setGameType] = useState<'idea' | 'crossword' | 'quiz'>('idea');
@@ -644,6 +645,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     setShowHistory(false);
   };
 
+  const handleSaveToLibrary = () => {
+    if (!result) return;
+    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${subject}`);
+    if (name) {
+      const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      onSaveToLibrary(name, contentToSave);
+      alert("✅ Đã lưu tài liệu vào Thư viện thành công!");
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       <div className="flex items-center justify-between">
@@ -1014,6 +1025,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                     className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
                   >
                     {activeTab === 'lesson_plan' ? 'Đưa vào Giáo án' : 'Đưa vào Soạn thảo'}
+                  </button>
+                  <button
+                    onClick={handleSaveToLibrary}
+                    className="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all"
+                  >
+                    <i className="fas fa-book-bookmark mr-2"></i>Lưu Thư viện
                   </button>
                 </div>
               )}

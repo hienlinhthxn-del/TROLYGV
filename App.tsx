@@ -615,7 +615,7 @@ const App: React.FC = () => {
                 { id: 'worksheet', icon: 'fa-child-reaching', label: 'Phiếu học tập Lớp 1' },
                 { id: 'workspace', icon: 'fa-file-pen', label: 'Soạn thảo tài liệu' },
                 { id: 'classroom', icon: 'fa-users-viewfinder', label: 'Quản lý lớp học' },
-                { id: 'cloud', icon: 'fa-cloud-arrow-up', label: 'Lưu trữ Online' },
+                { id: 'cloud', icon: 'fa-book-bookmark', label: 'Thư viện của tôi' },
                 { id: 'security', icon: 'fa-shield-halved', label: 'Trung tâm Bảo mật' },
               ].map(item => (
                 <button
@@ -686,7 +686,7 @@ const App: React.FC = () => {
             {view === 'exam' && <ExamCreator onExportToWorkspace={sendToWorkspace} onStartPractice={startPractice} onCreateAssignment={handleCreateAssignmentFromExam} />}
             {view === 'worksheet' && <WorksheetCreator />}
             {view === 'cloud' && <CloudDrive documents={cloudDocs} onOpen={handleOpenCloudDoc} onDelete={handleDeleteCloudDoc} />}
-            {view === 'utility' && <UtilityKit onSendToWorkspace={sendToWorkspace} />}
+            {view === 'utility' && <UtilityKit onSendToWorkspace={sendToWorkspace} onSaveToLibrary={handleSaveToCloud} />}
             {view === 'security' && <SecurityCenter onClearAllData={handleClearAllData} />}
           </Suspense>
         </div>
