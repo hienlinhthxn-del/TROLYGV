@@ -166,6 +166,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [topic, setTopic] = useState('');
   const [videoStyle, setVideoStyle] = useState('Hoạt hình đơn giản');
   const [voiceName, setVoiceName] = useState<'Kore' | 'Puck'>('Kore');
+  const [quizCount, setQuizCount] = useState(5);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -422,7 +423,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     setAudioUrl(null);
 
     try {
-      const quizContent = await geminiService.generateQuiz(topic);
+      const quizContent = await geminiService.generateQuiz(topic, quizCount);
       setResult(quizContent);
     } catch (error: any) {
       alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
@@ -803,6 +804,22 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                         <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
                         <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
                       </div>
+                      {gameType === 'quiz' && (
+                        <div className="mt-3 animate-in fade-in slide-in-from-top-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
+                          <div className="flex items-center space-x-2 mt-1">
+                            {[5, 10, 15].map(num => (
+                              <button
+                                key={num}
+                                onClick={() => setQuizCount(num)}
+                                className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                              >
+                                {num} câu
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {activeTab === 'lesson_plan' && (
