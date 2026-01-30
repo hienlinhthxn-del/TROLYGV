@@ -517,14 +517,17 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   };
 
   const handlePlayWithVoiceover = () => {
-    if (!result || !topic || !videoRef.current) return;
+    if (!result || !topic) return;
+
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      return;
+    }
 
     // Dừng mọi giọng nói đang phát
     window.speechSynthesis.cancel();
-
-    // Tua video về đầu và phát
-    videoRef.current.currentTime = 0;
-    videoRef.current.play();
+    setIsPlaying(true);
 
     const utterance = new SpeechSynthesisUtterance(topic);
     utterance.lang = 'vi-VN';
@@ -538,7 +541,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
     }
 
     utterance.onend = () => {
-      // Có thể muốn dừng video khi nói xong, hoặc không. Tạm thời để video chạy tiếp.
+      setIsPlaying(false);
+    };
+    utterance.onerror = () => {
+      setIsPlaying(false);
     };
     window.speechSynthesis.speak(utterance);
   };
@@ -1045,30 +1051,30 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                     </div>
                   ) : activeTab === 'video' ? (
                     <div className="flex flex-col items-center">
-                      <div className="relative group w-full max-w-lg">
-                        <video
-                          ref={videoRef}
+                      <div className="relative group w-full max-w-lg aspect-video bg-black rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
+                        <img
                           src={result}
-                          controls
-                          loop
-                          className="w-full rounded-[32px] shadow-2xl border-4 border-white"
-                          onPlay={() => window.speechSynthesis.resume()}
-                          onPause={() => window.speechSynthesis.pause()}
-                          onEnded={() => window.speechSynthesis.cancel()}
-                        >
-                          Trình duyệt của bạn không hỗ trợ video.
-                        </video>
+                          alt="Video Scene"
+                          className={`w-full h-full object-cover transition-transform duration-[20s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
+                        />
+                        {!isPlaying && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
+                            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm text-indigo-600 pl-1">
+                              <i className="fas fa-play text-2xl"></i>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="mt-8 flex flex-col items-center space-y-3">
                         <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className="px-8 py-4 bg-purple-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 shadow-xl shadow-purple-100 active:scale-95 transition-all">
-                            <i className="fas fa-comment-dots mr-2"></i>Phát kèm Lồng tiếng
+                          <button onClick={handlePlayWithVoiceover} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
+                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
-                          <a href={result} download="Video_AI.mp4" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
-                            <i className="fas fa-download mr-2"></i>Tải Video (Không tiếng)
+                          <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
+                            <i className="fas fa-download mr-2"></i>Tải Ảnh nền
                           </a>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium">Lưu ý: Chức năng lồng tiếng sử dụng giọng đọc của trình duyệt.</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Video được tạo từ công nghệ biến ảnh tĩnh thành động (Ken Burns Effect).</p>
                       </div>
                     </div>
                   ) : activeTab === 'tts' ? (
