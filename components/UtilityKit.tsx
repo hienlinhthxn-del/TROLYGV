@@ -192,7 +192,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const assistantMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const ASSISTANT_PERSONAS = useMemo(() => {
-    const ids = ['lesson-planner', 'student-advisor', 'admin-writer'];
+    const ids = ['lesson-planner', 'student-advisor', 'admin-writer', 'form-creator'];
     return PERSONAS.filter(p => ids.includes(p.id));
   }, []);
 
@@ -332,6 +332,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           - **Hoạt động chi tiết:** Viết rõ hoạt động của Giáo viên (GV) và Học sinh (HS). Nếu kế hoạch chỉ ghi vắn tắt, hãy đề xuất các hoạt động sư phạm phù hợp.
           - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm, trang trọng, rõ ràng.
           - **Định dạng:** Trả về kết quả dưới dạng Markdown để dễ dàng hiển thị.
+          - **QUAN TRỌNG: Không sử dụng dấu hoa thị (*) cho các mục liệt kê hoặc nhấn mạnh. Thay vào đó, hãy dùng dấu gạch ngang (-) cho các mục liệt kê và chỉ in đậm (sử dụng **text**) khi cần nhấn mạnh.**
         `;
       } else {
         if (!topic.trim()) {
@@ -350,6 +351,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         - **Trình bày:** Văn bản phải khoa học, các mục lớn (I, II, III...) in đậm rõ ràng, tách biệt.
         - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm chuẩn mực, trong sáng, súc tích.
         - **Kỹ thuật:** Trình bày dưới dạng Markdown chuẩn để khi copy sang Word không bị lỗi định dạng.
+        - **QUAN TRỌNG: Không sử dụng dấu hoa thị (*) cho các mục liệt kê hoặc nhấn mạnh. Thay vào đó, hãy dùng dấu gạch ngang (-) cho các mục liệt kê và chỉ in đậm (sử dụng **text**) khi cần nhấn mạnh.**
         
         Yêu cầu cấu trúc giáo án phải có đầy đủ các mục:
         I. MỤC TIÊU:
