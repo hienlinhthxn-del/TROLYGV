@@ -401,17 +401,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
   const handleSendAssistantMessage = async () => {
     const messageContent = assistantInput.trim();
-    if (!messageContent || isAssistantLoading || !activeAssistant) return;
+    if ((!messageContent && pendingAttachments.length === 0) || isAssistantLoading || !activeAssistant) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageContent,
+      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${pendingAttachments.length} tệp đính kèm]` : ''),
       timestamp: new Date(),
     };
 
     setAssistantMessages(prev => [...prev, userMessage]);
     setAssistantInput('');
+
+    const currentAttachments = getFileParts();
+    setPendingAttachments([]);
     setIsAssistantLoading(true);
 
     const assistantId = (Date.now() + 1).toString();
@@ -419,7 +422,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
 
     try {
       let fullContent = '';
-      const stream = geminiService.sendMessageStream(messageContent);
+      const stream = geminiService.sendMessageStream(messageContent, currentAttachments);
 
       for await (const chunk of stream) {
         fullContent += chunk.text;
@@ -653,7 +656,33 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                   <div ref={assistantMessagesEndRef} />
                 </div>
                 <div className="p-6 bg-white border-t border-slate-100">
+                  {pendingAttachments.length > 0 && (
+                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2 custom-scrollbar">
+                      {pendingAttachments.map((att, idx) => (
+                        <div key={idx} className="relative shrink-0 group">
+                          {att.type === 'image' ? (
+                            <img src={`data:${att.mimeType};base64,${att.data}`} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                          ) : (
+                            <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
+                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
+                              <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
+                            </div>
+                          )}
+                          <button onClick={() => removeAttachment(idx)} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-md hover:bg-rose-600"><i className="fas fa-times"></i></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-10 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-xl hover:bg-indigo-50 mr-1"
+                      title="Đính kèm tệp (Ảnh, PDF...)"
+                    >
+                      <i className="fas fa-paperclip"></i>
+                    </button>
+                    <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+
                     <textarea
                       value={assistantInput}
                       onChange={e => setAssistantInput(e.target.value)}
@@ -665,7 +694,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                     >
                       <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'}`}></i>
                     </button>
