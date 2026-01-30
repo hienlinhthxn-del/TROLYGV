@@ -185,6 +185,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [planFile, setPlanFile] = useState<File | null>(null);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
+  const [docxFont, setDocxFont] = useState('Times New Roman');
+  const [docxFontSize, setDocxFontSize] = useState(13);
+  const [docxAlignment, setDocxAlignment] = useState<"left" | "center" | "right" | "justify">('justify');
+  const [docxLineSpacing, setDocxLineSpacing] = useState(1.5);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -311,8 +315,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           Đóng vai trò là một chuyên gia sư phạm và trợ lý giáo viên đắc lực.
           Nhiệm vụ của bạn là soạn thảo một GIÁO ÁN CHI TIẾT (Kế hoạch bài dạy) dựa trên hai nguồn thông tin đầu vào sau đây:
 
-          ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN:
-          "${additionalPrompt}"` : ''}
+          ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN (ƯU TIÊN CAO NHẤT):
+          "${additionalPrompt}"
+          Lưu ý: Hãy thực hiện chính xác các yêu cầu này, ưu tiên hơn các nội dung mặc định.` : ''}
 
           1. CẤU TRÚC VÀ ĐỊNH DẠNG (FILE MẪU):
           Hãy tuân thủ chặt chẽ cấu trúc các mục, các phần trình bày trong văn bản dưới đây:
@@ -332,6 +337,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           - **Hoạt động chi tiết:** Viết rõ hoạt động của Giáo viên (GV) và Học sinh (HS). Nếu kế hoạch chỉ ghi vắn tắt, hãy đề xuất các hoạt động sư phạm phù hợp.
           - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm, trang trọng, rõ ràng.
           - **Định dạng:** Trả về kết quả dưới dạng Markdown để dễ dàng hiển thị.
+          - **Tuân thủ chỉ đạo:** Nếu có yêu cầu bổ sung từ giáo viên, hãy thực hiện chính xác, không tự ý thay đổi ý định của giáo viên.
           - **QUAN TRỌNG: Không sử dụng dấu hoa thị (*) cho các mục liệt kê hoặc nhấn mạnh. Thay vào đó, hãy dùng dấu gạch ngang (-) cho các mục liệt kê và chỉ in đậm (sử dụng **text**) khi cần nhấn mạnh.**
         `;
       } else {
@@ -343,14 +349,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         Môn học: ${subject}. Lớp: ${grade}. 
         Tên bài dạy: "${topic}".
         
-        ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN:
-        "${additionalPrompt}"` : ''}
+        ${additionalPrompt ? `YÊU CẦU BỔ SUNG CỤ THỂ TỪ GIÁO VIÊN (ƯU TIÊN CAO NHẤT):
+        "${additionalPrompt}"
+        Lưu ý: Hãy thực hiện chính xác các yêu cầu này.` : ''}
 
         YÊU CẦU VỀ HÌNH THỨC VÀ TRÌNH BÀY (BẮT BUỘC):
         - **Phông chữ & Định dạng:** Soạn thảo nội dung với tư duy sử dụng phông chữ **Times New Roman**, cỡ chữ 13-14 (chuẩn văn bản hành chính Việt Nam).
         - **Trình bày:** Văn bản phải khoa học, các mục lớn (I, II, III...) in đậm rõ ràng, tách biệt.
         - **Ngôn ngữ:** Sử dụng ngôn ngữ sư phạm chuẩn mực, trong sáng, súc tích.
         - **Kỹ thuật:** Trình bày dưới dạng Markdown chuẩn để khi copy sang Word không bị lỗi định dạng.
+        - **Tuân thủ chỉ đạo:** Nếu có yêu cầu bổ sung từ giáo viên, hãy thực hiện chính xác.
         - **QUAN TRỌNG: Không sử dụng dấu hoa thị (*) cho các mục liệt kê hoặc nhấn mạnh. Thay vào đó, hãy dùng dấu gạch ngang (-) cho các mục liệt kê và chỉ in đậm (sử dụng **text**) khi cần nhấn mạnh.**
         
         Yêu cầu cấu trúc giáo án phải có đầy đủ các mục:
@@ -1123,11 +1131,39 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
               {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {activeTab === 'lesson_plan' && (
                     <>
+                      <div className="flex items-center space-x-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                        <select value={docxFont} onChange={e => setDocxFont(e.target.value)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
+                          <option>Times New Roman</option>
+                          <option>Arial</option>
+                          <option>Calibri</option>
+                          <option>Garamond</option>
+                        </select>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <select value={docxFontSize} onChange={e => setDocxFontSize(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
+                          <option>12</option>
+                          <option>13</option>
+                          <option>14</option>
+                        </select>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <select value={docxAlignment} onChange={e => setDocxAlignment(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Căn lề">
+                          <option value="justify">Đều</option>
+                          <option value="left">Trái</option>
+                          <option value="center">Giữa</option>
+                          <option value="right">Phải</option>
+                        </select>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <select value={docxLineSpacing} onChange={e => setDocxLineSpacing(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Giãn dòng">
+                          <option value={1.0}>1.0</option>
+                          <option value={1.15}>1.15</option>
+                          <option value={1.5}>1.5</option>
+                          <option value={2.0}>2.0</option>
+                        </select>
+                      </div>
                       <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx")}
+                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
                       >
                         <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
