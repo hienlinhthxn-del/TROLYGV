@@ -594,9 +594,9 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-white sm:bg-slate-50">
-      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-20 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-all duration-300 ease-out shadow-2xl lg:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-all duration-300 ease-out shadow-2xl lg:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-slate-100">
             <div className="flex items-center space-x-3 mb-2">
@@ -640,7 +640,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden p-0 sm:p-6 lg:pt-2">
+        <div className="flex-1 overflow-hidden p-0 sm:p-6 lg:pt-2 pb-[80px] lg:pb-0">
           <Suspense fallback={<LoadingView />}>
             {view === 'chat' && (
               <div className="h-full flex flex-col max-w-5xl mx-auto bg-white rounded-none sm:rounded-[40px] border-none sm:border border-slate-200 shadow-xl overflow-hidden">
@@ -689,6 +689,30 @@ const App: React.FC = () => {
             {view === 'utility' && <UtilityKit onSendToWorkspace={sendToWorkspace} onSaveToLibrary={handleSaveToCloud} />}
             {view === 'security' && <SecurityCenter onClearAllData={handleClearAllData} />}
           </Suspense>
+        </div>
+
+        {/* Mobile Bottom Navigation */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-between items-center z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <button onClick={() => setView('chat')} className={`flex flex-col items-center space-y-1 ${view === 'chat' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-comment-dots text-xl"></i>
+            <span className="text-[9px] font-bold">Chat AI</span>
+          </button>
+          <button onClick={() => setView('utility')} className={`flex flex-col items-center space-y-1 ${view === 'utility' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-wand-magic-sparkles text-xl"></i>
+            <span className="text-[9px] font-bold">Tiện ích</span>
+          </button>
+          <button onClick={() => setView('classroom')} className={`flex flex-col items-center space-y-1 ${view === 'classroom' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-users-viewfinder text-xl"></i>
+            <span className="text-[9px] font-bold">Lớp học</span>
+          </button>
+          <button onClick={() => setView('cloud')} className={`flex flex-col items-center space-y-1 ${view === 'cloud' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-book-bookmark text-xl"></i>
+            <span className="text-[9px] font-bold">Thư viện</span>
+          </button>
+          <button onClick={() => setIsSidebarOpen(true)} className="flex flex-col items-center space-y-1 text-slate-400">
+            <i className="fas fa-bars text-xl"></i>
+            <span className="text-[9px] font-bold">Menu</span>
+          </button>
         </div>
       </main>
     </div>

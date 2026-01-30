@@ -1818,7 +1818,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <table className="w-full text-left border-collapse min-w-[800px]">
                       <thead>
                         <tr className="text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 bg-slate-50">
-                          <th className="py-3 px-4 font-black border-r border-slate-200">Họ tên</th>
+                          <th className="py-3 px-4 font-black border-r border-slate-200 sticky left-0 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Họ tên</th>
                           <th className="py-3 px-4 font-black text-center border-r border-slate-200">Điểm <span className="text-[9px] font-normal text-slate-400 block">(Toán, TV)</span></th>
                           <th className="py-3 px-4 font-black text-center border-r border-slate-200">Mức đạt được</th>
                           <th className="py-3 px-4 font-black border-r border-slate-200 w-1/3">Nhận xét</th>
@@ -1836,7 +1836,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
                           return (
                             <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                              <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
+                              <td className="py-3 px-4 font-bold text-slate-800 border-r border-slate-100 sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">{s.name} <span className="text-[9px] text-slate-400 font-normal ml-1">({s.code})</span></td>
                               <td className="p-0 border-r border-slate-100">
                                 {isScoreSubject ? (
                                   <input
@@ -1890,9 +1890,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <table className="w-full text-left border-collapse min-w-[1400px]">
                       <thead>
                         <tr className="text-[9px] text-slate-600 uppercase tracking-tighter border border-slate-300 bg-slate-100 font-black text-center">
-                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10">STT</th>
-                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24">Mã học sinh</th>
-                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40">Họ và tên</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-10 hidden md:table-cell">STT</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-24 hidden md:table-cell">Mã học sinh</th>
+                          <th rowSpan={2} className="py-2 px-2 border border-slate-300 w-40 sticky left-0 z-20 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Họ và tên</th>
                           <th colSpan={3} className="py-2 px-1 border border-slate-300 bg-indigo-50 text-indigo-700">NL chung</th>
                           <th colSpan={7} className="py-2 px-1 border border-slate-300 bg-sky-50 text-sky-700">NL đặc thù</th>
                           <th colSpan={5} className="py-2 px-1 border border-slate-300 bg-emerald-50 text-emerald-700">Phẩm chất</th>
@@ -1932,9 +1932,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
                           return (
                             <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                              <td className="py-2 px-2 border border-slate-200 text-center">{idx + 1}</td>
-                              <td className="py-2 px-2 border border-slate-200">{s.code}</td>
-                              <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800">{s.name}</td>
+                              <td className="py-2 px-2 border border-slate-200 text-center hidden md:table-cell">{idx + 1}</td>
+                              <td className="py-2 px-2 border border-slate-200 hidden md:table-cell">{s.code}</td>
+                              <td className="py-2 px-2 border border-slate-200 font-bold text-slate-800 sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">{s.name}</td>
                               {/* NL Chung */}
                               {[1, 2, 3].map(i => {
                                 const val = manualData.competencies?.[i] || cVal; return <td key={i} tabIndex={0} onPaste={(e) => handlePasteCompetencies(e, s.id, 'competence', i)} onClick={() => handleManualChange(s.id, 'competence', i, val)} className={`py-2 px-2 border border-slate-200 text-center cursor-pointer hover:bg-slate-100 font-bold outline-none focus:bg-indigo-50 ${val === 'T' ? 'text-emerald-600' : val === 'Đ' ? 'text-blue-600' : val === 'C' ? 'text-rose-500' : 'text-slate-400'}`}>{val}</td>
