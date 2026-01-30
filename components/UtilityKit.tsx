@@ -19,6 +19,113 @@ interface SavedLessonPlan {
   timestamp: string;
 }
 
+// Component Quiz Player nội bộ
+const QuizPlayer: React.FC<{ data: any[] }> = ({ data }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [showScore, setShowScore] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+
+  const handleAnswerClick = (option: string) => {
+    if (selectedOption) return; // Chặn click nhiều lần
+
+    const correct = option === data[currentIndex].answer;
+    setSelectedOption(option);
+    setIsCorrect(correct);
+
+    if (correct) {
+      setScore(score + 1);
+    }
+
+    // Tự động chuyển câu sau 2s
+    setTimeout(() => {
+      const nextQuestion = currentIndex + 1;
+      if (nextQuestion < data.length) {
+        setCurrentIndex(nextQuestion);
+        setSelectedOption(null);
+        setIsCorrect(null);
+      } else {
+        setShowScore(true);
+      }
+    }, 2000);
+  };
+
+  const restartQuiz = () => {
+    setCurrentIndex(0);
+    setScore(0);
+    setShowScore(false);
+    setSelectedOption(null);
+    setIsCorrect(null);
+  };
+
+  if (showScore) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in zoom-in duration-300">
+        <div className="text-6xl mb-4">🏆</div>
+        <h3 className="text-2xl font-black text-slate-800 mb-2">Hoàn thành xuất sắc!</h3>
+        <p className="text-lg text-slate-600 mb-6">Thầy/Cô đã trả lời đúng <span className="text-indigo-600 font-bold text-2xl">{score}</span> / {data.length} câu.</p>
+        <button onClick={restartQuiz} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all">
+          🔄 Chơi lại
+        </button>
+      </div>
+    );
+  }
+
+  const currentQuestion = data[currentIndex];
+
+  return (
+    <div className="flex flex-col h-full p-4">
+      <div className="flex justify-between items-center mb-6">
+        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Câu hỏi {currentIndex + 1}/{data.length}</span>
+        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center">
+        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{currentQuestion.question}</h3>
+
+        <div className="grid grid-cols-1 gap-3">
+          {currentQuestion.options.map((option: string, index: number) => {
+            let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
+            if (selectedOption === option) {
+              btnClass += option === currentQuestion.answer
+                ? "bg-emerald-100 border-emerald-500 text-emerald-800"
+                : "bg-rose-100 border-rose-500 text-rose-800";
+            } else if (selectedOption && option === currentQuestion.answer) {
+              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700"; // Hiện đáp án đúng nếu chọn sai
+            } else {
+              btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
+            }
+
+            return (
+              <button
+                key={index}
+                onClick={() => handleAnswerClick(option)}
+                disabled={!!selectedOption}
+                className={btnClass}
+              >
+                <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
+                {option}
+                {selectedOption === option && (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {option === currentQuestion.answer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedOption && currentQuestion.explanation && (
+        <div className="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg animate-in fade-in slide-in-from-bottom-2">
+          <i className="fas fa-info-circle mr-2"></i>{currentQuestion.explanation}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant'>('games');
   const [subject, setSubject] = useState('Toán');
@@ -798,6 +905,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace }) => {
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
+                  ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
+                    <QuizPlayer data={result} />
                   ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">

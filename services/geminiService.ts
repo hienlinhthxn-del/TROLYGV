@@ -248,17 +248,40 @@ export class GeminiService {
     }
   }
 
-  public async generateQuiz(topic: string, count: number = 5): Promise<string> {
+  public async generateQuiz(topic: string, count: number = 5): Promise<any> {
     await this.ensureInitialized();
     this.setStatus("Đang soạn câu hỏi Quiz...");
-    const prompt = `Soạn ${count} câu hỏi trắc nghiệm dạng quiz game về chủ đề "${topic}" cho học sinh tiểu học.
-    Mỗi câu hỏi có 4 đáp án và chỉ 1 đáp án đúng.
-    Câu hỏi và đáp án phải ngắn gọn, vui nhộn.
-    Định dạng:
-    Câu 1: [Nội dung câu hỏi]
-    A. [Đáp án A] | B. [Đáp án B] | C. [Đáp án C] | D. [Đáp án D]
-    => Đáp án đúng: [A/B/C/D]`;
-    return this.generateText(prompt);
+
+    const prompt = `Soạn ${count} câu hỏi trắc nghiệm vui nhộn về chủ đề "${topic}" cho học sinh tiểu học.
+    YÊU CẦU:
+    1. Trả về DUY NHẤT một mảng JSON.
+    2. Mỗi câu hỏi có 4 đáp án (options).
+    3. Chỉ định rõ đáp án đúng (answer) phải khớp chính xác với một trong các options.
+    
+    CẤU TRÚC JSON:
+    [
+      {
+        "question": "Câu hỏi ở đây?",
+        "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+        "answer": "Đáp án A",
+        "explanation": "Giải thích ngắn gọn vì sao đúng"
+      }
+    ]`;
+
+    try {
+      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+      const jsonModel = this.genAI!.getGenerativeModel({
+        model: activeModelName,
+        generationConfig: { responseMimeType: "application/json" }
+      }, { apiVersion: 'v1beta' });
+
+      const result = await jsonModel.generateContent(prompt);
+      const text = result.response.text();
+      return this.parseJSONSafely(text);
+    } catch (error: any) {
+      console.error("Lỗi tạo Quiz:", error);
+      return this.handleError(error, () => this.generateQuiz(topic, count));
+    }
   }
 
   // --- HÌNH ẢNH & GỢI Ý ---
@@ -300,27 +323,27 @@ export class GeminiService {
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
   private parseJSONSafely(text: string): any {
-    // 1. Tìm và bóc tách khối JSON bằng cách quét cân bằng dấu ngoặc { }
-    // Điều này giúp loại bỏ rác ở đầu và cuối một cách tuyệt đối
+    // 1. Tìm và bóc tách khối JSON (Hỗ trợ cả Object {} và Array [])
     const extractJSON = (input: string): string => {
-      const firstOpen = input.indexOf('{');
-      const lastClose = input.lastIndexOf('}');
-      if (firstOpen === -1 || lastClose === -1 || lastClose < firstOpen) return input;
+      const firstOpenBrace = input.indexOf('{');
+      const firstOpenBracket = input.indexOf('[');
 
-      let count = 0;
       let start = -1;
-      for (let i = firstOpen; i <= lastClose; i++) {
-        if (input[i] === '{') {
-          if (count === 0) start = i;
-          count++;
-        } else if (input[i] === '}') {
-          count--;
-          if (count === 0 && start !== -1) {
-            return input.substring(start, i + 1);
-          }
-        }
+      let end = -1;
+
+      // Xác định xem là Object hay Array dựa vào cái nào xuất hiện trước
+      if (firstOpenBracket !== -1 && (firstOpenBrace === -1 || firstOpenBracket < firstOpenBrace)) {
+        start = firstOpenBracket;
+        end = input.lastIndexOf(']');
+      } else if (firstOpenBrace !== -1) {
+        start = firstOpenBrace;
+        end = input.lastIndexOf('}');
       }
-      return input.substring(firstOpen, lastClose + 1);
+
+      if (start !== -1 && end !== -1 && end > start) {
+        return input.substring(start, end + 1);
+      }
+      return input;
     };
 
     let cleaned = extractJSON(text.trim());
