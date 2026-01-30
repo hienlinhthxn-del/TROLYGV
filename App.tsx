@@ -560,7 +560,7 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error("Chat Stream Error Details:", error);
       const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra trong quá trình trao đổi.";
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi kết nối hoặc vấn đề bảo mật: ${errorMessage}. Thầy/Cô hãy tải lại trang (F5) hoặc kiểm tra lại mạng nhé!`, isThinking: false, isStreaming: false } : msg));
+      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Đã có lỗi xảy ra: ${errorMessage}. Thầy/Cô vui lòng kiểm tra kết nối mạng hoặc thử lại sau giây lát nhé!`, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsLoading(false);
     }

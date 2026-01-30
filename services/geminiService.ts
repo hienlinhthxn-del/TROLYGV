@@ -168,44 +168,52 @@ export class GeminiService {
     try {
       const result = await this.chat.sendMessageStream(parts);
       for await (const chunk of result.stream) {
+        let text = '';
+        try {
+          text = chunk.text();
+        } catch (e) {
+          // Bỏ qua lỗi nếu chunk bị chặn do safety settings để tránh crash luồng
+        }
         yield {
-          text: chunk.text(),
-          grounding: (chunk as any).candidates?.[0]?.groundingMetadata
-        };
-      }
-    } catch (error: any) {
-      if (error.message?.includes("429")) {
-        throw new Error("Lượt dùng miễn phí hiện tại đã hết. Thầy Cô vui lòng đợi 1 phút rồi thử lại nhé!");
-      }
-      throw error;
+          text: ing: (chunk as any).candidates?.[0]?.groundingMetadata
+      };
     }
+    } catch(error: any) {
+    if (error.message?.includes("429")) {
+      throw new Error("Lượt dùng miễn phí hiện tại đã hết. Thầy Cô vui lòng đợi 1 phút rồi thử lại nhé!");
+    }
+    if (error.message?.includes("safety") || error.message?.includes("blocked")) {
+      throw new Error("Nội dung câu hỏi hoặc câu trả lời bị hệ thống an toàn chặn. Thầy/Cô vui lòng diễn đạt lại câu hỏi nhé!");
+    }
+    throw error;
   }
+}
 
   // --- TẠO NỘI DUNG VĂN BẢN ---
 
-  public async generateText(prompt: string): Promise<string> {
-    await this.ensureInitialized();
+  public async generateText(prompt: string): Promise < string > {
+  await this.ensureInitialized();
+  try {
+    const result = await this.model.generateContent([
+      { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }
+    ]);
+    return result.response.text();
+  } catch(error: any) {
     try {
-      const result = await this.model.generateContent([
-        { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }
-      ]);
-      return result.response.text();
-    } catch (error: any) {
-      try {
-        return await this.handleError(error, () => this.generateText(prompt));
-      } catch (finalError) {
-        return this.fallbackToOtherProviders(`${this.currentInstruction}\n\nYêu cầu: ${prompt}`);
-      }
+      return await this.handleError(error, () => this.generateText(prompt));
+    } catch (finalError) {
+      return this.fallbackToOtherProviders(`${this.currentInstruction}\n\nYêu cầu: ${prompt}`);
     }
   }
+}
 
   // --- TẠO ĐỀ THI / PHIẾU HỌC TẬP (JSON) ---
 
-  public async generateExamQuestionsStructured(prompt: string, fileParts?: FilePart[]) {
-    await this.ensureInitialized();
-    this.setStatus("Đang soạn nội dung...");
+  public async generateExamQuestionsStructured(prompt: string, fileParts ?: FilePart[]) {
+  await this.ensureInitialized();
+  this.setStatus("Đang soạn nội dung...");
 
-    const fullPrompt = `${this.currentInstruction}\n\nYêu cầu: ${prompt}\n\nQUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
+  const fullPrompt = `${this.currentInstruction}\n\nYêu cầu: ${prompt}\n\nQUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. Trả về DUY NHẤT mã JSON, không chứa bất kỳ văn bản giải thích nào ở trước hoặc sau.
     2. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
     3. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
@@ -228,51 +236,51 @@ export class GeminiService {
       ] 
     }`;
 
+  try {
+    const parts = [...(fileParts || []), { text: fullPrompt }];
+
+    // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
+    const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+    const jsonModel = this.genAI!.getGenerativeModel({
+      model: activeModelName,
+      generationConfig: { responseMimeType: "application/json" }
+    }, { apiVersion: 'v1beta' });
+
+    const result = await jsonModel.generateContent(parts);
+    const text = result.response.text();
+    const json = this.parseJSONSafely(text);
+
+    if (json.questions) {
+      json.questions = json.questions.map((q: any) => ({
+        ...q,
+        id: 'q-' + Math.random().toString(36).substr(2, 9),
+        content: q.content || q.question || '',
+        question: q.question || q.content || ''
+      }));
+    }
+    return json;
+  } catch (error: any) {
+    console.error("Lỗi AI:", error);
     try {
-      const parts = [...(fileParts || []), { text: fullPrompt }];
-
-      // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
-      const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
-      }, { apiVersion: 'v1beta' });
-
-      const result = await jsonModel.generateContent(parts);
-      const text = result.response.text();
-      const json = this.parseJSONSafely(text);
-
-      if (json.questions) {
-        json.questions = json.questions.map((q: any) => ({
-          ...q,
-          id: 'q-' + Math.random().toString(36).substr(2, 9),
-          content: q.content || q.question || '',
-          question: q.question || q.content || ''
-        }));
-      }
-      return json;
-    } catch (error: any) {
-      console.error("Lỗi AI:", error);
-      try {
-        return await this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
-      } catch (finalError) {
-        if (fileParts && fileParts.length > 0) throw finalError; // Fallback chưa hỗ trợ file
-        const text = await this.fallbackToOtherProviders(fullPrompt, true);
-        return this.parseJSONSafely(text);
-      }
+      return await this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
+    } catch (finalError) {
+      if (fileParts && fileParts.length > 0) throw finalError; // Fallback chưa hỗ trợ file
+      const text = await this.fallbackToOtherProviders(fullPrompt, true);
+      return this.parseJSONSafely(text);
     }
   }
+}
 
-  public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts?: FilePart[]) {
-    const prompt = `Soạn phiếu học tập đa dạng cho học sinh lớp 1. Chủ đề: ${topic}, Môn: ${subject}. Cơ cấu: Trắc nghiệm (${config.mcq}), Đúng/Sai (${config.tf}), Điền khuyết (${config.fill}), Nối cột (${config.match}), Sắp xếp từ thành câu (${config.arrange || 0}), Tự luận (${config.essay}).`;
-    return this.generateExamQuestionsStructured(prompt, fileParts);
-  }
+  public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts ?: FilePart[]) {
+  const prompt = `Soạn phiếu học tập đa dạng cho học sinh lớp 1. Chủ đề: ${topic}, Môn: ${subject}. Cơ cấu: Trắc nghiệm (${config.mcq}), Đúng/Sai (${config.tf}), Điền khuyết (${config.fill}), Nối cột (${config.match}), Sắp xếp từ thành câu (${config.arrange || 0}), Tự luận (${config.essay}).`;
+  return this.generateExamQuestionsStructured(prompt, fileParts);
+}
 
-  public async generateCrossword(topic: string, size: number = 12, wordCount: number = 10): Promise<any> {
-    await this.ensureInitialized();
-    this.setStatus("Đang tạo ô chữ...");
+  public async generateCrossword(topic: string, size: number = 12, wordCount: number = 10): Promise < any > {
+  await this.ensureInitialized();
+  this.setStatus("Đang tạo ô chữ...");
 
-    const prompt = `Tạo một trò chơi ô chữ cho học sinh tiểu học với chủ đề "${topic}".
+  const prompt = `Tạo một trò chơi ô chữ cho học sinh tiểu học với chủ đề "${topic}".
     
     YÊU CẦU:
     1.  Tạo một lưới ${size}x${size}.
@@ -295,32 +303,32 @@ export class GeminiService {
       ]
     }`;
 
-    try {
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
-      const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
-      }, { apiVersion: 'v1beta' });
+  try {
+    const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+    const jsonModel = this.genAI!.getGenerativeModel({
+      model: activeModelName,
+      generationConfig: { responseMimeType: "application/json" }
+    }, { apiVersion: 'v1beta' });
 
-      const result = await jsonModel.generateContent(prompt);
-      const text = result.response.text();
+    const result = await jsonModel.generateContent(prompt);
+    const text = result.response.text();
+    return this.parseJSONSafely(text);
+  } catch(error: any) {
+    console.error("Lỗi tạo ô chữ:", error);
+    try {
+      return await this.handleError(error, () => this.generateCrossword(topic, size, wordCount));
+    } catch (finalError) {
+      const text = await this.fallbackToOtherProviders(prompt, true);
       return this.parseJSONSafely(text);
-    } catch (error: any) {
-      console.error("Lỗi tạo ô chữ:", error);
-      try {
-        return await this.handleError(error, () => this.generateCrossword(topic, size, wordCount));
-      } catch (finalError) {
-        const text = await this.fallbackToOtherProviders(prompt, true);
-        return this.parseJSONSafely(text);
-      }
     }
   }
+}
 
-  public async generateQuiz(topic: string, count: number = 5): Promise<any> {
-    await this.ensureInitialized();
-    this.setStatus("Đang soạn câu hỏi Quiz...");
+  public async generateQuiz(topic: string, count: number = 5): Promise < any > {
+  await this.ensureInitialized();
+  this.setStatus("Đang soạn câu hỏi Quiz...");
 
-    const prompt = `Soạn ${count} câu hỏi trắc nghiệm vui nhộn về chủ đề "${topic}" cho học sinh tiểu học.
+  const prompt = `Soạn ${count} câu hỏi trắc nghiệm vui nhộn về chủ đề "${topic}" cho học sinh tiểu học.
     YÊU CẦU:
     1. Trả về DUY NHẤT một mảng JSON.
     2. Mỗi câu hỏi có 4 đáp án (options).
@@ -336,180 +344,180 @@ export class GeminiService {
       }
     ]`;
 
-    try {
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
-      const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
-      }, { apiVersion: 'v1beta' });
+  try {
+    const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
+    const jsonModel = this.genAI!.getGenerativeModel({
+      model: activeModelName,
+      generationConfig: { responseMimeType: "application/json" }
+    }, { apiVersion: 'v1beta' });
 
-      const result = await jsonModel.generateContent(prompt);
-      const text = result.response.text();
+    const result = await jsonModel.generateContent(prompt);
+    const text = result.response.text();
+    return this.parseJSONSafely(text);
+  } catch(error: any) {
+    console.error("Lỗi tạo Quiz:", error);
+    try {
+      return await this.handleError(error, () => this.generateQuiz(topic, count));
+    } catch (finalError) {
+      const text = await this.fallbackToOtherProviders(prompt, true);
       return this.parseJSONSafely(text);
-    } catch (error: any) {
-      console.error("Lỗi tạo Quiz:", error);
-      try {
-        return await this.handleError(error, () => this.generateQuiz(topic, count));
-      } catch (finalError) {
-        const text = await this.fallbackToOtherProviders(prompt, true);
-        return this.parseJSONSafely(text);
-      }
     }
   }
+}
 
   // --- HÌNH ẢNH & GỢI Ý ---
 
-  public async generateSpeech(text: string, voice: string): Promise<string | null> {
-    // Hiện tại ưu tiên dùng Web Speech API của trình duyệt
-    return null;
-  }
+  public async generateSpeech(text: string, voice: string): Promise < string | null > {
+  // Hiện tại ưu tiên dùng Web Speech API của trình duyệt
+  return null;
+}
 
-  public async generateImage(prompt: string): Promise<string> {
-    // Không dùng Gemini để vẽ (vì phiên bản miễn phí thường lỗi 429 khi vẽ nhiều)
-    // Tận dụng API bên ngoài để ổn định và nhanh hơn cho GV
-    const seed = Math.floor(Math.random() * 9999);
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + " simple cute drawing for kids")}?width=600&height=400&seed=${seed}&nologo=true`;
-  }
+  public async generateImage(prompt: string): Promise < string > {
+  // Không dùng Gemini để vẽ (vì phiên bản miễn phí thường lỗi 429 khi vẽ nhiều)
+  // Tận dụng API bên ngoài để ổn định và nhanh hơn cho GV
+  const seed = Math.floor(Math.random() * 9999);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + " simple cute drawing for kids")}?width=600&height=400&seed=${seed}&nologo=true`;
+}
 
-  public async generateVideo(prompt: string): Promise<string> {
-    const seed = Math.floor(Math.random() * 9999);
-    // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
-    // Đây là một giải pháp tạm thời để có tính năng.
-    // Thêm các từ khóa "video, animation" để tăng khả năng AI hiểu đúng yêu cầu,
-    // ngay cả khi prompt đầu vào là tiếng Việt.
-    const finalPrompt = `${prompt}, video, animation, cinematic`;
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=video&seed=${seed}&nologo=true`;
-  }
+  public async generateVideo(prompt: string): Promise < string > {
+  const seed = Math.floor(Math.random() * 9999);
+  // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
+  // Đây là một giải pháp tạm thời để có tính năng.
+  // Thêm các từ khóa "video, animation" để tăng khả năng AI hiểu đúng yêu cầu,
+  // ngay cả khi prompt đầu vào là tiếng Việt.
+  const finalPrompt = `${prompt}, video, animation, cinematic`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=video&seed=${seed}&nologo=true`;
+}
 
-  public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
-    if (history.length === 0) return [];
-    try {
-      const res = await this.generateText(`Dựa trên cuộc trò chuyện: ${history.slice(-2).join(' | ')}. Gợi ý 3 câu hỏi tiếp theo ngắn gọn.`);
-      return res.split('\n').filter(s => s.trim().length > 5).slice(0, 3);
-    } catch {
-      return [];
-    }
+  public async generateSuggestions(history: string[], persona: string): Promise < string[] > {
+  if(history.length === 0) return [];
+  try {
+    const res = await this.generateText(`Dựa trên cuộc trò chuyện: ${history.slice(-2).join(' | ')}. Gợi ý 3 câu hỏi tiếp theo ngắn gọn.`);
+    return res.split('\n').filter(s => s.trim().length > 5).slice(0, 3);
+  } catch {
+    return [];
   }
+}
 
   // --- TIỆN ÍCH ---
 
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
   private parseJSONSafely(text: string): any {
-    // 1. Tìm và bóc tách khối JSON (Hỗ trợ cả Object {} và Array [])
-    const extractJSON = (input: string): string => {
-      const firstOpenBrace = input.indexOf('{');
-      const firstOpenBracket = input.indexOf('[');
+  // 1. Tìm và bóc tách khối JSON (Hỗ trợ cả Object {} và Array [])
+  const extractJSON = (input: string): string => {
+    const firstOpenBrace = input.indexOf('{');
+    const firstOpenBracket = input.indexOf('[');
 
-      let start = -1;
-      let end = -1;
+    let start = -1;
+    let end = -1;
 
-      // Xác định xem là Object hay Array dựa vào cái nào xuất hiện trước
-      if (firstOpenBracket !== -1 && (firstOpenBrace === -1 || firstOpenBracket < firstOpenBrace)) {
-        start = firstOpenBracket;
-        end = input.lastIndexOf(']');
-      } else if (firstOpenBrace !== -1) {
-        start = firstOpenBrace;
-        end = input.lastIndexOf('}');
-      }
+    // Xác định xem là Object hay Array dựa vào cái nào xuất hiện trước
+    if (firstOpenBracket !== -1 && (firstOpenBrace === -1 || firstOpenBracket < firstOpenBrace)) {
+      start = firstOpenBracket;
+      end = input.lastIndexOf(']');
+    } else if (firstOpenBrace !== -1) {
+      start = firstOpenBrace;
+      end = input.lastIndexOf('}');
+    }
 
-      if (start !== -1 && end !== -1 && end > start) {
-        return input.substring(start, end + 1);
-      }
-      return input;
-    };
+    if (start !== -1 && end !== -1 && end > start) {
+      return input.substring(start, end + 1);
+    }
+    return input;
+  };
 
-    let cleaned = extractJSON(text.trim());
+  let cleaned = extractJSON(text.trim());
 
-    // 2. Hàm sửa lỗi JSON "siêu cấp"
-    const ultraRepair = (str: string): string => {
-      let r = str;
+  // 2. Hàm sửa lỗi JSON "siêu cấp"
+  const ultraRepair = (str: string): string => {
+    let r = str;
 
-      // A. Sửa lỗi backslash: Chỉ giữ lại các escape hơp lệ, còn lại biến thành double backslash
-      // Các escape hợp lệ: " \ / b f n r t uXXXX
-      r = r.replace(/\\/g, '__BACKSLASH__'); // Tạm thời ẩn tất cả backslash
+    // A. Sửa lỗi backslash: Chỉ giữ lại các escape hơp lệ, còn lại biến thành double backslash
+    // Các escape hợp lệ: " \ / b f n r t uXXXX
+    r = r.replace(/\\/g, '__BACKSLASH__'); // Tạm thời ẩn tất cả backslash
 
-      // Khôi phục các escape chuẩn
-      r = r.replace(/__BACKSLASH__(["\\\/bfnrt])/g, '\\$1');
-      r = r.replace(/__BACKSLASH__u([0-9a-fA-F]{4})/g, '\\u$1');
+    // Khôi phục các escape chuẩn
+    r = r.replace(/__BACKSLASH__(["\\\/bfnrt])/g, '\\$1');
+    r = r.replace(/__BACKSLASH__u([0-9a-fA-F]{4})/g, '\\u$1');
 
-      // Những gì còn lại là backslash đơn lẻ gây lỗi -> biến thành \\
-      r = r.replace(/__BACKSLASH__/g, '\\\\');
+    // Những gì còn lại là backslash đơn lẻ gây lỗi -> biến thành \\
+    r = r.replace(/__BACKSLASH__/g, '\\\\');
 
-      // B. Sửa lỗi ký tự điều khiển (Newline, Tab...) bên trong chuỗi
-      r = r.replace(/[\u0000-\u001F]/g, (match) => {
-        const charCode = match.charCodeAt(0);
-        if (charCode === 10) return "\\n";
-        if (charCode === 13) return "\\r";
-        if (charCode === 9) return "\\t";
-        return "";
-      });
+    // B. Sửa lỗi ký tự điều khiển (Newline, Tab...) bên trong chuỗi
+    r = r.replace(/[\u0000-\u001F]/g, (match) => {
+      const charCode = match.charCodeAt(0);
+      if (charCode === 10) return "\\n";
+      if (charCode === 13) return "\\r";
+      if (charCode === 9) return "\\t";
+      return "";
+    });
 
-      return r;
-    };
+    return r;
+  };
 
-    // 3. Thử Parse đa tầng
+  // 3. Thử Parse đa tầng
+  try {
+    return JSON.parse(cleaned);
+  } catch (e1) {
     try {
-      return JSON.parse(cleaned);
-    } catch (e1) {
-      try {
-        const repaired = ultraRepair(cleaned);
-        return JSON.parse(repaired);
-      } catch (e2) {
-        console.error("JSON Parse Failed completely.", { original: text, repaired: ultraRepair(cleaned) });
-        throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
-      }
+      const repaired = ultraRepair(cleaned);
+      return JSON.parse(repaired);
+    } catch (e2) {
+      console.error("JSON Parse Failed completely.", { original: text, repaired: ultraRepair(cleaned) });
+      throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
     }
   }
+}
 
   private retryAttempt: number = 0;
 
-  private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
-    const msg = error.message || "";
-    console.warn("AI Encountered Error:", msg);
+  private async handleError(error: any, retryFn: () => Promise<any>): Promise < any > {
+  const msg = error.message || "";
+  console.warn("AI Encountered Error:", msg);
 
-    // Xử lý lỗi 404 hoặc Model Not Found
-    if (msg.includes("404") || msg.includes("not found")) {
-      if (this.currentVersion === 'v1') {
-        this.setStatus(`Dò tìm kênh dự phòng cho ${this.currentModelName}...`);
-        this.setupModel(this.currentModelName, 'v1beta');
-        return retryFn();
-      }
+  // Xử lý lỗi 404 hoặc Model Not Found
+  if(msg.includes("404") || msg.includes("not found")) {
+  if (this.currentVersion === 'v1') {
+    this.setStatus(`Dò tìm kênh dự phòng cho ${this.currentModelName}...`);
+    this.setupModel(this.currentModelName, 'v1beta');
+    return retryFn();
+  }
 
-      const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
-      if (nextIdx < MODELS.length) {
-        this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx], 'v1beta');
-        this.retryAttempt = 0; // Reset retry attempt when changing model
-        return retryFn();
-      }
+  const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
+  if (nextIdx < MODELS.length) {
+    this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
+    this.setupModel(MODELS[nextIdx], 'v1beta');
+    this.retryAttempt = 0; // Reset retry attempt when changing model
+    return retryFn();
+  }
+}
+
+// Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại
+if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
+  if (this.retryAttempt < 2) {
+    this.retryAttempt++;
+    const waitMs = this.retryAttempt === 1 ? 5000 : 15000;
+    this.setStatus(`Google báo bận, đang đợi ${waitMs / 1000} giây để thử lại...`);
+    await new Promise(r => setTimeout(r, waitMs));
+    return retryFn();
+  } else {
+    // Đổi model ngay nếu thử lại 2 lần không được
+    this.retryAttempt = 0;
+    const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
+    if (nextIdx < MODELS.length) {
+      this.setStatus(`Đang đổi sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
+      this.setupModel(MODELS[nextIdx], 'v1beta');
+      return retryFn();
+    } else {
+      this.setStatus("Tạm thời hết lượt.");
+      throw new Error("Lượt dùng miễn phí của Google hiện đã hết trong lúc này. Thầy Cô vui lòng đợi khoảng 1 phút rồi bấm nút lại nhé. (Mách nhỏ: Thầy Cô có thể vào Trung tâm Bảo mật để nhập API Key cá nhân để dùng thoải mái hơn ạ!)");
     }
+  }
+}
 
-    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại
-    if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
-      if (this.retryAttempt < 2) {
-        this.retryAttempt++;
-        const waitMs = this.retryAttempt === 1 ? 5000 : 15000;
-        this.setStatus(`Google báo bận, đang đợi ${waitMs / 1000} giây để thử lại...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        return retryFn();
-      } else {
-        // Đổi model ngay nếu thử lại 2 lần không được
-        this.retryAttempt = 0;
-        const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
-        if (nextIdx < MODELS.length) {
-          this.setStatus(`Đang đổi sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
-          this.setupModel(MODELS[nextIdx], 'v1beta');
-          return retryFn();
-        } else {
-          this.setStatus("Tạm thời hết lượt.");
-          throw new Error("Lượt dùng miễn phí của Google hiện đã hết trong lúc này. Thầy Cô vui lòng đợi khoảng 1 phút rồi bấm nút lại nhé. (Mách nhỏ: Thầy Cô có thể vào Trung tâm Bảo mật để nhập API Key cá nhân để dùng thoải mái hơn ạ!)");
-        }
-      }
-    }
-
-    this.retryAttempt = 0; // Reset nếu là lỗi khác
-    throw error;
+this.retryAttempt = 0; // Reset nếu là lỗi khác
+throw error;
   }
 }
 
