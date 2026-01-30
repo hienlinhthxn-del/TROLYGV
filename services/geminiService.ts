@@ -10,8 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-// Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
+const MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
 // Ánh xạ model name sang alias nếu cần
 const MODEL_ALIASES: Record<string, string> = {
   'gemini-1.5-flash': 'gemini-flash-latest',
