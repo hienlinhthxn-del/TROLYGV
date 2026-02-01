@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { ExamQuestion } from '../types';
+import { geminiService } from '../services/geminiService';
 
 interface StudentPracticeProps {
   subject: string;
@@ -20,6 +21,9 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const [studentName, setStudentName] = useState('');
+  const [aiResults, setAiResults] = useState<Record<string, { isCorrect: boolean, feedback: string }>>({});
+  const [isGrading, setIsGrading] = useState(false);
+  const [strictness, setStrictness] = useState<'easy' | 'strict'>('easy');
 
   const currentQuestion = questions[currentIdx];
   const progress = ((currentIdx + 1) / questions.length) * 100;
@@ -44,11 +48,57 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     setAnswers({ ...answers, [currentQuestion.id]: val });
   };
 
-  const handleSubmit = () => {
-    if (window.confirm("Em chắc chắn muốn nộp bài?")) {
-      setIsSubmitted(true);
-      setEndTime(Date.now());
+  const handleSubmit = async () => {
+    if (!window.confirm("Em chắc chắn muốn nộp bài?")) return;
+
+    setEndTime(Date.now());
+
+    // Lọc câu hỏi tự luận để chấm bằng AI
+    const essayQuestions = questions.filter(q => q.type !== 'Trắc nghiệm' || !q.options || q.options.length === 0);
+    const hasEssayAnswers = essayQuestions.some(q => answers[q.id]?.trim());
+
+    if (essayQuestions.length > 0 && hasEssayAnswers) {
+      setIsGrading(true);
+      try {
+        const dataToGrade = essayQuestions.map(q => ({
+          id: q.id,
+          question: q.content,
+          correctAnswer: q.answer,
+          studentAnswer: answers[q.id] || '(Bỏ trống)'
+        }));
+
+        const strictnessInstruction = strictness === 'strict'
+          ? "CHẾ ĐỘ KHẮT KHE: Yêu cầu câu trả lời phải chính xác, đầy đủ ý và đúng thuật ngữ. Nếu thiếu ý quan trọng hoặc diễn đạt sai lệch -> isCorrect: false. Nhận xét kỹ lỗi sai."
+          : "CHẾ ĐỘ DỄ TÍNH: Khuyến khích học sinh. Chỉ cần trả lời đúng ý chính là được tính điểm (isCorrect: true). Bỏ qua lỗi chính tả hoặc diễn đạt chưa hay.";
+
+        const prompt = `Bạn là giáo viên chấm bài. Hãy chấm điểm các câu trả lời tự luận sau.
+        ${strictnessInstruction}
+        
+        Dữ liệu (JSON): ${JSON.stringify(dataToGrade)}
+        Yêu cầu:
+        1. So sánh "studentAnswer" với "correctAnswer".
+        2. feedback: Nhận xét ngắn gọn, cụ thể, khích lệ (Tiếng Việt).
+        Trả về JSON: { "results": [{ "id": "...", "isCorrect": boolean, "feedback": "..." }] }`;
+
+        const response = await geminiService.generateText(prompt);
+        const cleanJson = response.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+
+        const newAiResults: Record<string, { isCorrect: boolean, feedback: string }> = {};
+        if (parsed.results && Array.isArray(parsed.results)) {
+          parsed.results.forEach((r: any) => {
+            newAiResults[r.id] = { isCorrect: r.isCorrect, feedback: r.feedback };
+          });
+        }
+        setAiResults(newAiResults);
+      } catch (e) {
+        console.error("AI Grading Error", e);
+      } finally {
+        setIsGrading(false);
+      }
     }
+
+    setIsSubmitted(true);
   };
 
   const results = useMemo(() => {
@@ -56,9 +106,42 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     let correctCount = 0;
     const details = questions.map(q => {
       if (q.type !== 'Trắc nghiệm' || !q.options || q.options.length === 0) {
-        // Tự luận coi như đúng hoặc bỏ qua chấm điểm tự động
-        // Hoặc nếu câu trắc nghiệm không có options
-        return { id: q.id, isCorrect: true, correctAnswer: q.answer, userAnswer: answers[q.id] };
+        // 1. Ưu tiên kết quả từ AI
+        if (aiResults[q.id]) {
+          const { isCorrect, feedback } = aiResults[q.id];
+          if (isCorrect) correctCount++;
+          return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id], feedback };
+        }
+
+        // Logic chấm điểm Tự luận theo từ khóa
+        const userAnswer = (answers[q.id] || '').trim();
+        const correctAnswer = (q.answer || '').trim();
+        let isCorrect = false;
+
+        if (userAnswer && correctAnswer) {
+          const normalize = (str: string) => str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s{2,}/g, " ").trim();
+          const normUser = normalize(userAnswer);
+          const normCorrect = normalize(correctAnswer);
+
+          // 1. Khớp chính xác hoặc chứa đựng toàn bộ đáp án mẫu
+          if (normUser === normCorrect || normUser.includes(normCorrect)) {
+            isCorrect = true;
+          } else {
+            // 2. Khớp theo từ khóa/ý chính (tách bởi dấu phẩy/chấm phẩy hoặc khoảng trắng)
+            const keywords = (correctAnswer.includes(',') || correctAnswer.includes(';'))
+              ? correctAnswer.split(/[,;]/).map(k => normalize(k)).filter(k => k.length > 0)
+              : normCorrect.split(' ').filter(w => w.length > 1);
+
+            if (keywords.length > 0) {
+              const matchCount = keywords.filter(k => normUser.includes(k)).length;
+              // Nếu khớp >= 50% số từ khóa/ý -> Chấp nhận đúng
+              if (matchCount / keywords.length >= 0.5) isCorrect = true;
+            }
+          }
+        }
+
+        if (isCorrect) correctCount++;
+        return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id], feedback: null };
       }
 
       // Lấy câu trả lời của người dùng ('A', 'B', 'C', 'D')
@@ -95,11 +178,11 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
       }
 
       if (isCorrect) correctCount++;
-      return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id] };
+      return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id], feedback: null };
     });
     const duration = endTime ? Math.floor((endTime - startTime) / 1000) : 0;
     return { correctCount, total: questions.length, duration, details };
-  }, [isSubmitted, questions, answers, startTime, endTime]);
+  }, [isSubmitted, questions, answers, startTime, endTime, aiResults]);
 
   const renderQuestionImage = (imageSrc?: string) => {
     if (!imageSrc) return null;
@@ -226,6 +309,12 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
                         Gợi ý: {q.explanation}
                       </div>
                     )}
+                    {(results.details[idx] as any).feedback && (
+                      <div className="mt-2 text-[11px] text-indigo-600 font-medium border-t border-indigo-100 pt-2 bg-indigo-50/50 p-2 rounded-lg animate-in fade-in">
+                        <i className="fas fa-robot mr-1"></i>
+                        Nhận xét AI: {(results.details[idx] as any).feedback}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -275,7 +364,22 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
               <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${progress}%` }}></div>
             </div>
           </div>
-          <button onClick={handleSubmit} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95">Nộp bài</button>
+
+          {!isSubmitted && questions.some(q => q.type !== 'Trắc nghiệm') && (
+            <div className="hidden sm:flex items-center space-x-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <button onClick={() => setStrictness('easy')} className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${strictness === 'easy' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                Dễ tính
+              </button>
+              <button onClick={() => setStrictness('strict')} className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${strictness === 'strict' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                Khắt khe
+              </button>
+            </div>
+          )}
+
+          <button onClick={handleSubmit} disabled={isGrading} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait">
+            {isGrading ? <i className="fas fa-spinner fa-spin mr-2"></i> : null}
+            {isGrading ? 'Đang chấm...' : 'Nộp bài'}
+          </button>
         </div>
       </header>
 
