@@ -2350,6 +2350,31 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
+                      onClick={() => {
+                        const newStatus = assignmentToView.status === 'Đang mở' ? 'Đã đóng' : 'Đang mở';
+                        const updatedAssignments = classroom.assignments.map(a =>
+                          a.id === assignmentToView.id ? { ...a, status: newStatus } : a
+                        );
+                        onUpdate({ ...classroom, assignments: updatedAssignments });
+                      }}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${assignmentToView.status === 'Đang mở' ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                    >
+                      <i className={`fas ${assignmentToView.status === 'Đang mở' ? 'fa-lock' : 'fa-lock-open'} mr-2`}></i>
+                      {assignmentToView.status === 'Đang mở' ? 'Đóng bài' : 'Mở lại'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Thầy Cô chắc chắn muốn xóa bài tập "${assignmentToView.title}"? Hành động này không thể hoàn tác.`)) {
+                          const updatedAssignments = classroom.assignments.filter(a => a.id !== assignmentToView.id);
+                          onUpdate({ ...classroom, assignments: updatedAssignments });
+                          setViewingAssignmentId(null);
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
+                    >
+                      <i className="fas fa-trash-alt mr-2"></i>Xóa
+                    </button>
+                    <button
                       onClick={handleRemindUnsubmitted}
                       className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
                     >
