@@ -78,6 +78,19 @@ const Crossword: React.FC<CrosswordProps> = ({ data }) => {
         }
     };
 
+    const handleHint = (word: Word) => {
+        if (!window.confirm("Bạn muốn xem đáp án cho từ này?")) return;
+        const newGrid = grid.map(r => [...r]);
+        for (let i = 0; i < word.word.length; i++) {
+            if (word.direction === 'across') {
+                newGrid[word.row][word.col + i] = word.word[i].toUpperCase();
+            } else {
+                newGrid[word.row + i][word.col] = word.word[i].toUpperCase();
+            }
+        }
+        setGrid(newGrid);
+    };
+
     return (
         <div className="flex flex-col lg:flex-row gap-8 items-start">
             <div className="flex-shrink-0">
@@ -108,8 +121,38 @@ const Crossword: React.FC<CrosswordProps> = ({ data }) => {
                 <button onClick={checkAnswers} className="mt-4 w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700">Kiểm tra đáp án</button>
             </div>
             <div className="flex-1 space-y-6 text-xs">
-                <div><h4 className="font-black text-slate-800 uppercase tracking-widest border-b-2 border-indigo-200 pb-2 mb-3">Hàng ngang</h4><div className="space-y-2">{words.filter(w => w.direction === 'across').map((w, i) => (<p key={i}><b>{w.col + 1},{w.row + 1}:</b> {w.clue}</p>))}</div></div>
-                <div><h4 className="font-black text-slate-800 uppercase tracking-widest border-b-2 border-indigo-200 pb-2 mb-3">Hàng dọc</h4><div className="space-y-2">{words.filter(w => w.direction === 'down').map((w, i) => (<p key={i}><b>{w.col + 1},{w.row + 1}:</b> {w.clue}</p>))}</div></div>
+                <div>
+                    <h4 className="font-black text-slate-800 uppercase tracking-widest border-b-2 border-indigo-200 pb-2 mb-3">Hàng ngang</h4>
+                    <div className="space-y-2">
+                        {words.filter(w => w.direction === 'across').map((w, i) => (
+                            <div key={i} className="flex items-start justify-between group hover:bg-slate-50 p-1 rounded transition-colors">
+                                <p className="flex-1"><b>({w.col + 1},{w.row + 1}):</b> {w.clue}</p>
+                                <button
+                                    onClick={() => handleHint(w)}
+                                    className="ml-2 px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-all hover:bg-amber-200 whitespace-nowrap"
+                                >
+                                    Gợi ý
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div>
+                    <h4 className="font-black text-slate-800 uppercase tracking-widest border-b-2 border-indigo-200 pb-2 mb-3">Hàng dọc</h4>
+                    <div className="space-y-2">
+                        {words.filter(w => w.direction === 'down').map((w, i) => (
+                            <div key={i} className="flex items-start justify-between group hover:bg-slate-50 p-1 rounded transition-colors">
+                                <p className="flex-1"><b>({w.col + 1},{w.row + 1}):</b> {w.clue}</p>
+                                <button
+                                    onClick={() => handleHint(w)}
+                                    className="ml-2 px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-all hover:bg-amber-200 whitespace-nowrap"
+                                >
+                                    Gợi ý
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );

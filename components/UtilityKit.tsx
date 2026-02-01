@@ -196,7 +196,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const assistantMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const ASSISTANT_PERSONAS = useMemo(() => {
-    const ids = ['lesson-planner', 'student-advisor', 'admin-writer', 'form-creator'];
+    const ids = ['lesson-planner', 'student-advisor', 'admin-writer', 'form-creator', 'paperwork-assistant'];
     return PERSONAS.filter(p => ids.includes(p.id));
   }, []);
 
@@ -723,6 +723,80 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     }
   };
 
+  const handlePrintCrossword = () => {
+    if (!result || !result.size || !result.words) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const { size, words } = result;
+
+    // Xác định các ô cần tô đen/trắng
+    const gridMap = Array(size).fill(null).map(() => Array(size).fill(false));
+    words.forEach((word: any) => {
+      for (let i = 0; i < word.word.length; i++) {
+        if (word.direction === 'across') {
+          gridMap[word.row][word.col + i] = true;
+        } else {
+          gridMap[word.row + i][word.col] = true;
+        }
+      }
+    });
+
+    let gridHtml = `<div class="grid" style="grid-template-columns: repeat(${size}, 1fr);">`;
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const isActive = gridMap[r][c];
+        gridHtml += `<div class="cell ${isActive ? 'active' : 'black'}"></div>`;
+      }
+    }
+    gridHtml += `</div>`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Ô chữ: ${topic}</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          h1 { text-align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
+          .sub-title { text-align: center; margin-bottom: 30px; font-style: italic; color: #666; }
+          .container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+          .grid { display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
+          .cell { background: #fff; position: relative; }
+          .cell.black { background: #333; }
+          .clues-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+          .clues-col h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+          ul { list-style: none; padding: 0; }
+          li { margin-bottom: 10px; line-height: 1.4; }
+          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <h1>Trò chơi Ô chữ</h1>
+        <p class="sub-title">Chủ đề: ${topic}</p>
+        <div class="container">
+          ${gridHtml}
+          <div class="clues-container">
+            <div class="clues-col">
+              <h3>Hàng ngang</h3>
+              <ul>${words.filter((w: any) => w.direction === 'across').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+            </div>
+            <div class="clues-col">
+              <h3>Hàng dọc</h3>
+              <ul>${words.filter((w: any) => w.direction === 'down').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer">Được tạo bởi Trợ lý Giáo viên AI</div>
+        <script>setTimeout(() => window.print(), 500);</script>
+      </body>
+      </html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       <div className="flex items-center justify-between">
@@ -1175,6 +1249,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                         <i className="fas fa-save mr-2"></i>Lưu giáo án
                       </button>
                     </>
+                  )}
+                  {activeTab === 'games' && gameType === 'crossword' && (
+                    <button
+                      onClick={handlePrintCrossword}
+                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all"
+                    >
+                      <i className="fas fa-print mr-2"></i>In phiếu
+                    </button>
                   )}
                   <button
                     onClick={() => onSendToWorkspace(result)}
