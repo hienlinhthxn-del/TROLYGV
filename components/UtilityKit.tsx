@@ -567,7 +567,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               "image": "Mã SVG hoặc Mô tả hình ảnh"
             }
           ]
-          Lưu ý: Chỉ trả về JSON hợp lệ.
+          LƯU Ý QUAN TRỌNG VỀ ĐỊNH DẠNG JSON:
+          1. Chỉ trả về duy nhất mảng JSON, không có lời dẫn hay markdown thừa.
+          2. Đối với mã SVG trong trường "image": BẮT BUỘC phải escape dấu ngoặc kép (") thành (\") để đảm bảo JSON hợp lệ.
+          3. Không được xuống dòng trong giá trị của chuỗi JSON (dùng \\n nếu cần).
         `;
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
