@@ -361,11 +361,13 @@ export class GeminiService {
     }
   }
 
-  public async generateQuiz(topic: string, count: number = 5): Promise<any> {
+  public async generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise<any> {
     await this.ensureInitialized();
     this.setStatus("Đang soạn câu hỏi Quiz...");
 
     const prompt = `Soạn ${count} câu hỏi trắc nghiệm vui nhộn về chủ đề "${topic}" cho học sinh tiểu học.
+    ${additionalPrompt ? `YÊU CẦU BỔ SUNG TỪ GIÁO VIÊN: "${additionalPrompt}"` : ''}
+
     YÊU CẦU:
     1. Trả về DUY NHẤT một mảng JSON.
     2. Mỗi câu hỏi có 4 đáp án (options).
@@ -401,7 +403,7 @@ export class GeminiService {
     } catch (error: any) {
       console.error("Lỗi tạo Quiz:", error);
       try {
-        return await this.handleError(error, () => this.generateQuiz(topic, count));
+        return await this.handleError(error, () => this.generateQuiz(topic, count, additionalPrompt));
       } catch (finalError) {
         const text = await this.fallbackToOtherProviders(prompt, true);
         return this.parseJSONSafely(text);

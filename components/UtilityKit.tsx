@@ -7,8 +7,6 @@ import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
-// @ts-ignore
-import { PDFDocument } from 'pdf-lib';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -569,7 +567,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     setAudioUrl(null);
 
     try {
-      const quizContent = await geminiService.generateQuiz(topic, quizCount);
+      const quizContent = await geminiService.generateQuiz(topic, quizCount, additionalPrompt);
       setResult(quizContent);
     } catch (error: any) {
       alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
@@ -607,6 +605,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
       Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi (thường từ 20 đến 30 câu).
       
+      ${additionalPrompt ? `YÊU CẦU CỤ THỂ CỦA GIÁO VIÊN:
+      "${additionalPrompt}"
+      (Hãy ưu tiên thực hiện yêu cầu này khi xử lý nội dung)` : ''}
+
       Đặc biệt lưu ý đây là dạng đề thi kiểu ViOlympic Toán hoặc Trạng Nguyên Tiếng Việt:
       - Rất nhiều câu hỏi dựa trên quy luật hình ảnh, dãy số trong hình, hoặc điền từ vào hình.
       - Hãy mô tả kỹ các quy luật này trong nội dung câu hỏi để học sinh có thể hiểu được mà không cần nhìn ảnh gốc (nếu ảnh gốc quá phức tạp).
@@ -933,6 +935,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       return;
     }
     setPdfToolFile(file);
+
+    // @ts-ignore
+    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+
     const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer);
     const count = pdfDoc.getPageCount();
@@ -942,6 +948,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleSplitPdf = async () => {
     if (!pdfToolFile) return;
+
+    // @ts-ignore
+    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+
     const arrayBuffer = await pdfToolFile.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer);
     const newPdf = await PDFDocument.create();
@@ -967,7 +977,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
           className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -1377,13 +1387,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && activeTab === 'lesson_plan' && !useTemplateMode && (
+              {!showHistory && ((activeTab === 'lesson_plan' && !useTemplateMode) || (activeTab === 'games' && gameType === 'quiz')) && (
                 <div className="mt-3">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
                   <textarea
                     value={additionalPrompt}
                     onChange={e => setAdditionalPrompt(e.target.value)}
-                    placeholder="VD: Soạn kỹ phần khởi động, thêm trò chơi, chú trọng phẩm chất nhân ái..."
+                    placeholder={activeTab === 'lesson_plan' ? "VD: Soạn kỹ phần khởi động, thêm trò chơi, chú trọng phẩm chất nhân ái..." : "VD: Tập trung vào hình học, mức độ khó, giải thích chi tiết..."}
                     className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none leading-relaxed"
                   />
                 </div>
