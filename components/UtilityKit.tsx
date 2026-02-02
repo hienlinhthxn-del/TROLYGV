@@ -1675,6 +1675,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       </div>
     );
   };
+};
 
-  // Force update to fix build error
-  export default UtilityKit;
+// Force update to fix build error
+export default UtilityKit;
