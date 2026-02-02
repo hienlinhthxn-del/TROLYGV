@@ -221,6 +221,7 @@ export class GeminiService {
     YÊU CẦU XỬ LÝ DẠNG BÀI VIOLYMPIC / TRẠNG NGUYÊN TIẾNG VIỆT (BẮT BUỘC):
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
        - Hãy phân tích nội dung hình ảnh thật kỹ.
+       - **QUAN TRỌNG:** Nếu là file ảnh/PDF scan, hãy OCR chính xác nội dung văn bản và công thức.
        - **ƯU TIÊN HÀNG ĐẦU:** Mô tả hình ảnh bằng văn bản một cách chi tiết và rõ ràng trong trường "image". Ví dụ: "image": "[HÌNH ẢNH: Một hình vuông bên trong có một hình tròn màu xanh]".
        - **CHỈ KHI THẬT SỰ CẦN THIẾT:** Nếu hình học quá đơn giản (ví dụ: một tam giác), bạn có thể dùng mã SVG. SVG phải trên một dòng và không chứa ký tự đặc biệt có thể làm hỏng JSON.
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
@@ -419,22 +420,65 @@ export class GeminiService {
   }
 
   public async generateImage(prompt: string): Promise<string> {
-    // Không dùng Gemini để vẽ (vì phiên bản miễn phí thường lỗi 429 khi vẽ nhiều)
-    // Tận dụng API bên ngoài để ổn định và nhanh hơn cho GV
-    const seed = Math.floor(Math.random() * 9999);
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + " simple cute drawing for kids")}?width=600&height=400&seed=${seed}&nologo=true`;
+    // Pollinations.ai thường không ổn định và có thể gây lỗi 502 (Bad Gateway).
+    // Chuyển sang một dịch vụ thay thế (dựa trên Stable Diffusion qua Cloudflare Worker) để tăng độ tin cậy.
+    const enhancedPrompt = `${prompt}, simple cute drawing for kids, educational illustration, high quality, white background`;
+    const url = `https://image.gen.workers.dev/?prompt=${encodeURIComponent(enhancedPrompt)}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Máy chủ tạo ảnh báo lỗi: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Dịch vụ không trả về hình ảnh hợp lệ.');
+      }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Lỗi khi fetch ảnh AI:", error);
+      if (error instanceof Error && (error.message.includes('502') || error.message.includes('Failed to fetch'))) {
+        throw new Error("Dịch vụ tạo ảnh đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
+      }
+      throw error;
+    }
   }
 
   public async generateVideo(prompt: string): Promise<string> {
-    const seed = Math.floor(Math.random() * 9999);
-    // Pollinations.ai có thể tạo video ngắn, nhưng chất lượng và độ ổn định không cao.
-    // Đây là một giải pháp tạm thời để có tính năng.
-    // Thêm các từ khóa "video, animation" để tăng khả năng AI hiểu đúng yêu cầu,
-    // ngay cả khi prompt đầu vào là tiếng Việt.
-    const finalPrompt = `${prompt}, video, animation, cinematic`;
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=video&seed=${seed}&nologo=true`;
-  }
+    // Pollinations.ai thường không ổn định và có thể gây lỗi 502 (Bad Gateway).
+    // Chuyển sang một dịch vụ thay thế (dựa trên Stable Diffusion qua Cloudflare Worker) để tăng độ tin cậy.
+    // Dịch vụ này chỉ tạo ảnh tĩnh, hiệu ứng video được thực hiện bằng CSS.
+    const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
+    const url = `https://image.gen.workers.dev/?prompt=${encodeURIComponent(enhancedPrompt)}`;
 
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Máy chủ tạo ảnh video báo lỗi: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Dịch vụ không trả về hình ảnh hợp lệ cho video.');
+      }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Lỗi khi fetch ảnh video AI:", error);
+      if (error instanceof Error && (error.message.includes('502') || error.message.includes('Failed to fetch'))) {
+        throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
+      }
+      throw error;
+    }
+  }
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
     if (history.length === 0) return [];
     try {

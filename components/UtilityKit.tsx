@@ -35,15 +35,31 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
     setTimeLeft(15);
   }, [currentIndex]);
 
-  const handleAnswerClick = (option: any) => {
-    if (selectedOption) return; // Chặn click nhiều lần
+  const checkCorrectness = (q: any, opt: any, idx: number) => {
+    if (!q || !opt) return false;
 
-    const optText = typeof option === 'string' ? option : (option.text || '');
-    const correctText = typeof data[currentIndex].answer === 'string'
-      ? data[currentIndex].answer
-      : (data[currentIndex].answer.text || '');
+    const ansVal = typeof q.answer === 'string' ? q.answer : (q.answer.text || '');
+    const ansStr = String(ansVal).trim();
 
-    const correct = optText === correctText;
+    const optVal = typeof opt === 'string' ? opt : (opt.text || '');
+    const optStr = String(optVal).trim();
+
+    if (ansStr.toLowerCase() === optStr.toLowerCase()) return true;
+
+    if (idx >= 0) {
+      const letter = String.fromCharCode(65 + idx);
+      const letterLower = letter.toLowerCase();
+      const ansLower = ansStr.toLowerCase();
+      if (ansLower === letterLower) return true;
+      if (ansLower.startsWith(`${letterLower}.`) || ansLower.startsWith(`${letterLower} `) || ansLower.startsWith(`${letterLower})`)) return true;
+    }
+    return false;
+  };
+
+  const handleAnswerClick = (option: any, index: number) => {
+    if (selectedOption) return;
+
+    const correct = checkCorrectness(data[currentIndex], option, index);
     setSelectedOption(option);
     setIsCorrect(correct);
 
@@ -51,7 +67,6 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
       setScore(prev => prev + 1);
     }
 
-    // Tự động chuyển câu sau 2s
     setTimeout(() => {
       const nextQuestion = currentIndex + 1;
       if (nextQuestion < data.length) {
@@ -68,7 +83,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
     if (showScore || selectedOption) return;
 
     if (timeLeft === 0) {
-      handleAnswerClick('TIMEOUT');
+      handleAnswerClick('TIMEOUT', -1);
       return;
     }
 
@@ -159,7 +174,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
             const optText = typeof option === 'string' ? option : (option.text || '');
             const optImg = typeof option === 'string' ? '' : (option.image || '');
             const isSelected = selectedOption === option;
-            const isCorrectAnswer = optText === (typeof currentQuestion.answer === 'string' ? currentQuestion.answer : currentQuestion.answer.text);
+            const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
 
             let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
             if (isSelected) {
@@ -167,7 +182,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
                 ? "bg-emerald-100 border-emerald-500 text-emerald-800"
                 : "bg-rose-100 border-rose-500 text-rose-800";
             } else if (selectedOption && isCorrectAnswer) {
-              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700"; // Hiện đáp án đúng nếu chọn sai
+              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
             } else {
               btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
             }
@@ -175,7 +190,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
             return (
               <button
                 key={index}
-                onClick={() => handleAnswerClick(option)}
+                onClick={() => handleAnswerClick(option, index)}
                 disabled={!!selectedOption}
                 className={btnClass}
               >
@@ -619,14 +634,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.2 });
+            // Tăng scale lên 2.0 để ảnh rõ nét hơn cho AI nhận diện hình vẽ/chữ nhỏ
+            const viewport = page.getViewport({ scale: 2.0 });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL('image/jpeg', 0.6);
+            const imgData = canvas.toDataURL('image/jpeg', 0.85); // Tăng chất lượng ảnh
             images.push({
               inlineData: {
                 data: imgData.split(',')[1],
