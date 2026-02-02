@@ -7,6 +7,8 @@ import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
+// @ts-ignore
+import { PDFDocument } from 'pdf-lib';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -228,7 +230,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
 };
 
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibrary }) => {
-  const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant' | 'pdf_tools'>('games');
   const [subject, setSubject] = useState('Toán');
   const [gameType, setGameType] = useState<'idea' | 'crossword' | 'quiz'>('idea');
   const [quizMode, setQuizMode] = useState<'topic' | 'file'>('topic');
@@ -257,6 +259,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [docxFontSize, setDocxFontSize] = useState(13);
   const [docxAlignment, setDocxAlignment] = useState<"left" | "center" | "right" | "justify">('justify');
   const [docxLineSpacing, setDocxLineSpacing] = useState(1.5);
+
+  // State cho PDF Tools
+  const [pdfToolFile, setPdfToolFile] = useState<File | null>(null);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -918,6 +925,39 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     printWindow.document.close();
   };
 
+  const handlePdfToolUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert('Vui lòng chọn file PDF!');
+      return;
+    }
+    setPdfToolFile(file);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const count = pdfDoc.getPageCount();
+    setPdfPageCount(count);
+    setSplitRange({ start: 1, end: Math.min(count, 5) }); // Mặc định cắt 5 trang đầu
+  };
+
+  const handleSplitPdf = async () => {
+    if (!pdfToolFile) return;
+    const arrayBuffer = await pdfToolFile.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    const newPdf = await PDFDocument.create();
+
+    const pageIndices = Array.from({ length: splitRange.end - splitRange.start + 1 }, (_, i) => splitRange.start - 1 + i);
+    const pages = await newPdf.copyPages(pdfDoc, pageIndices);
+    pages.forEach(page => newPdf.addPage(page));
+
+    const pdfBytes = await newPdf.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Cat_Trang_${splitRange.start}-${splitRange.end}_${pdfToolFile.name}`;
+    link.click();
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       <div className="flex items-center justify-between">
@@ -969,6 +1009,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         >
           <i className="fas fa-user-robot"></i>
           <span>Trợ lý Chat</span>
+        </button>
+        <button
+          onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          <i className="fas fa-scissors"></i>
+          <span>Cắt PDF</span>
         </button>
       </div>
 
@@ -1074,7 +1121,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
           <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
             <div className="space-y-4 flex-1 flex flex-col">
-              {(activeTab === 'games' || activeTab === 'lesson_plan') && (
+              {(activeTab === 'games' || activeTab === 'lesson_plan' || activeTab === 'pdf_tools') && (
                 <>
                   {activeTab === 'games' && (
                     <div className="mb-2">
@@ -1195,41 +1242,73 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
-                        <select
-                          value={subject}
-                          onChange={e => setSubject(e.target.value)}
-                          className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                        >
-                          <option>Toán</option>
-                          <option>Tiếng Việt</option>
-                          <option>Tiếng Anh</option>
-                          <option>Đạo đức</option>
-                          <option>Tự nhiên & Xã hội</option>
-                          <option>Lịch sử & Địa lí</option>
-                          <option>Khoa học</option>
-                          <option>Công nghệ</option>
-                          <option>Tin học</option>
-                        </select>
+                    activeTab === 'pdf_tools' ? (
+                      <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
+                          <i className="fas fa-info-circle mr-2"></i>
+                          Công cụ giúp Thầy Cô chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handlePdfToolUpload}
+                            className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                          />
+                        </div>
+                        {pdfToolFile && (
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                            <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Từ trang</label>
+                                <input type="number" min="1" max={pdfPageCount} value={splitRange.start} onChange={(e) => setSplitRange(prev => ({ ...prev, start: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Đến trang</label>
+                                <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
-                        <select
-                          value={grade}
-                          onChange={e => setGrade(e.target.value)}
-                          className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                        >
-                          <option>Lớp 1</option>
-                          <option>Lớp 2</option>
-                          <option>Lớp 3</option>
-                          <option>Lớp 4</option>
-                          <option>Lớp 5</option>
-                        </select>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
+                          <select
+                            value={subject}
+                            onChange={e => setSubject(e.target.value)}
+                            className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          >
+                            <option>Toán</option>
+                            <option>Tiếng Việt</option>
+                            <option>Tiếng Anh</option>
+                            <option>Đạo đức</option>
+                            <option>Tự nhiên & Xã hội</option>
+                            <option>Lịch sử & Địa lí</option>
+                            <option>Khoa học</option>
+                            <option>Công nghệ</option>
+                            <option>Tin học</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
+                          <select
+                            value={grade}
+                            onChange={e => setGrade(e.target.value)}
+                            className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                          >
+                            <option>Lớp 1</option>
+                            <option>Lớp 2</option>
+                            <option>Lớp 3</option>
+                            <option>Lớp 4</option>
+                            <option>Lớp 5</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ))}
                 </>
               )}
 
@@ -1284,7 +1363,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && !(activeTab === 'games' && gameType === 'quiz' && quizMode === 'file') && (
+              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && !(activeTab === 'games' && gameType === 'quiz' && quizMode === 'file') && activeTab !== 'pdf_tools' && (
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                     {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
@@ -1298,7 +1377,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && activeTab === 'lesson_plan' && (
+              {!showHistory && activeTab === 'lesson_plan' && !useTemplateMode && (
                 <div className="mt-3">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
                   <textarea
@@ -1310,7 +1389,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && (
+              {!showHistory && activeTab !== 'pdf_tools' && (
                 <div className="pt-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
                     <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
@@ -1336,12 +1415,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
             {!showHistory && (
               <button
-                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
-                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
+                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
+                className={`w-full py-4 mt-auto rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'}`}
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
-                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
+                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
               </button>
             )}
           </div>
@@ -1542,16 +1621,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     </div>
                   ) : (
                     <div className="p-4">
-                      <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
-                        {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                      </div>
+                      {activeTab === 'pdf_tools' ? (
+                        <div className="text-center py-10 text-slate-400">
+                          <i className="fas fa-file-pdf text-4xl mb-3 opacity-30"></i>
+                          <p className="text-xs font-bold uppercase">File PDF đã được tải xuống máy của bạn.</p>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
+                          {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text-5xl text-slate-300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>

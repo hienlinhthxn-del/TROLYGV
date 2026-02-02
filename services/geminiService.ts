@@ -689,9 +689,9 @@ export class GeminiService {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
       }
 
-      // Nếu Google bảo chờ quá lâu (> 15s), hoặc đã thử lại 3 lần bận liên tiếp
+      // Nếu Google bảo chờ quá lâu (> 25s), hoặc đã thử lại 5 lần bận liên tiếp
       // thì đổi model luôn cho nhanh, không bắt người dùng chờ vô ích
-      if (waitMs > 15000 || this.retryAttempt >= 3) {
+      if (waitMs > 25000 || this.retryAttempt >= 5) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
