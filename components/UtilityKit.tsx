@@ -572,82 +572,50 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   };
 
   const generateQuizFromUpload = async () => {
-    if (!quizFile) {
-      alert("Vui lòng chọn file đề thi (Ảnh/PDF)!");
-      return;
-    }
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const base64Data = (reader.result as string).split(',')[1];
-        const mimeType = quizFile.type;
+    try {
+      // Ưu tiên sử dụng pendingAttachments nếu có (để hỗ trợ nhiều file)
+      const fileParts = getFileParts();
 
-        const prompt = `
-          Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
-          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm.
-          
-          QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):
-          1. Rất nhiều câu hỏi trong đề này có hình ảnh minh họa (hình học, đồ thị, phép tính, hình vẽ...).
-          2. Với mỗi câu hỏi, bạn phải kiểm tra xem có hình ảnh đi kèm không.
-          3. Nếu có hình ảnh:
-             - Ưu tiên 1: Tạo mã SVG đơn giản để vẽ lại hình đó (ví dụ: hình tam giác, hình tròn, sơ đồ cây...). Mã SVG phải nằm gọn trên 1 dòng, không xuống dòng.
-             - Ưu tiên 2: Nếu hình quá phức tạp (ảnh chụp phong cảnh, người...), hãy mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả chi tiết...].
-             - Đưa kết quả (SVG hoặc Mô tả) vào trường "image".
-          4. Nếu ĐÁP ÁN là hình ảnh: Hãy tạo mã SVG hoặc mô tả cho từng đáp án trong mảng "options".
-          5. Nếu câu hỏi có chứa các từ như "hình bên", "hình dưới", "quan sát hình", "biểu đồ", BẮT BUỘC phải có dữ liệu trong trường "image".
-          
-          Ví dụ SVG mẫu (để tham khảo):
-          "<svg width=\\"100\\" height=\\"100\\"><circle cx=\\"50\\" cy=\\"50\\" r=\\"40\\" stroke=\\"black\\" stroke-width=\\"3\\" fill=\\"none\\" /></svg>"
-          
-          Định dạng đầu ra JSON Array (Bắt buộc):
-          [
-            {
-              "question": "Nội dung câu hỏi...",
-              "options": [
-                { "text": "Đáp án A", "image": "SVG/Mô tả nếu là hình" },
-                { "text": "Đáp án B", "image": "" },
-                { "text": "Đáp án C", "image": "" },
-                { "text": "Đáp án D", "image": "" }
-              ],
-              "answer": "Nội dung đáp án đúng (khớp chính xác trường text của một option)", 
-              "explanation": "Giải thích...",
-              "image": "Mã SVG hoặc [HÌNH ẢNH: Mô tả...]"
-            }
-          ]
-          LƯU Ý QUAN TRỌNG VỀ ĐỊNH DẠNG JSON:
-          1. Chỉ trả về duy nhất mảng JSON, không có lời dẫn hay markdown thừa.
-          2. Đối với mã SVG trong trường "image": BẮT BUỘC phải escape dấu ngoặc kép (") thành (\") để đảm bảo JSON hợp lệ.
-          3. Không được xuống dòng trong giá trị của chuỗi JSON (dùng \\n nếu cần).
-          4. Tuyệt đối xử lý đúng ký tự escape: Backslash (\\) phải viết là (\\\\).
-          5. Đảm bảo tất cả các chuỗi đều được đóng ngoặc kép đúng cách.
-        `;
-
-        const filePart = { inlineData: { data: base64Data, mimeType } };
-
-        // Sử dụng generateText thay vì stream để tận dụng cơ chế tự động thử lại (retry) khi gặp lỗi 429
-        const fullContent = await geminiService.generateText(prompt, [filePart]);
-
-        try {
-          // Sử dụng hàm parse an toàn từ service để tự sửa lỗi JSON (Bad escaped character)
-          const json = geminiService.parseJSONSafely(fullContent);
-          setResult(json);
-        } catch (e) {
-          console.error("JSON Parse Error", e);
-          alert("AI đã trả về kết quả nhưng định dạng chưa chuẩn JSON. Kết quả sẽ hiển thị dạng văn bản để Thầy/Cô kiểm tra.");
-          setResult(fullContent);
-        }
-      } catch (error: any) {
-        console.error("Quiz Upload Error:", error);
-        alert(`Lỗi bóc tách đề: ${error.message}`);
-      } finally {
-        setIsProcessing(false);
+      if (fileParts.length === 0 && quizFile) {
+        // Fallback cho logic cũ hoặc nếu người dùng chỉ chọn 1 file qua input riêng
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(quizFile);
+        });
+        const base64Data = await base64Promise;
+        fileParts.push({ inlineData: { data: base64Data, mimeType: quizFile.type } });
       }
-    };
-    reader.readAsDataURL(quizFile);
+
+      if (fileParts.length === 0) {
+        alert("Vui lòng chọn file đề thi (Ảnh/PDF)!");
+        setIsProcessing(false);
+        return;
+      }
+
+      const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp. 
+      Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi.
+      Đặc biệt chú ý bóc tách các dạng bài quy luật hình ảnh (như mẫu Trạng Nguyên, ViOlympic).
+      Dùng mã SVG cho hình đơn giản hoặc ghi [HÌNH ẢNH: Mô tả...] cho hình phức tạp.`;
+
+      // Sử dụng hàm đã được tối ưu trong geminiService
+      const json = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
+
+      if (json && json.questions) {
+        setResult(json.questions);
+      } else {
+        setResult(json);
+      }
+    } catch (error: any) {
+      console.error("Quiz Upload Error:", error);
+      alert(`Lỗi bóc tách đề: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleShareQuiz = async () => {
@@ -1136,11 +1104,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                             </>
                           ) : (
                             <div>
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF)</label>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Chọn nhiều file)</label>
                               <input
                                 type="file"
+                                multiple
                                 accept="image/*,.pdf"
-                                onChange={(e) => setQuizFile(e.target.files ? e.target.files[0] : null)}
+                                onChange={(e) => {
+                                  if (e.target.files) {
+                                    handleFileChange(e as any);
+                                  }
+                                }}
                                 className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                               />
                             </div>

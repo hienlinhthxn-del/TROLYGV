@@ -47,7 +47,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [savedExams, setSavedExams] = useState<SavedExam[]>([]);
-  const [pendingImportFile, setPendingImportFile] = useState<Attachment | null>(null);
+  const [pendingImportFiles, setPendingImportFiles] = useState<Attachment[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,19 +62,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
           if (file) {
-            event.preventDefault(); // Ngăn trình duyệt dán text (nếu có)
+            event.preventDefault();
             const reader = new FileReader();
             reader.onloadend = () => {
               const base64Data = (reader.result as string).split(',')[1];
-              setPendingImportFile({
+              const newFile: Attachment = {
                 type: 'image',
                 name: `Pasted_Image_${Date.now()}.png`,
                 data: base64Data,
                 mimeType: file.type
-              });
+              };
+              setPendingImportFiles(prev => [...prev, newFile]);
             };
             reader.readAsDataURL(file);
-            return; // Chỉ xử lý ảnh đầu tiên tìm thấy
           }
         }
       }
@@ -235,43 +235,47 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64Data = (reader.result as string).split(',')[1];
-      const isPdf = file.type === 'application/pdf';
-      setPendingImportFile({
-        type: isPdf ? 'file' : 'image',
-        name: file.name,
-        data: base64Data,
-        mimeType: file.type
-      });
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        const isPdf = file.type === 'application/pdf';
+        const newFile: Attachment = {
+          type: isPdf ? 'file' : 'image',
+          name: file.name,
+          data: base64Data,
+          mimeType: file.type
+        };
+        setPendingImportFiles(prev => [...prev, newFile]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleImportOldExam = async () => {
-    if (!pendingImportFile || !pendingImportFile.data || !pendingImportFile.mimeType) return;
+    if (pendingImportFiles.length === 0) return;
     setIsImporting(true);
 
-    const prompt = `Bạn là chuyên gia số hóa đề thi đa phương thức. Hãy trích xuất TOÀN BỘ câu hỏi từ tài liệu.
+    const prompt = `Bạn là chuyên gia số hóa đề thi đa phương thức. Hãy trích xuất TOÀN BỘ câu hỏi từ các tài liệu đính kèm.
     
-    YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH:
-    - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ hoặc bảng biểu, hãy bóc tách và cung cấp mô tả chi tiết hoặc mã SVG trong trường "image".
-    - ĐẶC BIỆT: Nếu các ĐÁP ÁN (options) là hình ảnh, hãy trích xuất chúng vào trường "image" của từng option.
-    - Không được bỏ sót các dữ kiện nằm trong hình ảnh.
-    - Đảm bảo trích xuất số lượng câu hỏi đầy đủ từ tài liệu (thường từ 20-30 câu).`;
+    YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH & QUY LUẬT:
+    - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ, hoặc DÃY QUY LUẬT HÌNH ẢNH, hãy bóc tách và cung cấp mã SVG hoặc mô tả chi tiết: [HÌNH ẢNH: Mô tả...] trong trường "image".
+    - Với các câu hỏi Quy luật: Hãy mô tả rõ các thành phần của quy luật.
+    - Nếu các ĐÁP ÁN là hình ảnh: Hãy trích xuất chúng vào trường "image" của từng option.
+    - Đảm bảo trích xuất số lượng câu hỏi đầy đủ (Thường 20-30 câu).`;
 
     try {
-      const filePart: FilePart = {
+      const fileParts: FilePart[] = pendingImportFiles.map(f => ({
         inlineData: {
-          data: pendingImportFile.data,
-          mimeType: pendingImportFile.mimeType
+          data: f.data!,
+          mimeType: f.mimeType!
         }
-      };
+      }));
 
-      const result = await geminiService.generateExamQuestionsStructured(prompt, [filePart]);
+      const result = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
 
       if (!result || !result.questions || result.questions.length === 0) {
         throw new Error("AI không tìm thấy câu hỏi nào.");
@@ -286,11 +290,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       setQuestions(prev => [...prev, ...formatted]);
       if (result.readingPassage) setReadingPassage(result.readingPassage);
       setShowImportModal(false);
-      setPendingImportFile(null);
-      alert(`Đã bóc tách thành công ${formatted.length} câu hỏi.`);
-    } catch (error) {
+      setPendingImportFiles([]);
+      alert(`Đã bóc tách thành công ${formatted.length} câu hỏi từ ${pendingImportFiles.length} trang tài liệu.`);
+    } catch (error: any) {
       console.error(error);
-      alert("Lỗi bóc tách tài liệu.");
+      alert(`Lỗi bóc tách tài liệu: ${error.message}`);
     } finally {
       setIsImporting(false);
     }
@@ -1021,19 +1025,38 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div onClick={() => importFileInputRef.current?.click()} className={`w-full aspect-video bg-slate-50 border-4 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-all overflow-hidden relative group ${isImporting ? 'pointer-events-none opacity-50' : ''}`}>
-                    {pendingImportFile ? (
-                      pendingImportFile.mimeType === 'application/pdf' ? (
-                        <div className="flex flex-col items-center">
-                          <i className="fas fa-file-pdf text-6xl text-rose-500 mb-3"></i>
-                          <p className="text-xs font-bold text-slate-600">{pendingImportFile.name}</p>
+                    {pendingImportFiles.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2 p-4 w-full h-full overflow-y-auto custom-scrollbar">
+                        {pendingImportFiles.map((file, idx) => (
+                          <div key={idx} className="relative aspect-video rounded-xl overflow-hidden border border-slate-200 bg-white">
+                            {file.mimeType === 'application/pdf' ? (
+                              <div className="flex flex-col items-center justify-center h-full">
+                                <i className="fas fa-file-pdf text-2xl text-rose-500 mb-1"></i>
+                                <span className="text-[8px] font-bold text-slate-500 truncate w-full px-2 text-center">{file.name}</span>
+                              </div>
+                            ) : (
+                              <img src={`data:${file.mimeType};base64,${file.data}`} className="w-full h-full object-cover" />
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPendingImportFiles(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-md hover:bg-rose-600"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        ))}
+                        <div className="aspect-video rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 hover:text-indigo-400 hover:border-indigo-200 transition-all">
+                          <i className="fas fa-plus text-xl"></i>
+                          <span className="text-[8px] font-black uppercase mt-1">Thêm trang</span>
                         </div>
-                      ) : (
-                        <img src={`data:${pendingImportFile.mimeType};base64,${pendingImportFile.data}`} className="w-full h-full object-contain" />
-                      )
+                      </div>
                     ) : (
                       <>
                         <i className="fas fa-cloud-arrow-up text-4xl text-slate-200 mb-2"></i>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn hoặc Dán ảnh/PDF đề thi</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4">Chọn hoặc Dán nhiều ảnh/PDF đề thi</p>
                       </>
                     )}
                   </div>
@@ -1120,9 +1143,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                   </div>
                 </div>
 
-                <input ref={importFileInputRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
-                <button onClick={handleImportOldExam} disabled={isImporting || !pendingImportFile} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
-                  {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung đa phương thức...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ File)</span></>}
+                <input ref={importFileInputRef} type="file" multiple className="hidden" accept="image/*,application/pdf" onChange={handleFileImport} />
+                <button onClick={handleImportOldExam} disabled={isImporting || pendingImportFiles.length === 0} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center">
+                  {isImporting ? <><i className="fas fa-spinner fa-spin mr-3"></i><span>AI đang bóc tách nội dung ({pendingImportFiles.length} trang)...</span></> : <><i className="fas fa-wand-magic mr-3"></i><span>Bắt đầu bóc tách (Từ {pendingImportFiles.length} File)</span></>}
                 </button>
               </div>
             </div>

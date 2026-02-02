@@ -213,7 +213,21 @@ export class GeminiService {
     await this.ensureInitialized();
     this.setStatus("Đang soạn nội dung...");
 
-    const fullPrompt = `${this.currentInstruction}\n\nYêu cầu: ${prompt}\n\nQUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
+    const fullPrompt = `${this.currentInstruction}
+    
+    NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ tài liệu (Ảnh/PDF). 
+    Đặc biệt chú ý các dạng bài "Trạng Nguyên Tiếng Việt", "ViOlympic Toán" thường có nhiều hình ảnh.
+
+    YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH & QUY LUẬT (BẮT BUỘC):
+    1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
+       - Hãy phân tích nội dung hình ảnh thật kỹ.
+       - Vẽ lại bằng mã SVG đơn giản (ví dụ: <svg...><circle.../></svg>) nếu có thể. Mã SVG phải trên 1 dòng.
+       - Nếu hình phức tạp (ví dụ: hình con chim, bông hoa), hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
+       - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
+    2. Nếu ĐÁP ÁN là hình ảnh: BẮT BUỘC phải cung cấp SVG hoặc Mô tả vào trường "image" của từng option.
+    3. Đảm bảo số lượng câu hỏi đầy đủ (Tối đa 30 câu nếu tài liệu có đủ). Đừng bỏ sót câu nào.
+
+    QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. Trả về DUY NHẤT mã JSON, không chứa bất kỳ văn bản giải thích nào ở trước hoặc sau.
     2. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
     3. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
@@ -235,12 +249,11 @@ export class GeminiService {
             { "text": "Đáp án 4", "image": "" }
           ], 
           "answer": "Đáp án 1", 
-          "explanation": "Giải thích tại sao Đáp án 1 đúng", 
-          "image": "Mô tả hình ảnh/mã SVG của câu hỏi (nếu có)" 
+          "explanation": "Giải thích chi tiết", 
+          "image": "Mã SVG hoặc [HÌNH ẢNH: Mô tả...]" 
         } 
       ] 
-    }
-    LƯU Ý: Trường 'options' là mảng các đối tượng {text, image}. Nếu không có hình thì image để chuỗi rỗng. 'answer' phải khớp chính xác với 'text' của một option.`;
+    }`;
 
     try {
       const parts = [...(fileParts || []), { text: fullPrompt }];
@@ -249,7 +262,10 @@ export class GeminiService {
       const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
         model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+        }
       }, { apiVersion: 'v1beta' });
 
       const result = await jsonModel.generateContent(parts);
@@ -313,7 +329,10 @@ export class GeminiService {
       const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
         model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+        }
       }, { apiVersion: 'v1beta' });
 
       const result = await jsonModel.generateContent(prompt);
@@ -358,7 +377,10 @@ export class GeminiService {
       const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
         model: activeModelName,
-        generationConfig: { responseMimeType: "application/json" }
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+        }
       }, { apiVersion: 'v1beta' });
 
       const result = await jsonModel.generateContent(prompt);
