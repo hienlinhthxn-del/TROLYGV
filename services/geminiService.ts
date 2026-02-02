@@ -254,7 +254,9 @@ export class GeminiService {
     }`;
 
     try {
-      const parts = [...(fileParts || []), { text: fullPrompt }];
+      // Kết hợp instruction mặc định và prompt tùy chỉnh của người dùng
+      const combinedPrompt = `${fullPrompt}\n\nBỔ XUNG YÊU CẦU CỤ THỂ:\n${prompt}`;
+      const parts = [...(fileParts || []), { text: combinedPrompt }];
 
       // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
       const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
@@ -507,6 +509,15 @@ export class GeminiService {
     const emergencyRepair = (str: string): string => {
       let r = str.trim();
 
+      // Tìm vị trí mở { hoặc [ đầu tiên để cắt bỏ rác phía trước
+      const startBrace = r.indexOf('{');
+      const startBracket = r.indexOf('[');
+      let startIdx = -1;
+      if (startBrace !== -1 && (startBracket === -1 || startBrace < startBracket)) startIdx = startBrace;
+      else if (startBracket !== -1) startIdx = startBracket;
+
+      if (startIdx !== -1) r = r.substring(startIdx);
+
       // Nếu kết thúc bằng dấu phẩy, bỏ đi
       if (r.endsWith(',')) r = r.slice(0, -1);
 
@@ -520,8 +531,16 @@ export class GeminiService {
         const char = r[i];
 
         // Xử lý chuỗi nháy kép (cẩn thận với escaped quotes)
-        if (char === '"' && (i === 0 || r[i - 1] !== '\\')) {
-          inString = !inString;
+        if (char === '"') {
+          let backslashCount = 0;
+          let j = i - 1;
+          while (j >= 0 && r[j] === '\\') {
+            backslashCount++;
+            j--;
+          }
+          if (backslashCount % 2 === 0) {
+            inString = !inString;
+          }
         }
 
         if (!inString) {
@@ -533,8 +552,19 @@ export class GeminiService {
         cleaned += char;
       }
 
-      // Nếu đang ở trong chuỗi, đóng nháy kép lại
-      if (inString) cleaned += '"';
+      // VẤN ĐỀ TRUNCATION: Nếu kết thúc bằng dấu \ lẻ, nó sẽ escape ký tự tiếp theo
+      if (inString) {
+        let backslashCount = 0;
+        let k = cleaned.length - 1;
+        while (k >= 0 && cleaned[k] === '\\') {
+          backslashCount++;
+          k--;
+        }
+        if (backslashCount % 2 !== 0) {
+          cleaned = cleaned.slice(0, -1);
+        }
+        cleaned += '"';
+      }
 
       // Đóng các ngoặc nhọn/vuông còn thiếu
       while (brackets > 0) { cleaned += ']'; brackets--; }
