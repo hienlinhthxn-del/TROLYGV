@@ -597,10 +597,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         return;
       }
 
-      const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp. 
-      Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi.
-      Đặc biệt chú ý bóc tách các dạng bài quy luật hình ảnh (như mẫu Trạng Nguyên, ViOlympic).
-      Dùng mã SVG cho hình đơn giản hoặc ghi [HÌNH ẢNH: Mô tả...] cho hình phức tạp.`;
+      const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
+      Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi (thường từ 20 đến 30 câu).
+      
+      Đặc biệt lưu ý đây là dạng đề thi kiểu ViOlympic Toán hoặc Trạng Nguyên Tiếng Việt:
+      - Rất nhiều câu hỏi dựa trên quy luật hình ảnh, dãy số trong hình, hoặc điền từ vào hình.
+      - Hãy mô tả kỹ các quy luật này trong nội dung câu hỏi để học sinh có thể hiểu được mà không cần nhìn ảnh gốc (nếu ảnh gốc quá phức tạp).
+      - Nếu đáp án là hình ảnh, hãy mô tả chúng trong trường image của options.`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const json = await geminiService.generateExamQuestionsStructured(prompt, fileParts);

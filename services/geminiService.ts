@@ -215,18 +215,21 @@ export class GeminiService {
 
     const fullPrompt = `${this.currentInstruction}
     
-    NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ tài liệu (Ảnh/PDF). 
-    Đặc biệt chú ý các dạng bài "Trạng Nguyên Tiếng Việt", "ViOlympic Toán" thường có nhiều hình ảnh.
+    NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ tài liệu (Ảnh/PDF). Tài liệu này thường chứa khoảng 20 đến 30 câu hỏi.
+    HÃY KIÊN NHẪN ĐỌC HẾT TÀI LIỆU VÀ TRÍCH XUẤT KHÔNG BỎ SÓT CÂU NÀO.
 
-    YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH & QUY LUẬT (BẮT BUỘC):
+    YÊU CẦU XỬ LÝ DẠNG BÀI VIOLYMPIC / TRẠNG NGUYÊN TIẾNG VIỆT (BẮT BUỘC):
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
        - Hãy phân tích nội dung hình ảnh thật kỹ.
        - Vẽ lại bằng mã SVG CỰC KỲ ĐƠN GIẢN (chỉ dùng rect, circle, line, polygon cơ bản, tối đa 5 đối tượng) nếu thực sự cần cho việc giải bài. Mã SVG phải trên 1 dòng.
        - Nếu hình phức tạp hoặc không thể vẽ đơn giản, hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
-    2. Nếu ĐÁP ÁN là hình ảnh: Cung cấp SVG đơn giản hoặc Mô tả vào trường "image" của từng option.
-    3. Đảm bảo trích xuất ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý giới hạn số lượng câu.
-    4. GIẢI THÍCH (explanation) phải ngắn gọn, súc tích (dưới 100 chữ).
+       - Với dạng bài ĐIỀN SỐ/CHỮ VÀO HÌNH: Hãy chuyển thành câu hỏi văn bản. Ví dụ: "Số thích hợp điền vào hình tròn cuối cùng là bao nhiêu? (Quy luật: Số sau gấp đôi số trước)".
+    2. Nếu ĐÁP ÁN là hình ảnh: 
+       - Bắt buộc điền mô tả hoặc mã SVG vào trường "image" của đối tượng option.
+       - Trường "text" của option có thể để là "Hình A", "Hình B" nếu đã có ảnh.
+    3. SỐ LƯỢNG: Phải trích xuất đủ 20-30 câu nếu tài liệu có đủ. Không được tự ý tóm tắt hay cắt bớt.
+    4. GIẢI THÍCH (explanation): Cần ngắn gọn, chỉ ra quy luật logic của bài toán/câu đố.
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. QUAN TRỌNG NHẤT: Chỉ trả về JSON. KHÔNG có lời dẫn (Ví dụ: "Đây là kết quả..."). Bắt buộc dùng dấu ngoặc kép (") cho tên trường và giá trị chuỗi.
