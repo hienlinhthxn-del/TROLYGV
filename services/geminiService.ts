@@ -228,13 +228,19 @@ export class GeminiService {
         { 
           "type": "Trắc nghiệm", 
           "content": "Câu hỏi số 1?", 
-          "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"], 
-          "answer": "A. Đáp án 1", 
-          "explanation": "Giải thích tại sao A đúng", 
-          "imagePrompt": "Mô tả hình ảnh công thức/sơ đồ nếu cần" 
+          "options": [
+            { "text": "Đáp án 1", "image": "Mô tả hình ảnh hoặc mã SVG nếu đáp án là hình" },
+            { "text": "Đáp án 2", "image": "" },
+            { "text": "Đáp án 3", "image": "" },
+            { "text": "Đáp án 4", "image": "" }
+          ], 
+          "answer": "Đáp án 1", 
+          "explanation": "Giải thích tại sao Đáp án 1 đúng", 
+          "image": "Mô tả hình ảnh/mã SVG của câu hỏi (nếu có)" 
         } 
       ] 
-    }`;
+    }
+    LƯU Ý: Trường 'options' là mảng các đối tượng {text, image}. Nếu không có hình thì image để chuỗi rỗng. 'answer' phải khớp chính xác với 'text' của một option.`;
 
     try {
       const parts = [...(fileParts || []), { text: fullPrompt }];
@@ -338,7 +344,12 @@ export class GeminiService {
     [
       {
         "question": "Câu hỏi ở đây?",
-        "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+        "options": [
+          { "text": "Đáp án A", "image": "" },
+          { "text": "Đáp án B", "image": "" },
+          { "text": "Đáp án C", "image": "" },
+          { "text": "Đáp án D", "image": "" }
+        ],
         "answer": "Đáp án A",
         "explanation": "Giải thích ngắn gọn vì sao đúng"
       }

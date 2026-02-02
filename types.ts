@@ -36,17 +36,23 @@ export interface TeacherPersona {
 // Exam Types
 export type CognitiveLevel = 'Nhận biết' | 'Thông hiểu' | 'Vận dụng' | 'Vận dụng cao';
 
+export interface ExamOption {
+  text: string;
+  image?: string;
+}
+
 export interface ExamQuestion {
   id: string;
   type: 'Trắc nghiệm' | 'Tự luận';
   level: CognitiveLevel;
   strand?: string;
   content: string;
-  options?: string[];
+  options?: (string | ExamOption)[]; // Support both old and new formats
   answer: string;
   explanation?: string;
   image?: string;
 }
+
 
 export interface ExamPaper {
   title: string;

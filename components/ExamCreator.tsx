@@ -103,13 +103,38 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           'Vận dụng cao': { mcq: 0, essay: 0 }
         };
       });
+      // Mặc định tạo khoảng 20 câu trắc nghiệm cho mạch đầu tiên mẫu
       const first = strands[0];
-      initial[first]['Nhận biết'].mcq = 2;
-      initial[first]['Thông hiểu'].mcq = 2;
-      initial[first]['Vận dụng'].essay = 1;
+      const second = strands[1] || strands[0];
+      initial[first]['Nhận biết'].mcq = 10;
+      initial[first]['Thông hiểu'].mcq = 5;
+      initial[second]['Vận dụng'].mcq = 5;
       setStrandMatrix(initial);
     }
   }, [config.subject]);
+
+  const applyQuickSetup = (total: number) => {
+    const strands = Object.keys(strandMatrix);
+    if (strands.length === 0) return;
+
+    const newMatrix = { ...strandMatrix };
+    // Reset all
+    strands.forEach(s => {
+      COGNITIVE_LEVELS.forEach(l => {
+        newMatrix[s][l] = { mcq: 0, essay: 0 };
+      });
+    });
+
+    // Phân bổ đơn giản
+    const perStrand = Math.floor(total / strands.length);
+    strands.forEach((s, i) => {
+      const count = i === strands.length - 1 ? total - (perStrand * (strands.length - 1)) : perStrand;
+      newMatrix[s]['Nhận biết'].mcq = Math.floor(count * 0.4);
+      newMatrix[s]['Thông hiểu'].mcq = Math.floor(count * 0.4);
+      newMatrix[s]['Vận dụng'].mcq = count - (newMatrix[s]['Nhận biết'].mcq + newMatrix[s]['Thông hiểu'].mcq);
+    });
+    setStrandMatrix(newMatrix);
+  };
 
   const stats = useMemo(() => {
     let mcq = 0, essay = 0;
@@ -234,7 +259,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     
     YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH:
     - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ hoặc bảng biểu, hãy bóc tách và cung cấp mô tả chi tiết hoặc mã SVG trong trường "image".
-    - Không được bỏ sót các dữ kiện nằm trong hình ảnh.`;
+    - ĐẶC BIỆT: Nếu các ĐÁP ÁN (options) là hình ảnh, hãy trích xuất chúng vào trường "image" của từng option.
+    - Không được bỏ sót các dữ kiện nằm trong hình ảnh.
+    - Đảm bảo trích xuất số lượng câu hỏi đầy đủ từ tài liệu (thường từ 20-30 câu).`;
 
     try {
       const filePart: FilePart = {
@@ -325,15 +352,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           return q;
         }
 
+        // Tách nhãn đáp án đúng
         const answerPrefixMatch = q.answer.match(/^[A-D][\.\:]\s*/);
         const correctAnswerText = answerPrefixMatch
-          ? q.answer.substring(answerPrefixMatch[0].length)
-          : q.answer;
+          ? q.answer.substring(answerPrefixMatch[0].length).trim()
+          : q.answer.trim();
 
-        const originalOption = q.options.find(opt => opt.trim() === correctAnswerText.trim());
-        if (!originalOption) {
-          return q;
-        }
+        // Tìm đáp án nguyên bản
+        const originalOption = q.options.find(opt => {
+          const optText = typeof opt === 'string' ? opt : opt.text;
+          return optText.trim() === correctAnswerText;
+        });
+
+        if (!originalOption) return q;
 
         const shuffledOptions = [...q.options];
         for (let i = shuffledOptions.length - 1; i > 0; i--) {
@@ -341,11 +372,17 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
         }
 
-        const newCorrectIndex = shuffledOptions.findIndex(opt => opt.trim() === originalOption.trim());
+        const newCorrectIndex = shuffledOptions.findIndex(opt => {
+          const optText = typeof opt === 'string' ? opt : opt.text;
+          const origText = typeof originalOption === 'string' ? originalOption : originalOption.text;
+          return optText.trim() === origText.trim();
+        });
+
         if (newCorrectIndex === -1) return q;
 
         const newAnswerLetter = String.fromCharCode('A'.charCodeAt(0) + newCorrectIndex);
-        const newAnswer = `${newAnswerLetter}. ${originalOption}`;
+        const finalOptText = typeof originalOption === 'string' ? originalOption : originalOption.text;
+        const newAnswer = `${newAnswerLetter}. ${finalOptText}`;
 
         return { ...q, options: shuffledOptions, answer: newAnswer };
       });
@@ -400,7 +437,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const addOption = (qId: string) => {
     setQuestions(prev => prev.map(q => {
       if (q.id === qId) {
-        return { ...q, options: [...(q.options || []), ''] };
+        const newOpt = { text: '', image: '' };
+        return { ...q, options: [...(q.options || []), newOpt] };
       }
       return q;
     }));
@@ -421,7 +459,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       type: 'Trắc nghiệm',
       level: 'Thông hiểu',
       content: 'Câu hỏi mới...',
-      options: ['', '', '', ''],
+      options: [
+        { text: '', image: '' },
+        { text: '', image: '' },
+        { text: '', image: '' },
+        { text: '', image: '' }
+      ],
       answer: '',
       explanation: ''
     };
@@ -583,11 +626,18 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   };
 
-  const updateOption = (qId: string, optIdx: number, value: string) => {
+  const updateOption = (qId: string, optIdx: number, value: string, isImage: boolean = false) => {
     setQuestions(prev => prev.map(q => {
       if (q.id === qId && q.options) {
         const newOpts = [...q.options];
-        newOpts[optIdx] = value;
+        const currentOpt = newOpts[optIdx];
+
+        if (typeof currentOpt === 'string') {
+          newOpts[optIdx] = isImage ? { text: currentOpt, image: value } : { text: value, image: '' };
+        } else {
+          newOpts[optIdx] = isImage ? { ...currentOpt, image: value } : { ...currentOpt, text: value };
+        }
+
         return { ...q, options: newOpts };
       }
       return q;
@@ -598,10 +648,17 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     <div className="flex flex-col lg:flex-row h-full gap-6 animate-in fade-in duration-500 overflow-hidden relative">
       <div className="lg:w-[400px] flex-shrink-0 flex flex-col space-y-4 overflow-y-auto custom-scrollbar pb-6 pr-2">
         <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Ma trận & Cấu hình</h3>
-            <div className="bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 flex items-center space-x-2">
-              <span className="text-[10px] font-black text-emerald-600 uppercase">{stats.total} câu</span>
+          <div className="flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Ma trận & Cấu hình</h3>
+              <div className="bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 flex items-center space-x-2">
+                <span className="text-[10px] font-black text-emerald-600 uppercase">{stats.total} câu</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => applyQuickSetup(20)} className="flex-1 py-1.5 bg-slate-100 text-[9px] font-black uppercase rounded-lg border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all">20 Câu</button>
+              <button onClick={() => applyQuickSetup(30)} className="flex-1 py-1.5 bg-slate-100 text-[9px] font-black uppercase rounded-lg border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all">30 Câu</button>
             </div>
           </div>
 
@@ -850,18 +907,42 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                         {renderImage(q.image)}
 
                         {q.options && q.options.length > 0 && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {q.options.map((opt, i) => (
-                              <div key={i} className={`p-3 rounded-2xl border bg-white border-slate-100 text-slate-600 text-[13px] font-medium flex items-center space-x-3 ${editingId === q.id ? 'border-indigo-200 shadow-sm' : ''}`}>
-                                <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black">{['A', 'B', 'C', 'D'][i]}</span>
-                                <input
-                                  value={opt}
-                                  onChange={(e) => updateOption(q.id, i, e.target.value)}
-                                  className="flex-1 border-none focus:ring-0 p-0 text-[13px] bg-transparent"
-                                  placeholder={`Lựa chọn ${i + 1}`}
-                                />
-                              </div>
-                            ))}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {q.options.map((opt, i) => {
+                              const optText = typeof opt === 'string' ? opt : opt.text;
+                              const optImg = typeof opt === 'string' ? '' : opt.image;
+                              return (
+                                <div key={i} className={`p-4 rounded-3xl border bg-white border-slate-100 flex flex-col space-y-3 transition-all ${editingId === q.id ? 'border-indigo-200 shadow-md ring-1 ring-indigo-50' : ''}`}>
+                                  <div className="flex items-center space-x-3">
+                                    <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] font-black shrink-0">{['A', 'B', 'C', 'D', 'E', 'F'][i]}</span>
+                                    <input
+                                      value={optText}
+                                      onChange={(e) => updateOption(q.id, i, e.target.value)}
+                                      className="flex-1 border-none focus:ring-0 p-0 text-[14px] font-bold text-slate-700 bg-transparent"
+                                      placeholder={`Nội dung lựa chọn ${i + 1}`}
+                                    />
+                                  </div>
+
+                                  {editingId === q.id && (
+                                    <div className="pt-2 border-t border-slate-50 flex flex-col space-y-2">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hình ảnh đáp án (Mô tả/SVG)</p>
+                                      <input
+                                        value={optImg}
+                                        onChange={(e) => updateOption(q.id, i, e.target.value, true)}
+                                        className="w-full bg-slate-50 border-none rounded-xl px-3 py-2 text-[10px] outline-none focus:ring-2 focus:ring-indigo-100"
+                                        placeholder="Mô tả hình ảnh cho đáp án này..."
+                                      />
+                                    </div>
+                                  )}
+
+                                  {optImg && (
+                                    <div className="mt-1">
+                                      {renderImage(optImg)}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 

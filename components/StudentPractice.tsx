@@ -149,23 +149,19 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
       // --- Logic chấm điểm mới, mạnh mẽ hơn ---
 
-      // 1. Trích xuất nội dung text của đáp án đúng từ trường 'answer'
-      let correctAnswerText = (q.answer || '').trim();
-      const answerPrefixMatch = correctAnswerText.match(/^[A-D][\.\:]\s*/i);
-      if (answerPrefixMatch) {
-        correctAnswerText = correctAnswerText.substring(answerPrefixMatch[0].length).trim();
-      }
+      // 1. Tìm index của đáp án đúng trong q.options
+      // Đáp án đúng 'q.answer' có thể là nhãn (A.) hoặc nội dung text của đáp án
+      let correctOptionIndex = -1;
 
-      // 2. Tìm index của lựa chọn (option) khớp với text đáp án đúng
-      // Điều này xử lý trường hợp các options cũng có thể chứa prefix "A.", "B."
-      const correctOptionIndex = q.options.findIndex(opt => {
-        let cleanOptionText = (opt || '').trim();
-        const optionPrefixMatch = cleanOptionText.match(/^[A-D][\.\:]\s*/i);
-        if (optionPrefixMatch) {
-          cleanOptionText = cleanOptionText.substring(optionPrefixMatch[0].length).trim();
-        }
-        // So sánh không phân biệt hoa thường
-        return cleanOptionText.toLowerCase() === correctAnswerText.toLowerCase();
+      const answerTextOnly = q.answer.replace(/^[A-E][\.\:]\s*/i, '').trim().toLowerCase();
+      const answerLabelOnly = q.answer.match(/^[A-E][\.\:]/i)?.[0].toUpperCase().replace(/[\.\:]/, '') || '';
+
+      correctOptionIndex = q.options.findIndex((opt, i) => {
+        const optText = (typeof opt === 'string' ? opt : opt.text).trim().toLowerCase();
+        const optLabel = String.fromCharCode('A'.charCodeAt(0) + i);
+
+        // So khớp nhãn hoặc so khớp nội dung
+        return optLabel === answerLabelOnly || optText === answerTextOnly;
       });
 
       // 3. So sánh câu trả lời của người dùng với vị trí đáp án đúng
@@ -404,16 +400,26 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
             {currentQuestion.type === 'Trắc nghiệm' ? (
               <div className="grid grid-cols-1 gap-3 relative z-10">
                 {currentQuestion.options?.map((opt, i) => {
-                  const label = ['A', 'B', 'C', 'D'][i];
+                  const label = ['A', 'B', 'C', 'D', 'E', 'F'][i];
                   const isSelected = answers[currentQuestion.id] === label;
+                  const optText = typeof opt === 'string' ? opt : opt.text;
+                  const optImg = typeof opt === 'string' ? '' : opt.image;
+
                   return (
                     <button
                       key={i}
                       onClick={() => handleSelectOption(i)}
-                      className={`flex items-center p-5 rounded-2xl border-2 text-left transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50/30'}`}
+                      className={`flex flex-col p-5 rounded-3xl border-2 text-left transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50/30'}`}
                     >
-                      <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black mr-4 ${isSelected ? 'bg-white/20' : 'bg-slate-50'}`}>{label}</span>
-                      <span className="text-[15px] font-bold">{opt}</span>
+                      <div className="flex items-center w-full">
+                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black mr-4 ${isSelected ? 'bg-white/20' : 'bg-slate-50'}`}>{label}</span>
+                        <span className="text-[17px] font-bold flex-1">{optText}</span>
+                      </div>
+                      {optImg && (
+                        <div className="mt-4 w-full">
+                          {renderQuestionImage(optImg)}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
