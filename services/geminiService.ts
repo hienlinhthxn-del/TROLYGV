@@ -685,22 +685,22 @@ export class GeminiService {
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại hoặc đổi Model
     if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = this.retryAttempt === 0 ? 2000 : 5000;
+      let waitMs = this.retryAttempt === 0 ? 4000 : 8000; // Tăng thời gian chờ cơ bản (4s -> 8s)
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Thêm buffer 2s an toàn
       }
 
-      // Nếu Google bảo chờ quá lâu (> 25s), hoặc đã thử lại 5 lần bận liên tiếp
+      // Nếu Google bảo chờ quá lâu (> 20s), hoặc đã thử lại 2 lần bận liên tiếp (Giảm từ 5 xuống 2 để đổi model nhanh hơn)
       // thì đổi model luôn cho nhanh, không bắt người dùng chờ vô ích
-      if (waitMs > 25000 || this.retryAttempt >= 5) {
+      if (waitMs > 20000 || this.retryAttempt >= 2) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
 
         // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
         if (nextIdx === 0 && currentIdx !== -1) {
-          throw new Error("Tất cả các đường truyền AI hiện đang bận do quá tải. Thầy/Cô vui lòng đợi khoảng 1 phút rồi thử lại, hoặc nhập API Key cá nhân để dùng ổn định hơn nhé!");
+          throw new Error("Hệ thống đang quá tải do file đề thi quá dài hoặc nhiều hình ảnh. Thầy/Cô hãy thử:\n1. Dùng tính năng 'Cắt PDF' để chia nhỏ đề thi (khuyên dùng).\n2. Đợi 1-2 phút rồi thử lại.\n3. Nhập API Key cá nhân để có giới hạn cao hơn.");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
