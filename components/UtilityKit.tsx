@@ -626,273 +626,279 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     } catch (error: any) {
       console.error("Quiz Upload Error:", error);
 
-      id ì | ossage Lỗi bóc tách đề: \n\n${ errorMessage } `);      } 
-i chung khi tải file PDF -> Gợi ý cắt file.
- if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${ errorMessage } \n\nNguyên nhân thường do file đề thi quá dài hoặc có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không ? (Khuyên dùng)`)) {
+      const errorMessage = error.message || "Lỗi không xác định";
+
+      // Kịch bản 1: Lỗi đặc biệt, đã có hướng dẫn cụ thể (như chụp ảnh màn hình) -> Chỉ hiển thị alert.
+      if (errorMessage.includes("chụp ảnh màn hình") || errorMessage.includes("screenshot")) {
+        alert(`⚠️ Lỗi bóc tách đề:\n\n${errorMessage}`);
+      }
+      // Kịch bản 2: Lỗi chung khi tải file PDF -> Gợi ý cắt file.
+      else if (pendingAttachments.some(f => f.mimeType?.includes('pdf'))) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân thường do file đề thi quá dài hoặc có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không? (Khuyên dùng)`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
         }
       } else {
         // Kịch bản 3: Lỗi chung với các loại file khác (ảnh,...)
-        alert(`Lỗi bóc tách đề: ${ errorMessage } `);
+        alert(`Lỗi bóc tách đề: ${errorMessage}`);
       }
     } finally {
       setIsProcessing(false);
     }
 
-  const handleShareQuiz = async () => {
-    if (!result || !Array.isArray(result)) return;
+    const handleShareQuiz = async () => {
+      if (!result || !Array.isArray(result)) return;
 
-    try {
-      const quizData = {
-        s: subject,
-        g: grade,
-        q: result.map((q: any) => ([
-          1, // MCQ type
-          q.question,
-          q.options,
-          q.answer,
-          q.explanation,
-          q.image || '' // Image
-        ]))
+      try {
+        const quizData = {
+          s: subject,
+          g: grade,
+          q: result.map((q: any) => ([
+            1, // MCQ type
+            q.question,
+            q.options,
+            q.answer,
+            q.explanation,
+            q.image || '' // Image
+          ]))
+        };
+
+        const json = JSON.stringify(quizData);
+        let finalCode = '';
+
+        // @ts-ignore
+        if (window.CompressionStream) {
+          const stream = new Blob([json]).stream();
+          // @ts-ignore
+          const compressed = stream.pipeThrough(new CompressionStream('gzip'));
+          const response = new Response(compressed);
+          const blob = await response.blob();
+          const buffer = await blob.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        } else {
+          const utf8Bytes = new TextEncoder().encode(json);
+          let binary = '';
+          utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
+          finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        const url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
+        await navigator.clipboard.writeText(url);
+        alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
+      } catch (e) {
+        console.error("Share error", e);
+        alert("Lỗi khi tạo link chia sẻ.");
+      }
+    };
+
+    const handleSendAssistantMessage = async () => {
+      const messageContent = assistantInput.trim();
+      if ((!messageContent && pendingAttachments.length === 0) || isAssistantLoading || !activeAssistant) return;
+
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${pendingAttachments.length} tệp đính kèm]` : ''),
+        timestamp: new Date(),
       };
 
-      const json = JSON.stringify(quizData);
-      let finalCode = '';
+      setAssistantMessages(prev => [...prev, userMessage]);
+      setAssistantInput('');
 
-      // @ts-ignore
-      if (window.CompressionStream) {
-        const stream = new Blob([json]).stream();
-        // @ts-ignore
-        const compressed = stream.pipeThrough(new CompressionStream('gzip'));
-        const response = new Response(compressed);
-        const blob = await response.blob();
-        const buffer = await blob.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      } else {
-        const utf8Bytes = new TextEncoder().encode(json);
-        let binary = '';
-        utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
-        finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      }
+      const currentAttachments = getFileParts();
+      setPendingAttachments([]);
+      setIsAssistantLoading(true);
 
-      const url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
-      await navigator.clipboard.writeText(url);
-      alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
-    } catch (e) {
-      console.error("Share error", e);
-      alert("Lỗi khi tạo link chia sẻ.");
-    }
-  };
+      const assistantId = (Date.now() + 1).toString();
+      setAssistantMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date(), isThinking: true, isStreaming: true }]);
 
-  const handleSendAssistantMessage = async () => {
-    const messageContent = assistantInput.trim();
-    if ((!messageContent && pendingAttachments.length === 0) || isAssistantLoading || !activeAssistant) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${ pendingAttachments.length } tệp đính kèm]` : ''),
-      timestamp: new Date(),
-    };
-
-    setAssistantMessages(prev => [...prev, userMessage]);
-    setAssistantInput('');
-
-    const currentAttachments = getFileParts();
-    setPendingAttachments([]);
-    setIsAssistantLoading(true);
-
-    const assistantId = (Date.now() + 1).toString();
-    setAssistantMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date(), isThinking: true, isStreaming: true }]);
-
-    try {
-      let fullContent = '';
-      const stream = geminiService.sendMessageStream(messageContent, currentAttachments);
-
-      for await (const chunk of stream) {
-        fullContent += chunk.text;
-        setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: fullContent, isThinking: false } : msg));
-      }
-      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
-    } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
-      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${ errorMessage } `, isThinking: false, isStreaming: false } : msg));
-    } finally {
-      setIsAssistantLoading(false);
-    }
-  };
-
-  const handlePlayWithVoiceover = () => {
-    if (!result || !topic) return;
-
-    if (isPlaying) {
-      window.speechSynthesis.cancel();
-      setIsPlaying(false);
-      return;
-    }
-
-    // Dừng mọi giọng nói đang phát
-    window.speechSynthesis.cancel();
-    setIsPlaying(true);
-
-    const utterance = new SpeechSynthesisUtterance(topic);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.9;
-
-    const voices = window.speechSynthesis.getVoices();
-    const viVoices = voices.filter(v => v.lang.includes('vi'));
-    if (viVoices.length > 0) {
-      // Cố gắng tìm một giọng nữ chuẩn
-      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
-    }
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-    };
-    utterance.onerror = () => {
-      setIsPlaying(false);
-    };
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const generateVideo = async () => {
-    if (!topic.trim()) {
-      alert("Vui lòng nhập kịch bản hoặc mô tả video!");
-      return;
-    }
-    setIsProcessing(true);
-    setResult(null);
-    setAudioUrl(null);
-
-    try {
-      // Dịch và tối ưu prompt sang tiếng Anh để AI video hiểu tốt hơn
-      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${ videoStyle }, short animation, simple, for kids, educational.Script: "${topic}"`;
-
-      let optimizedPrompt = topic;
       try {
-        const translation = await geminiService.generateText(translationPrompt);
-        optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
-      } catch (err) {
-        console.warn("Translation failed, using original topic", err);
-        optimizedPrompt = `${ topic }, ${ videoStyle }, animation for kids`; // Fallback
-      }
+        let fullContent = '';
+        const stream = geminiService.sendMessageStream(messageContent, currentAttachments);
 
-      const videoUrl = await geminiService.generateVideo(optimizedPrompt);
-      setResult(videoUrl);
-    } catch (error: any) {
-      alert(`Không thể tạo video: ${ error.message || "Lỗi kết nối" }. Thầy Cô vui lòng thử lại nhé!`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const generateTTS = async () => {
-    if (!topic.trim()) {
-      alert("Vui lòng nhập văn bản cần đọc!");
-      return;
-    }
-    setIsProcessing(true);
-    setResult(null);
-    setAudioUrl(null);
-    setIsPlaying(false);
-
-    try {
-      // Kiểm tra tính khả dụng của SpeechSynthesis
-      if ('speechSynthesis' in window) {
-        setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
-      } else {
-        const url = await geminiService.generateSpeech(topic, voiceName);
-        if (url) {
-          setAudioUrl(url);
-          setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");
-        } else {
-          alert("Trình duyệt và máy chủ hiện không hỗ trợ giọng nói.");
+        for await (const chunk of stream) {
+          fullContent += chunk.text;
+          setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: fullContent, isThinking: false } : msg));
         }
+        setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
+      } catch (error: any) {
+        const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
+        setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${errorMessage} `, isThinking: false, isStreaming: false } : msg));
+      } finally {
+        setIsAssistantLoading(false);
       }
-    } catch (error: any) {
-      console.error("TTS error:", error);
-      alert("Lỗi khi chuẩn bị giọng đọc: " + (error.message || "Lỗi không xác định"));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleSaveLesson = () => {
-    if (!result || activeTab !== 'lesson_plan') return;
-    const newPlan: SavedLessonPlan = {
-      id: Date.now().toString(),
-      topic,
-      subject,
-      grade,
-      content: result,
-      timestamp: new Date().toISOString()
     };
-    const updated = [newPlan, ...lessonHistory];
-    setLessonHistory(updated);
-    localStorage.setItem('edu_lesson_history', JSON.stringify(updated));
-    alert("✅ Đã lưu giáo án vào lịch sử!");
-  };
 
-  const handleDeleteLesson = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm("Bạn có chắc muốn xóa giáo án này khỏi lịch sử?")) {
-      const updated = lessonHistory.filter(p => p.id !== id);
+    const handlePlayWithVoiceover = () => {
+      if (!result || !topic) return;
+
+      if (isPlaying) {
+        window.speechSynthesis.cancel();
+        setIsPlaying(false);
+        return;
+      }
+
+      // Dừng mọi giọng nói đang phát
+      window.speechSynthesis.cancel();
+      setIsPlaying(true);
+
+      const utterance = new SpeechSynthesisUtterance(topic);
+      utterance.lang = 'vi-VN';
+      utterance.rate = 0.9;
+
+      const voices = window.speechSynthesis.getVoices();
+      const viVoices = voices.filter(v => v.lang.includes('vi'));
+      if (viVoices.length > 0) {
+        // Cố gắng tìm một giọng nữ chuẩn
+        utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
+      }
+
+      utterance.onend = () => {
+        setIsPlaying(false);
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+      };
+      window.speechSynthesis.speak(utterance);
+    };
+
+    const generateVideo = async () => {
+      if (!topic.trim()) {
+        alert("Vui lòng nhập kịch bản hoặc mô tả video!");
+        return;
+      }
+      setIsProcessing(true);
+      setResult(null);
+      setAudioUrl(null);
+
+      try {
+        // Dịch và tối ưu prompt sang tiếng Anh để AI video hiểu tốt hơn
+        const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${videoStyle}, short animation, simple, for kids, educational.Script: "${topic}"`;
+
+        let optimizedPrompt = topic;
+        try {
+          const translation = await geminiService.generateText(translationPrompt);
+          optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
+        } catch (err) {
+          console.warn("Translation failed, using original topic", err);
+          optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+        }
+
+        const videoUrl = await geminiService.generateVideo(optimizedPrompt);
+        setResult(videoUrl);
+      } catch (error: any) {
+        alert(`Không thể tạo video: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    const generateTTS = async () => {
+      if (!topic.trim()) {
+        alert("Vui lòng nhập văn bản cần đọc!");
+        return;
+      }
+      setIsProcessing(true);
+      setResult(null);
+      setAudioUrl(null);
+      setIsPlaying(false);
+
+      try {
+        // Kiểm tra tính khả dụng của SpeechSynthesis
+        if ('speechSynthesis' in window) {
+          setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
+        } else {
+          const url = await geminiService.generateSpeech(topic, voiceName);
+          if (url) {
+            setAudioUrl(url);
+            setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");
+          } else {
+            alert("Trình duyệt và máy chủ hiện không hỗ trợ giọng nói.");
+          }
+        }
+      } catch (error: any) {
+        console.error("TTS error:", error);
+        alert("Lỗi khi chuẩn bị giọng đọc: " + (error.message || "Lỗi không xác định"));
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    const handleSaveLesson = () => {
+      if (!result || activeTab !== 'lesson_plan') return;
+      const newPlan: SavedLessonPlan = {
+        id: Date.now().toString(),
+        topic,
+        subject,
+        grade,
+        content: result,
+        timestamp: new Date().toISOString()
+      };
+      const updated = [newPlan, ...lessonHistory];
       setLessonHistory(updated);
       localStorage.setItem('edu_lesson_history', JSON.stringify(updated));
-    }
-  };
+      alert("✅ Đã lưu giáo án vào lịch sử!");
+    };
 
-  const handleSelectLesson = (plan: SavedLessonPlan) => {
-    setTopic(plan.topic);
-    setSubject(plan.subject);
-    setGrade(plan.grade);
-    setResult(plan.content);
-    setShowHistory(false);
-  };
+    const handleDeleteLesson = (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (window.confirm("Bạn có chắc muốn xóa giáo án này khỏi lịch sử?")) {
+        const updated = lessonHistory.filter(p => p.id !== id);
+        setLessonHistory(updated);
+        localStorage.setItem('edu_lesson_history', JSON.stringify(updated));
+      }
+    };
 
-  const handleSaveToLibrary = () => {
-    if (!result) return;
-    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${ subject } `);
-    if (name) {
-      const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-      onSaveToLibrary(name, contentToSave);
-      alert("✅ Đã lưu tài liệu vào Thư viện thành công!");
-    }
-  };
+    const handleSelectLesson = (plan: SavedLessonPlan) => {
+      setTopic(plan.topic);
+      setSubject(plan.subject);
+      setGrade(plan.grade);
+      setResult(plan.content);
+      setShowHistory(false);
+    };
 
-  const handlePrintCrossword = () => {
-    if (!result || !result.size || !result.words) return;
+    const handleSaveToLibrary = () => {
+      if (!result) return;
+      const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${subject} `);
+      if (name) {
+        const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        onSaveToLibrary(name, contentToSave);
+        alert("✅ Đã lưu tài liệu vào Thư viện thành công!");
+      }
+    };
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const handlePrintCrossword = () => {
+      if (!result || !result.size || !result.words) return;
 
-    const { size, words } = result;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
 
-    // Xác định các ô cần tô đen/trắng
-    const gridMap = Array(size).fill(null).map(() => Array(size).fill(false));
-    words.forEach((word: any) => {
-      for (let i = 0; i < word.word.length; i++) {
-        if (word.direction === 'across') {
-          gridMap[word.row][word.col + i] = true;
-        } else {
-          gridMap[word.row + i][word.col] = true;
+      const { size, words } = result;
+
+      // Xác định các ô cần tô đen/trắng
+      const gridMap = Array(size).fill(null).map(() => Array(size).fill(false));
+      words.forEach((word: any) => {
+        for (let i = 0; i < word.word.length; i++) {
+          if (word.direction === 'across') {
+            gridMap[word.row][word.col + i] = true;
+          } else {
+            gridMap[word.row + i][word.col] = true;
+          }
+        }
+      });
+
+      let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          const isActive = gridMap[r][c];
+          gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
         }
       }
-    });
+      gridHtml += `</div > `;
 
-    let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
-    for (let r = 0; r < size; r++) {
-      for (let c = 0; c < size; c++) {
-        const isActive = gridMap[r][c];
-        gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
-      }
-    }
-    gridHtml += `</div > `;
-
-    const html = `
+      const html = `
         < !DOCTYPE html >
           <html>
             <head>
@@ -933,741 +939,741 @@ i chung khi tải file PDF -> Gợi ý cắt file.
             </body>
           </html>`;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
-  };
+      printWindow.document.write(html);
+      printWindow.document.close();
+    };
 
-  const handlePdfToolUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      alert('Vui lòng chọn file PDF!');
-      return;
-    }
-    setPdfToolFile(file);
+    const handlePdfToolUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.type !== 'application/pdf') {
+        alert('Vui lòng chọn file PDF!');
+        return;
+      }
+      setPdfToolFile(file);
 
-    // @ts-ignore
-    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+      // @ts-ignore
+      const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const count = pdfDoc.getPageCount();
-    setPdfPageCount(count);
-    setSplitRange({ start: 1, end: Math.min(count, 5) }); // Mặc định cắt 5 trang đầu
-  };
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const count = pdfDoc.getPageCount();
+      setPdfPageCount(count);
+      setSplitRange({ start: 1, end: Math.min(count, 5) }); // Mặc định cắt 5 trang đầu
+    };
 
-  const handleSplitPdf = async () => {
-    if (!pdfToolFile) return;
+    const handleSplitPdf = async () => {
+      if (!pdfToolFile) return;
 
-    // @ts-ignore
-    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+      // @ts-ignore
+      const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
-    const arrayBuffer = await pdfToolFile.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
+      const arrayBuffer = await pdfToolFile.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const newPdf = await PDFDocument.create();
 
-    const pageIndices = Array.from({ length: splitRange.end - splitRange.start + 1 }, (_, i) => splitRange.start - 1 + i);
-    const pages = await newPdf.copyPages(pdfDoc, pageIndices);
-    pages.forEach(page => newPdf.addPage(page));
+      const pageIndices = Array.from({ length: splitRange.end - splitRange.start + 1 }, (_, i) => splitRange.start - 1 + i);
+      const pages = await newPdf.copyPages(pdfDoc, pageIndices);
+      pages.forEach(page => newPdf.addPage(page));
 
-    const pdfBytes = await newPdf.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Cat_Trang_${ splitRange.start } -${ splitRange.end }_${ pdfToolFile.name } `;
-    link.click();
-  };
+      const pdfBytes = await newPdf.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Cat_Trang_${splitRange.start} -${splitRange.end}_${pdfToolFile.name} `;
+      link.click();
+    };
 
-  return (
-    <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
-          <p className="text-sm text-slate-500 font-medium">Biến bài giảng trở nên sinh động và cuốn hút hơn.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
-        <button
-          onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-file-signature"></i>
-          <span>Giáo án 2345</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-gamepad"></i>
-          <span>Trò chơi</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-image"></i>
-          <span>Minh họa AI</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-volume-up"></i>
-          <span>Giọng đọc</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-film"></i>
-          <span>Tạo Video</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-user-robot"></i>
-          <span>Trợ lý Chat</span>
-        </button>
-        <button
-          onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
-        >
-          <i className="fas fa-scissors"></i>
-          <span>Cắt PDF</span>
-        </button>
-      </div>
-
-      {/* Helper function to handle speech */}
-      {(() => {
-        // Pre-load voices for the browser
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          window.speechSynthesis.getVoices();
-        }
-        return null;
-      })()}
-
-      {activeTab === 'assistant' ? (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
-          <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Chọn Trợ lý Thông minh</h3>
-            <div className="space-y-3">
-              {ASSISTANT_PERSONAS.map(persona => (
-                <button
-                  key={persona.id}
-                  onClick={() => setActiveAssistant(persona)}
-                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${ activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200' } `}
-                >
-                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${ activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white' } `}>
-                    <i className={`fas ${ persona.icon } ${ activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600' } `}></i>
-                  </div>
-                  <div>
-                    <p className="font-black text-sm">{persona.name}</p>
-                    <p className={`text - xs mt - 1 ${ activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500' } `}>{persona.description}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+    return (
+      <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
+            <p className="text-sm text-slate-500 font-medium">Biến bài giảng trở nên sinh động và cuốn hút hơn.</p>
           </div>
-          <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-            {activeAssistant ? (
-              <>
-                <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trò chuyện với: {activeAssistant.name}</span>
-                  <button onClick={() => setActiveAssistant(null)} className="text-xs font-bold text-slate-400 hover:text-rose-500">Đổi trợ lý</button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                  {assistantMessages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
-                  <div ref={assistantMessagesEndRef} />
-                </div>
-                <div className="p-6 bg-white border-t border-slate-100">
-                  {pendingAttachments.length > 0 && (
-                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2 custom-scrollbar">
-                      {pendingAttachments.map((att, idx) => (
-                        <div key={idx} className="relative shrink-0 group">
-                          {att.type === 'image' ? (
-                            <img src={`data:${ att.mimeType }; base64, ${ att.data } `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
-                          ) : (
-                            <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${ att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } text - xl mb - 1`}></i>
-                              <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
-                            </div>
-                          )}
-                          <button onClick={() => removeAttachment(idx)} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-md hover:bg-rose-600"><i className="fas fa-times"></i></button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-10 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-xl hover:bg-indigo-50 mr-1"
-                      title="Đính kèm tệp (Ảnh, PDF...)"
-                    >
-                      <i className="fas fa-paperclip"></i>
-                    </button>
-                    <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+        </div>
 
-                    <textarea
-                      value={assistantInput}
-                      onChange={e => setAssistantInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
-                      placeholder={`Hỏi ${ activeAssistant.name }...`}
-                      className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
-                      rows={1}
-                    />
-                    <button
-                      onClick={handleSendAssistantMessage}
-                      disabled={isAssistantLoading}
-                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${ assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400' } `}
-                    >
-                      <i className={`fas ${ isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane' } `}></i>
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
-                <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                  <i className="fas fa-user-robot text-5xl text-slate-300"></i>
-                </div>
-                <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Vui lòng chọn một trợ lý</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
+          <button
+            onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-file-signature"></i>
+            <span>Giáo án 2345</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-gamepad"></i>
+            <span>Trò chơi</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-image"></i>
+            <span>Minh họa AI</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-volume-up"></i>
+            <span>Giọng đọc</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-film"></i>
+            <span>Tạo Video</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-user-robot"></i>
+            <span>Trợ lý Chat</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
+            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          >
+            <i className="fas fa-scissors"></i>
+            <span>Cắt PDF</span>
+          </button>
+        </div>
+
+        {/* Helper function to handle speech */}
+        {(() => {
+          // Pre-load voices for the browser
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.getVoices();
+          }
+          return null;
+        })()}
+
+        {activeTab === 'assistant' ? (
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
+            <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Chọn Trợ lý Thông minh</h3>
+              <div className="space-y-3">
+                {ASSISTANT_PERSONAS.map(persona => (
+                  <button
+                    key={persona.id}
+                    onClick={() => setActiveAssistant(persona)}
+                    className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'} `}
+                  >
+                    <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'} `}>
+                      <i className={`fas ${persona.icon} ${activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600'} `}></i>
+                    </div>
+                    <div>
+                      <p className="font-black text-sm">{persona.name}</p>
+                      <p className={`text - xs mt - 1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'} `}>{persona.description}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
-          <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
-            <div className="space-y-4 flex-1 flex flex-col">
-              {(activeTab === 'games' || activeTab === 'lesson_plan' || activeTab === 'pdf_tools') && (
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+              {activeAssistant ? (
                 <>
-                  {activeTab === 'games' && (
-                    <div className="mb-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
-                      <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
-                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Soạn Ý tưởng</button>
-                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Tạo Ô chữ</button>
-                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Quiz Thi đua</button>
-                      </div>
-                      {gameType === 'quiz' && (
-                        <div className="mt-3 animate-in fade-in slide-in-from-top-1">
-                          <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ Chủ đề</button>
-                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ File Ảnh/PDF</button>
-                          </div>
-
-                          {quizMode === 'topic' ? (
-                            <>
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
-                              <div className="flex items-center space-x-2 mt-1">
-                                {[5, 10, 15].map(num => (
-                                  <button
-                                    key={num}
-                                    onClick={() => setQuizCount(num)}
-                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${ quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100' } `}
-                                  >
-                                    {num} câu
-                                  </button>
-                                ))}
+                  <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trò chuyện với: {activeAssistant.name}</span>
+                    <button onClick={() => setActiveAssistant(null)} className="text-xs font-bold text-slate-400 hover:text-rose-500">Đổi trợ lý</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                    {assistantMessages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
+                    <div ref={assistantMessagesEndRef} />
+                  </div>
+                  <div className="p-6 bg-white border-t border-slate-100">
+                    {pendingAttachments.length > 0 && (
+                      <div className="flex gap-2 mb-3 overflow-x-auto pb-2 custom-scrollbar">
+                        {pendingAttachments.map((att, idx) => (
+                          <div key={idx} className="relative shrink-0 group">
+                            {att.type === 'image' ? (
+                              <img src={`data:${att.mimeType}; base64, ${att.data} `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            ) : (
+                              <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
+                                <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text - xl mb - 1`}></i>
+                                <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                               </div>
-                            </>
-                          ) : (
-                            <div>
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Chọn nhiều file)</label>
-                              <input
-                                type="file"
-                                multiple
-                                accept="image/*,.pdf"
-                                onChange={(e) => {
-                                  if (e.target.files) {
-                                    handleFileChange(e as any);
-                                  }
-                                }}
-                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {activeTab === 'lesson_plan' && (
-                    <div className="flex justify-end mb-2 space-x-2">
+                            )}
+                            <button onClick={() => removeAttachment(idx)} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-md hover:bg-rose-600"><i className="fas fa-times"></i></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
                       <button
-                        onClick={() => setUseTemplateMode(!useTemplateMode)}
-                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${ useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100' } `}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-10 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-xl hover:bg-indigo-50 mr-1"
+                        title="Đính kèm tệp (Ảnh, PDF...)"
                       >
-                        <i className={`fas ${ useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off' } mr - 1`}></i>
-                        {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
+                        <i className="fas fa-paperclip"></i>
                       </button>
+                      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+
+                      <textarea
+                        value={assistantInput}
+                        onChange={e => setAssistantInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
+                        placeholder={`Hỏi ${activeAssistant.name}...`}
+                        className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
+                        rows={1}
+                      />
                       <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
+                        onClick={handleSendAssistantMessage}
+                        disabled={isAssistantLoading}
+                        className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'} `}
                       >
-                        {showHistory ? <><i className="fas fa-times mr-1"></i>Đóng lịch sử</> : <><i className="fas fa-clock-rotate-left mr-1"></i>Lịch sử giáo án</>}
+                        <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'} `}></i>
                       </button>
                     </div>
-                  )}
-
-                  {showHistory && activeTab === 'lesson_plan' ? (
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                      {lessonHistory.length === 0 ? (
-                        <p className="text-xs text-slate-400 text-center py-4">Chưa có giáo án nào được lưu.</p>
-                      ) : (
-                        lessonHistory.map(plan => (
-                          <div key={plan.id} onClick={() => handleSelectLesson(plan)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all group relative">
-                            <div className="font-bold text-xs text-slate-700 line-clamp-2 mb-1">{plan.topic}</div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[9px] text-slate-400 font-medium uppercase">{plan.subject} - {plan.grade}</span>
-                              <span className="text-[9px] text-slate-400">{new Date(plan.timestamp).toLocaleDateString('vi-VN')}</span>
-                            </div>
-                            <button onClick={(e) => handleDeleteLesson(plan.id, e)} className="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash"></i></button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  ) : useTemplateMode ? (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 text-xs">
-                        <i className="fas fa-info-circle mr-2"></i>
-                        Tính năng này giúp AI soạn giáo án theo đúng <b>Cấu trúc File Mẫu</b> (Word) và <b>Nội dung Kế hoạch</b> (Excel/Word) của Thầy Cô.
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">1. Tải lên File Mẫu (Cấu trúc)</label>
-                        <div className="mt-1 flex items-center space-x-2">
-                          <input
-                            type="file"
-                            accept=".docx,.doc,.txt"
-                            onChange={(e) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
-                            className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                          />
-                        </div>
-                        {templateFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {templateFile.name}</p>}
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Tải lên File Kế hoạch (Nội dung)</label>
-                        <div className="mt-1 flex items-center space-x-2">
-                          <input
-                            type="file"
-                            accept=".xlsx,.xls,.docx,.doc,.txt"
-                            onChange={(e) => setPlanFile(e.target.files ? e.target.files[0] : null)}
-                            className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                          />
-                        </div>
-                        {planFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {planFile.name}</p>}
-                      </div>
-                    </div>
-                  ) : (
-                    activeTab === 'pdf_tools' ? (
-                      <div className="space-y-4 animate-in fade-in">
-                        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
-                          <i className="fas fa-info-circle mr-2"></i>
-                          Công cụ giúp Thầy Cô chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
-                          <input
-                            type="file"
-                            accept=".pdf"
-                            onChange={handlePdfToolUpload}
-                            className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                          />
-                        </div>
-                        {pdfToolFile && (
-                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                            <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Từ trang</label>
-                                <input type="number" min="1" max={pdfPageCount} value={splitRange.start} onChange={(e) => setSplitRange(prev => ({ ...prev, start: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Đến trang</label>
-                                <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
-                          <select
-                            value={subject}
-                            onChange={e => setSubject(e.target.value)}
-                            className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                          >
-                            <option>Toán</option>
-                            <option>Tiếng Việt</option>
-                            <option>Tiếng Anh</option>
-                            <option>Đạo đức</option>
-                            <option>Tự nhiên & Xã hội</option>
-                            <option>Lịch sử & Địa lí</option>
-                            <option>Khoa học</option>
-                            <option>Công nghệ</option>
-                            <option>Tin học</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
-                          <select
-                            value={grade}
-                            onChange={e => setGrade(e.target.value)}
-                            className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                          >
-                            <option>Lớp 1</option>
-                            <option>Lớp 2</option>
-                            <option>Lớp 3</option>
-                            <option>Lớp 4</option>
-                            <option>Lớp 5</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))}
+                  </div>
                 </>
-              )}
-
-              {activeTab === 'images' && (
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học minh họa</label>
-                  <select
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option>Toán</option>
-                    <option>Tiếng Việt</option>
-                    <option>Khoa học</option>
-                    <option>Lịch sử & Địa lí</option>
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'video' && (
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phong cách Video</label>
-                  <select
-                    value={videoStyle}
-                    onChange={e => setVideoStyle(e.target.value)}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option>Hoạt hình đơn giản</option>
-                    <option>Tranh vẽ màu nước</option>
-                    <option>Phong cách 3D</option>
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'tts' && (
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
-                    <button
-                      onClick={() => setVoiceName('Kore')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
-                    >
-                      <i className="fas fa-mars mr-2"></i>Giọng Nam
-                    </button>
-                    <button
-                      onClick={() => setVoiceName('Puck')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
-                    >
-                      <i className="fas fa-venus mr-2"></i>Giọng Nữ
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && !(activeTab === 'games' && gameType === 'quiz' && quizMode === 'file') && activeTab !== 'pdf_tools' && (
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                    {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
-                  </label>
-                  <textarea
-                    value={topic}
-                    onChange={e => setTopic(e.target.value)}
-                    placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? (gameType === 'crossword' ? 'VD: Động vật hoang dã' : gameType === 'quiz' ? 'VD: Lịch sử Việt Nam' : 'VD: Phép nhân số có 1 chữ số...') : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
-                  />
-                </div>
-              )}
-
-              {!showHistory && ((activeTab === 'lesson_plan' && !useTemplateMode) || (activeTab === 'games' && gameType === 'quiz')) && (
-                <div className="mt-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
-                  <textarea
-                    value={additionalPrompt}
-                    onChange={e => setAdditionalPrompt(e.target.value)}
-                    placeholder={activeTab === 'lesson_plan' ? "VD: Soạn kỹ phần khởi động, thêm trò chơi, chú trọng phẩm chất nhân ái..." : "VD: Tập trung vào hình học, mức độ khó, giải thích chi tiết..."}
-                    className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none leading-relaxed"
-                  />
-                </div>
-              )}
-
-              {!showHistory && activeTab !== 'pdf_tools' && (
-                <div className="pt-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
-                    <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
-                    <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 hover:underline">Thêm tệp</button>
-                  </label>
-                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
-                  <div className="mt-2 space-y-2">
-                    {pendingAttachments.map((at, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
-                        <div className="flex items-center space-x-2 truncate">
-                          <i className={`fas ${ at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } `}></i>
-                          <span className="truncate">{at.name}</span>
-                        </div>
-                        <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
-                          <i className="fas fa-times"></i>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!showHistory && (
-              <button
-                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
-                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${ activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700' } `}
-              >
-                {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
-                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
-              </button>
-            )}
-          </div>
-
-          <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-            <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
-              {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {activeTab === 'lesson_plan' && (
-                    <>
-                      <div className="flex items-center space-x-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
-                        <select value={docxFont} onChange={e => setDocxFont(e.target.value)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
-                          <option>Times New Roman</option>
-                          <option>Arial</option>
-                          <option>Calibri</option>
-                          <option>Garamond</option>
-                        </select>
-                        <div className="w-px h-4 bg-slate-200"></div>
-                        <select value={docxFontSize} onChange={e => setDocxFontSize(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
-                          <option>12</option>
-                          <option>13</option>
-                          <option>14</option>
-                        </select>
-                        <div className="w-px h-4 bg-slate-200"></div>
-                        <select value={docxAlignment} onChange={e => setDocxAlignment(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Căn lề">
-                          <option value="justify">Đều</option>
-                          <option value="left">Trái</option>
-                          <option value="center">Giữa</option>
-                          <option value="right">Phải</option>
-                        </select>
-                        <div className="w-px h-4 bg-slate-200"></div>
-                        <select value={docxLineSpacing} onChange={e => setDocxLineSpacing(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Giãn dòng">
-                          <option value={1.0}>1.0</option>
-                          <option value={1.15}>1.15</option>
-                          <option value={1.5}>1.5</option>
-                          <option value={2.0}>2.0</option>
-                        </select>
-                      </div>
-                      <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${ topic.replace(/\s+/g, '_') }.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
-                        className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
-                      >
-                        <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
-                      </button>
-                      <button
-                        onClick={handleSaveLesson}
-                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
-                      >
-                        <i className="fas fa-save mr-2"></i>Lưu giáo án
-                      </button>
-                    </>
-                  )}
-                  {activeTab === 'games' && gameType === 'crossword' && (
-                    <button
-                      onClick={handlePrintCrossword}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all"
-                    >
-                      <i className="fas fa-print mr-2"></i>In phiếu
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onSendToWorkspace(result)}
-                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
-                  >
-                    {activeTab === 'lesson_plan' ? 'Đưa vào Giáo án' : 'Đưa vào Soạn thảo'}
-                  </button>
-                  <button
-                    onClick={handleSaveToLibrary}
-                    className="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all"
-                  >
-                    <i className="fas fa-book-bookmark mr-2"></i>Lưu Thư viện
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              {isProcessing ? (
-                <div className="h-full flex flex-col items-center justify-center space-y-6">
-                  <div className="relative">
-                    <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
-                    <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs font-black text-slate-800 uppercase tracking-widest">AI đang làm việc</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">Vui lòng đợi trong giây lát</p>
-                  </div>
-                </div>
-              ) : result ? (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
-                    <Crossword data={result} />
-                  ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
-                    <QuizPlayer data={result} onShare={handleShareQuiz} />
-                  ) : activeTab === 'images' ? (
-                    <div className="flex flex-col items-center">
-                      <div className="relative group">
-                        <img src={result} alt="AI Visual" className="w-full max-w-lg rounded-[32px] shadow-2xl border-4 border-white" />
-                        <div className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] pointer-events-none"></div>
-                      </div>
-                      <div className="mt-8 flex space-x-3">
-                        <a href={result} download="MinhHoa_AI.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
-                          <i className="fas fa-download mr-2"></i>Tải hình ảnh (.png)
-                        </a>
-                      </div>
-                    </div>
-                  ) : activeTab === 'video' ? (
-                    <div className="flex flex-col items-center">
-                      <div className="relative group w-full max-w-lg aspect-video bg-black rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
-                        <img
-                          src={result}
-                          alt="Video Scene"
-                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${ isPlaying ? 'scale-125' : 'scale-100' } `}
-                        />
-                        {!isPlaying && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
-                            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm text-indigo-600 pl-1">
-                              <i className="fas fa-play text-2xl"></i>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-8 flex flex-col items-center space-y-3">
-                        <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${ isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700' } `}>
-                            <i className={`fas ${ isPlaying ? 'fa-stop' : 'fa-play' } mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
-                          </button>
-                          <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
-                            <i className="fas fa-download mr-2"></i>Tải Ảnh nền
-                          </a>
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-medium">Video được tạo từ công nghệ biến ảnh tĩnh thành động (Ken Burns Effect).</p>
-                      </div>
-                    </div>
-                  ) : activeTab === 'tts' ? (
-                    <div className="flex flex-col items-center justify-center h-full space-y-8">
-                      <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 animate-pulse">
-                        <i className="fas fa-volume-high text-3xl"></i>
-                      </div>
-                      <div className="text-center space-y-4">
-                        <p className="text-lg font-bold text-slate-700">{result}</p>
-                        {(audioUrl || result) && (
-                          <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-inner w-full max-w-sm">
-                            <audio ref={audioRef} src={audioUrl || ''} className="hidden" />
-                            <div className="flex items-center justify-center space-x-4">
-                              <button
-                                onClick={() => {
-                                  if (audioUrl) {
-                                    audioRef.current?.play();
-                                    setIsPlaying(true);
-                                  } else if ('speechSynthesis' in window) {
-                                    window.speechSynthesis.cancel();
-                                    const utterance = new SpeechSynthesisUtterance(topic);
-                                    utterance.lang = 'vi-VN';
-                                    utterance.rate = 0.9;
-
-                                    const voices = window.speechSynthesis.getVoices();
-                                    const viVoices = voices.filter(v => v.lang.includes('vi'));
-                                    if (viVoices.length > 0) {
-                                      if (voiceName === 'Kore') {
-                                        utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh') || v.name.toLowerCase().includes('khang')) || viVoices[0];
-                                      } else {
-                                        utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('thao') || v.name.toLowerCase().includes('linh')) || viVoices[0];
-                                      }
-                                    }
-
-                                    utterance.onstart = () => setIsPlaying(true);
-                                    utterance.onend = () => setIsPlaying(false);
-                                    utterance.onerror = () => setIsPlaying(false);
-
-                                    window.speechSynthesis.speak(utterance);
-                                  }
-                                }}
-                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${ isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700' } `}
-                              >
-                                <i className={`fas ${ isPlaying ? 'fa-waveform' : 'fa-play' } text - xl ${ !isPlaying && 'ml-1' } `}></i>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (audioUrl) {
-                                    audioRef.current?.pause();
-                                  }
-                                  window.speechSynthesis.cancel();
-                                  setIsPlaying(false);
-                                }}
-                                className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
-                              >
-                                <i className="fas fa-pause"></i>
-                              </button>
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${ voiceName === 'Kore' ? 'Nam' : 'Nữ' } • ${ audioUrl ? 'Máy chủ' : 'Hệ thống' } `}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4">
-                      {activeTab === 'pdf_tools' ? (
-                        <div className="text-center py-10 text-slate-400">
-                          <i className="fas fa-file-pdf text-4xl mb-3 opacity-30"></i>
-                          <p className="text-xs font-bold uppercase">File PDF đã được tải xuống máy của bạn.</p>
-                        </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
-                          {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${ activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone' } text - 5xl text - slate - 300`}></i>
+                    <i className="fas fa-user-robot text-5xl text-slate-300"></i>
                   </div>
-                  <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
+                  <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Vui lòng chọn một trợ lý</p>
                 </div>
               )}
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-};
+        ) : (
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
+            <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
+              <div className="space-y-4 flex-1 flex flex-col">
+                {(activeTab === 'games' || activeTab === 'lesson_plan' || activeTab === 'pdf_tools') && (
+                  <>
+                    {activeTab === 'games' && (
+                      <div className="mb-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
+                        <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
+                          <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Soạn Ý tưởng</button>
+                          <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Tạo Ô chữ</button>
+                          <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Quiz Thi đua</button>
+                        </div>
+                        {gameType === 'quiz' && (
+                          <div className="mt-3 animate-in fade-in slide-in-from-top-1">
+                            <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
+                              <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ Chủ đề</button>
+                              <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ File Ảnh/PDF</button>
+                            </div>
 
-export default UtilityKit;
+                            {quizMode === 'topic' ? (
+                              <>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  {[5, 10, 15].map(num => (
+                                    <button
+                                      key={num}
+                                      onClick={() => setQuizCount(num)}
+                                      className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'} `}
+                                    >
+                                      {num} câu
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Chọn nhiều file)</label>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    if (e.target.files) {
+                                      handleFileChange(e as any);
+                                    }
+                                  }}
+                                  className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {activeTab === 'lesson_plan' && (
+                      <div className="flex justify-end mb-2 space-x-2">
+                        <button
+                          onClick={() => setUseTemplateMode(!useTemplateMode)}
+                          className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'} `}
+                        >
+                          <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr - 1`}></i>
+                          {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
+                        </button>
+                        <button
+                          onClick={() => setShowHistory(!showHistory)}
+                          className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
+                        >
+                          {showHistory ? <><i className="fas fa-times mr-1"></i>Đóng lịch sử</> : <><i className="fas fa-clock-rotate-left mr-1"></i>Lịch sử giáo án</>}
+                        </button>
+                      </div>
+                    )}
+
+                    {showHistory && activeTab === 'lesson_plan' ? (
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                        {lessonHistory.length === 0 ? (
+                          <p className="text-xs text-slate-400 text-center py-4">Chưa có giáo án nào được lưu.</p>
+                        ) : (
+                          lessonHistory.map(plan => (
+                            <div key={plan.id} onClick={() => handleSelectLesson(plan)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-all group relative">
+                              <div className="font-bold text-xs text-slate-700 line-clamp-2 mb-1">{plan.topic}</div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[9px] text-slate-400 font-medium uppercase">{plan.subject} - {plan.grade}</span>
+                                <span className="text-[9px] text-slate-400">{new Date(plan.timestamp).toLocaleDateString('vi-VN')}</span>
+                              </div>
+                              <button onClick={(e) => handleDeleteLesson(plan.id, e)} className="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash"></i></button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : useTemplateMode ? (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 text-xs">
+                          <i className="fas fa-info-circle mr-2"></i>
+                          Tính năng này giúp AI soạn giáo án theo đúng <b>Cấu trúc File Mẫu</b> (Word) và <b>Nội dung Kế hoạch</b> (Excel/Word) của Thầy Cô.
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">1. Tải lên File Mẫu (Cấu trúc)</label>
+                          <div className="mt-1 flex items-center space-x-2">
+                            <input
+                              type="file"
+                              accept=".docx,.doc,.txt"
+                              onChange={(e) => setTemplateFile(e.target.files ? e.target.files[0] : null)}
+                              className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            />
+                          </div>
+                          {templateFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {templateFile.name}</p>}
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Tải lên File Kế hoạch (Nội dung)</label>
+                          <div className="mt-1 flex items-center space-x-2">
+                            <input
+                              type="file"
+                              accept=".xlsx,.xls,.docx,.doc,.txt"
+                              onChange={(e) => setPlanFile(e.target.files ? e.target.files[0] : null)}
+                              className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            />
+                          </div>
+                          {planFile && <p className="mt-1 text-[10px] text-emerald-600 font-bold"><i className="fas fa-check mr-1"></i>Đã chọn: {planFile.name}</p>}
+                        </div>
+                      </div>
+                    ) : (
+                      activeTab === 'pdf_tools' ? (
+                        <div className="space-y-4 animate-in fade-in">
+                          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
+                            <i className="fas fa-info-circle mr-2"></i>
+                            Công cụ giúp Thầy Cô chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              onChange={handlePdfToolUpload}
+                              className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            />
+                          </div>
+                          {pdfToolFile && (
+                            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                              <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="text-[9px] font-black text-slate-400 uppercase">Từ trang</label>
+                                  <input type="number" min="1" max={pdfPageCount} value={splitRange.start} onChange={(e) => setSplitRange(prev => ({ ...prev, start: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-black text-slate-400 uppercase">Đến trang</label>
+                                  <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học</label>
+                            <select
+                              value={subject}
+                              onChange={e => setSubject(e.target.value)}
+                              className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                              <option>Toán</option>
+                              <option>Tiếng Việt</option>
+                              <option>Tiếng Anh</option>
+                              <option>Đạo đức</option>
+                              <option>Tự nhiên & Xã hội</option>
+                              <option>Lịch sử & Địa lí</option>
+                              <option>Khoa học</option>
+                              <option>Công nghệ</option>
+                              <option>Tin học</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lớp</label>
+                            <select
+                              value={grade}
+                              onChange={e => setGrade(e.target.value)}
+                              className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                              <option>Lớp 1</option>
+                              <option>Lớp 2</option>
+                              <option>Lớp 3</option>
+                              <option>Lớp 4</option>
+                              <option>Lớp 5</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                  </>
+                )}
+
+                {activeTab === 'images' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Môn học minh họa</label>
+                    <select
+                      value={subject}
+                      onChange={e => setSubject(e.target.value)}
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option>Toán</option>
+                      <option>Tiếng Việt</option>
+                      <option>Khoa học</option>
+                      <option>Lịch sử & Địa lí</option>
+                    </select>
+                  </div>
+                )}
+
+                {activeTab === 'video' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phong cách Video</label>
+                    <select
+                      value={videoStyle}
+                      onChange={e => setVideoStyle(e.target.value)}
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option>Hoạt hình đơn giản</option>
+                      <option>Tranh vẽ màu nước</option>
+                      <option>Phong cách 3D</option>
+                    </select>
+                  </div>
+                )}
+
+                {activeTab === 'tts' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <button
+                        onClick={() => setVoiceName('Kore')}
+                        className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
+                      >
+                        <i className="fas fa-mars mr-2"></i>Giọng Nam
+                      </button>
+                      <button
+                        onClick={() => setVoiceName('Puck')}
+                        className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
+                      >
+                        <i className="fas fa-venus mr-2"></i>Giọng Nữ
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && !(activeTab === 'games' && gameType === 'quiz' && quizMode === 'file') && activeTab !== 'pdf_tools' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
+                    </label>
+                    <textarea
+                      value={topic}
+                      onChange={e => setTopic(e.target.value)}
+                      placeholder={activeTab === 'lesson_plan' ? "VD: Bài 12: Phép cộng trong phạm vi 10..." : activeTab === 'games' ? (gameType === 'crossword' ? 'VD: Động vật hoang dã' : gameType === 'quiz' ? 'VD: Lịch sử Việt Nam' : 'VD: Phép nhân số có 1 chữ số...') : activeTab === 'images' ? "VD: Một chú voi con đang tung tăng trong rừng..." : activeTab === 'video' ? "VD: Một quả táo rơi từ trên cây xuống. Newton ngồi dưới gốc cây và suy ngẫm..." : "VD: Ngày xửa ngày xưa, ở một ngôi làng nhỏ..."}
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none leading-relaxed"
+                    />
+                  </div>
+                )}
+
+                {!showHistory && ((activeTab === 'lesson_plan' && !useTemplateMode) || (activeTab === 'games' && gameType === 'quiz')) && (
+                  <div className="mt-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Yêu cầu thêm cho AI (Tùy chọn)</label>
+                    <textarea
+                      value={additionalPrompt}
+                      onChange={e => setAdditionalPrompt(e.target.value)}
+                      placeholder={activeTab === 'lesson_plan' ? "VD: Soạn kỹ phần khởi động, thêm trò chơi, chú trọng phẩm chất nhân ái..." : "VD: Tập trung vào hình học, mức độ khó, giải thích chi tiết..."}
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none leading-relaxed"
+                    />
+                  </div>
+                )}
+
+                {!showHistory && activeTab !== 'pdf_tools' && (
+                  <div className="pt-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
+                      <span>Tài liệu mẫu tham khảo (Tùy chọn)</span>
+                      <button onClick={() => fileInputRef.current?.click()} className="text-indigo-600 hover:underline">Thêm tệp</button>
+                    </label>
+                    <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+                    <div className="mt-2 space-y-2">
+                      {pendingAttachments.map((at, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
+                          <div className="flex items-center space-x-2 truncate">
+                            <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} `}></i>
+                            <span className="truncate">{at.name}</span>
+                          </div>
+                          <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!showHistory && (
+                <button
+                  onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
+                  disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
+                  className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'} `}
+                >
+                  {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
+                  {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
+                </button>
+              )}
+            </div>
+
+            <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+              <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
+                {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeTab === 'lesson_plan' && (
+                      <>
+                        <div className="flex items-center space-x-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                          <select value={docxFont} onChange={e => setDocxFont(e.target.value)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
+                            <option>Times New Roman</option>
+                            <option>Arial</option>
+                            <option>Calibri</option>
+                            <option>Garamond</option>
+                          </select>
+                          <div className="w-px h-4 bg-slate-200"></div>
+                          <select value={docxFontSize} onChange={e => setDocxFontSize(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5">
+                            <option>12</option>
+                            <option>13</option>
+                            <option>14</option>
+                          </select>
+                          <div className="w-px h-4 bg-slate-200"></div>
+                          <select value={docxAlignment} onChange={e => setDocxAlignment(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Căn lề">
+                            <option value="justify">Đều</option>
+                            <option value="left">Trái</option>
+                            <option value="center">Giữa</option>
+                            <option value="right">Phải</option>
+                          </select>
+                          <div className="w-px h-4 bg-slate-200"></div>
+                          <select value={docxLineSpacing} onChange={e => setDocxLineSpacing(Number(e.target.value))} className="bg-transparent text-xs font-bold text-slate-600 border-0 focus:ring-0 py-1.5" title="Giãn dòng">
+                            <option value={1.0}>1.0</option>
+                            <option value={1.15}>1.15</option>
+                            <option value={1.5}>1.5</option>
+                            <option value={2.0}>2.0</option>
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
+                          className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
+                        >
+                          <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
+                        </button>
+                        <button
+                          onClick={handleSaveLesson}
+                          className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
+                        >
+                          <i className="fas fa-save mr-2"></i>Lưu giáo án
+                        </button>
+                      </>
+                    )}
+                    {activeTab === 'games' && gameType === 'crossword' && (
+                      <button
+                        onClick={handlePrintCrossword}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all"
+                      >
+                        <i className="fas fa-print mr-2"></i>In phiếu
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onSendToWorkspace(result)}
+                      className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                    >
+                      {activeTab === 'lesson_plan' ? 'Đưa vào Giáo án' : 'Đưa vào Soạn thảo'}
+                    </button>
+                    <button
+                      onClick={handleSaveToLibrary}
+                      className="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-100 transition-all"
+                    >
+                      <i className="fas fa-book-bookmark mr-2"></i>Lưu Thư viện
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                {isProcessing ? (
+                  <div className="h-full flex flex-col items-center justify-center space-y-6">
+                    <div className="relative">
+                      <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
+                      <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-black text-slate-800 uppercase tracking-widest">AI đang làm việc</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">Vui lòng đợi trong giây lát</p>
+                    </div>
+                  </div>
+                ) : result ? (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
+                      <Crossword data={result} />
+                    ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
+                      <QuizPlayer data={result} onShare={handleShareQuiz} />
+                    ) : activeTab === 'images' ? (
+                      <div className="flex flex-col items-center">
+                        <div className="relative group">
+                          <img src={result} alt="AI Visual" className="w-full max-w-lg rounded-[32px] shadow-2xl border-4 border-white" />
+                          <div className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] pointer-events-none"></div>
+                        </div>
+                        <div className="mt-8 flex space-x-3">
+                          <a href={result} download="MinhHoa_AI.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all">
+                            <i className="fas fa-download mr-2"></i>Tải hình ảnh (.png)
+                          </a>
+                        </div>
+                      </div>
+                    ) : activeTab === 'video' ? (
+                      <div className="flex flex-col items-center">
+                        <div className="relative group w-full max-w-lg aspect-video bg-black rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
+                          <img
+                            src={result}
+                            alt="Video Scene"
+                            className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${isPlaying ? 'scale-125' : 'scale-100'} `}
+                          />
+                          {!isPlaying && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
+                              <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm text-indigo-600 pl-1">
+                                <i className="fas fa-play text-2xl"></i>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-8 flex flex-col items-center space-y-3">
+                          <div className="flex space-x-3">
+                            <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'} `}>
+                              <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
+                            </button>
+                            <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
+                              <i className="fas fa-download mr-2"></i>Tải Ảnh nền
+                            </a>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium">Video được tạo từ công nghệ biến ảnh tĩnh thành động (Ken Burns Effect).</p>
+                        </div>
+                      </div>
+                    ) : activeTab === 'tts' ? (
+                      <div className="flex flex-col items-center justify-center h-full space-y-8">
+                        <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 animate-pulse">
+                          <i className="fas fa-volume-high text-3xl"></i>
+                        </div>
+                        <div className="text-center space-y-4">
+                          <p className="text-lg font-bold text-slate-700">{result}</p>
+                          {(audioUrl || result) && (
+                            <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-inner w-full max-w-sm">
+                              <audio ref={audioRef} src={audioUrl || ''} className="hidden" />
+                              <div className="flex items-center justify-center space-x-4">
+                                <button
+                                  onClick={() => {
+                                    if (audioUrl) {
+                                      audioRef.current?.play();
+                                      setIsPlaying(true);
+                                    } else if ('speechSynthesis' in window) {
+                                      window.speechSynthesis.cancel();
+                                      const utterance = new SpeechSynthesisUtterance(topic);
+                                      utterance.lang = 'vi-VN';
+                                      utterance.rate = 0.9;
+
+                                      const voices = window.speechSynthesis.getVoices();
+                                      const viVoices = voices.filter(v => v.lang.includes('vi'));
+                                      if (viVoices.length > 0) {
+                                        if (voiceName === 'Kore') {
+                                          utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh') || v.name.toLowerCase().includes('khang')) || viVoices[0];
+                                        } else {
+                                          utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('thao') || v.name.toLowerCase().includes('linh')) || viVoices[0];
+                                        }
+                                      }
+
+                                      utterance.onstart = () => setIsPlaying(true);
+                                      utterance.onend = () => setIsPlaying(false);
+                                      utterance.onerror = () => setIsPlaying(false);
+
+                                      window.speechSynthesis.speak(utterance);
+                                    }
+                                  }}
+                                  className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'} `}
+                                >
+                                  <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text - xl ${!isPlaying && 'ml-1'} `}></i>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (audioUrl) {
+                                      audioRef.current?.pause();
+                                    }
+                                    window.speechSynthesis.cancel();
+                                    setIsPlaying(false);
+                                  }}
+                                  className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
+                                >
+                                  <i className="fas fa-pause"></i>
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
+                                {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'} `}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4">
+                        {activeTab === 'pdf_tools' ? (
+                          <div className="text-center py-10 text-slate-400">
+                            <i className="fas fa-file-pdf text-4xl mb-3 opacity-30"></i>
+                            <p className="text-xs font-bold uppercase">File PDF đã được tải xuống máy của bạn.</p>
+                          </div>
+                        ) : (
+                          <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
+                            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
+                    <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
+                      <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text - 5xl text - slate - 300`}></i>
+                    </div>
+                    <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  export default UtilityKit;

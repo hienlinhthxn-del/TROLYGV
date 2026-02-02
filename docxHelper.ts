@@ -14,10 +14,11 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
     const { font = 'Times New Roman', fontSize = 13, alignment = 'justify', lineSpacing = 1.5 } = options;
 
     // Map alignment string to docx AlignmentType
-    let docxAlignment = AlignmentType.JUSTIFIED;
-    if (alignment === 'left') docxAlignment = AlignmentType.LEFT;
-    if (alignment === 'center') docxAlignment = AlignmentType.CENTER;
-    if (alignment === 'right') docxAlignment = AlignmentType.RIGHT;
+    const docxAlignment =
+        alignment === 'left' ? AlignmentType.LEFT :
+            alignment === 'center' ? AlignmentType.CENTER :
+                alignment === 'right' ? AlignmentType.RIGHT :
+                    AlignmentType.JUSTIFIED;
 
     // Calculate line spacing (240 = 1 line in docx LineRuleType.AUTO)
     const spacingValue = Math.round(lineSpacing * 240);
