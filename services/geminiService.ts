@@ -225,6 +225,7 @@ export class GeminiService {
        - Nếu hình phức tạp hoặc không thể vẽ đơn giản, hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
        - Với dạng bài ĐIỀN SỐ/CHỮ VÀO HÌNH: Hãy chuyển thành câu hỏi văn bản. Ví dụ: "Số thích hợp điền vào hình tròn cuối cùng là bao nhiêu? (Quy luật: Số sau gấp đôi số trước)".
+       - Với dạng bài ĐIỀN TỪ (Trạng Nguyên Tiếng Việt): Hãy mô tả rõ ngữ cảnh. Ví dụ: "Điền từ thích hợp vào chỗ trống: 'Học ... đôi với hành'".
     2. Nếu ĐÁP ÁN là hình ảnh: 
        - Bắt buộc điền mô tả hoặc mã SVG vào trường "image" của đối tượng option.
        - Trường "text" của option có thể để là "Hình A", "Hình B" nếu đã có ảnh.
@@ -688,9 +689,9 @@ export class GeminiService {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
       }
 
-      // Nếu Google bảo chờ quá lâu (> 10s), hoặc đã thử lại 2 lần bận liên tiếp
+      // Nếu Google bảo chờ quá lâu (> 15s), hoặc đã thử lại 3 lần bận liên tiếp
       // thì đổi model luôn cho nhanh, không bắt người dùng chờ vô ích
-      if (waitMs > 10000 || this.retryAttempt >= 2) {
+      if (waitMs > 15000 || this.retryAttempt >= 3) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model

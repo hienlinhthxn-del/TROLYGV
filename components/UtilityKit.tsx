@@ -603,7 +603,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       Đặc biệt lưu ý đây là dạng đề thi kiểu ViOlympic Toán hoặc Trạng Nguyên Tiếng Việt:
       - Rất nhiều câu hỏi dựa trên quy luật hình ảnh, dãy số trong hình, hoặc điền từ vào hình.
       - Hãy mô tả kỹ các quy luật này trong nội dung câu hỏi để học sinh có thể hiểu được mà không cần nhìn ảnh gốc (nếu ảnh gốc quá phức tạp).
-      - Nếu đáp án là hình ảnh, hãy mô tả chúng trong trường image của options.`;
+      - Nếu đáp án là hình ảnh, hãy mô tả chúng trong trường image của options.
+      - Cố gắng trích xuất đủ số lượng câu hỏi có trong đề (thường là 20-30 câu).`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const json = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
