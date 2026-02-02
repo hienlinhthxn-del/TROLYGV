@@ -614,19 +614,19 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const pdf = await loadingTask.promise;
           const images: any[] = [];
 
-          // Giới hạn xử lý 12 trang đầu để tránh quá tải
-          const maxPages = Math.min(pdf.numPages, 12);
+          // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
+          const maxPages = Math.min(pdf.numPages, 5);
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.5 });
+            const viewport = page.getViewport({ scale: 1.2 });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            const imgData = canvas.toDataURL('image/jpeg', 0.6);
             images.push({
               inlineData: {
                 data: imgData.split(',')[1],
@@ -637,6 +637,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           return images;
         } catch (e) {
           console.error("PDF Convert Error:", e);
+          alert("Không thể chuyển đổi PDF tự động. Hệ thống sẽ thử gửi file gốc...");
           return null as any; // Fallback to original
         }
       };
