@@ -229,12 +229,13 @@ export class GeminiService {
     4. GIẢI THÍCH (explanation) phải ngắn gọn, súc tích (dưới 100 chữ).
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
-    1. Trả về DUY NHẤT mã JSON, không chứa bất kỳ văn bản giải thích nào ở trước hoặc sau.
-    2. KHÔNG ĐƯỢC chứa comment (// hoặc /* */) trong JSON.
-    3. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
-    4. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
-    5. Không được xuống dòng thực sự bên trong giá trị của một trường, hãy dùng ký tự \\n.
-    6. Không thêm dấu phẩy (,) sau phần tử cuối cùng của mảng hoặc đối tượng.
+    1. Chỉ trả về JSON thuần túy. Bắt buộc dùng dấu ngoặc kép (") cho tên trường và giá trị chuỗi. KHÔNG dùng dấu ngoặc đơn (').
+    2. KHÔNG ĐƯỢC chứa comment (// hoặc /* */).
+    3. Escape kỹ các ký tự đặc biệt:
+       - Dấu ngoặc kép (") -> \\"
+       - Dấu gạch chéo (\\) trong LaTeX -> \\\\ (Ví dụ: \\\\frac{a}{b})
+    4. Không xuống dòng trong chuỗi, dùng \\n.
+    5. Không để dấu phẩy thừa cuối mảng/đối tượng.
     
     CẤU TRÚC JSON MẪU:
     { 
@@ -563,6 +564,15 @@ export class GeminiService {
       return s;
     };
 
+    // 5. Hàm sửa lỗi single quotes (Fallback)
+    const fixSingleQuotes = (str: string): string => {
+      // Thay thế 'key': thành "key":
+      let s = str.replace(/'((?:\\.|[^'])*)'\s*:/g, '"$1":');
+      // Thay thế : 'value' thành : "value"
+      s = s.replace(/:\s*'((?:\\.|[^'])*)'/g, ': "$1"');
+      return s;
+    };
+
     // 4. Chiến lược Parse
     const rescued = rescueTruncated(cleaned);
 
@@ -577,8 +587,13 @@ export class GeminiService {
           const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
           return JSON.parse(fixCommonErrors(superFix));
         } catch (e3) {
-          console.error("JSON Rescue Failed.", { original: text, rescued });
-          throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+          try {
+            const singleQuoteFix = fixSingleQuotes(rescued);
+            return JSON.parse(fixCommonErrors(singleQuoteFix));
+          } catch (e4) {
+            console.error("JSON Rescue Failed.", { original: text, rescued });
+            throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+          }
         }
       }
     }
