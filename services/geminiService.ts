@@ -221,11 +221,12 @@ export class GeminiService {
     YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH & QUY LUẬT (BẮT BUỘC):
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
        - Hãy phân tích nội dung hình ảnh thật kỹ.
-       - Vẽ lại bằng mã SVG đơn giản (ví dụ: <svg...><circle.../></svg>) nếu có thể. Mã SVG phải trên 1 dòng.
-       - Nếu hình phức tạp (ví dụ: hình con chim, bông hoa), hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
+       - Vẽ lại bằng mã SVG CỰC KỲ ĐƠN GIẢN (chỉ dùng rect, circle, line, polygon cơ bản, tối đa 5 đối tượng) nếu thực sự cần cho việc giải bài. Mã SVG phải trên 1 dòng.
+       - Nếu hình phức tạp hoặc không thể vẽ đơn giản, hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
-    2. Nếu ĐÁP ÁN là hình ảnh: BẮT BUỘC phải cung cấp SVG hoặc Mô tả vào trường "image" của từng option.
-    3. Đảm bảo số lượng câu hỏi đầy đủ (Tối đa 30 câu nếu tài liệu có đủ). Đừng bỏ sót câu nào.
+    2. Nếu ĐÁP ÁN là hình ảnh: Cung cấp SVG đơn giản hoặc Mô tả vào trường "image" của từng option.
+    3. Đảm bảo số lượng câu hỏi đầy đủ (Tối đa 30 câu). Đừng bỏ sót câu nào.
+    4. GIẢI THÍCH (explanation) phải ngắn gọn, súc tích (dưới 100 chữ).
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. Trả về DUY NHẤT mã JSON, không chứa bất kỳ văn bản giải thích nào ở trước hoặc sau.
@@ -237,20 +238,17 @@ export class GeminiService {
     { 
       "title": "Tên đề thi", 
       "subject": "Môn học", 
-      "readingPassage": "Văn bản đọc hiểu (nếu có)", 
       "questions": [ 
         { 
           "type": "Trắc nghiệm", 
-          "content": "Câu hỏi số 1?", 
+          "content": "Câu hỏi?", 
           "options": [
-            { "text": "Đáp án 1", "image": "Mô tả hình ảnh hoặc mã SVG nếu đáp án là hình" },
-            { "text": "Đáp án 2", "image": "" },
-            { "text": "Đáp án 3", "image": "" },
-            { "text": "Đáp án 4", "image": "" }
+            { "text": "A", "image": "" },
+            { "text": "B", "image": "" }
           ], 
-          "answer": "Đáp án 1", 
-          "explanation": "Giải thích chi tiết", 
-          "image": "Mã SVG hoặc [HÌNH ẢNH: Mô tả...]" 
+          "answer": "A", 
+          "explanation": "Giải thích ngắn gọn", 
+          "image": "SVG hoặc mô tả" 
         } 
       ] 
     }`;
@@ -505,7 +503,47 @@ export class GeminiService {
       return r;
     };
 
-    // 3. Thử Parse đa tầng
+    // 3. Hàm "Cấp cứu" JSON bị cắt ngang (Truncated) do chạm giới hạn token
+    const emergencyRepair = (str: string): string => {
+      let r = str.trim();
+
+      // Nếu kết thúc bằng dấu phẩy, bỏ đi
+      if (r.endsWith(',')) r = r.slice(0, -1);
+
+      // Đếm các dấu ngoặc để đóng lại một cách cơ học
+      let braces = 0;
+      let brackets = 0;
+      let inString = false;
+      let cleaned = '';
+
+      for (let i = 0; i < r.length; i++) {
+        const char = r[i];
+
+        // Xử lý chuỗi nháy kép (cẩn thận với escaped quotes)
+        if (char === '"' && (i === 0 || r[i - 1] !== '\\')) {
+          inString = !inString;
+        }
+
+        if (!inString) {
+          if (char === '{') braces++;
+          else if (char === '}') braces--;
+          else if (char === '[') brackets++;
+          else if (char === ']') brackets--;
+        }
+        cleaned += char;
+      }
+
+      // Nếu đang ở trong chuỗi, đóng nháy kép lại
+      if (inString) cleaned += '"';
+
+      // Đóng các ngoặc nhọn/vuông còn thiếu
+      while (brackets > 0) { cleaned += ']'; brackets--; }
+      while (braces > 0) { cleaned += '}'; braces--; }
+
+      return cleaned;
+    };
+
+    // 4. Thử Parse đa tầng
     try {
       return JSON.parse(cleaned);
     } catch (e1) {
@@ -513,8 +551,14 @@ export class GeminiService {
         const repaired = ultraRepair(cleaned);
         return JSON.parse(repaired);
       } catch (e2) {
-        console.error("JSON Parse Failed completely.", { original: text, repaired: ultraRepair(cleaned) });
-        throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+        try {
+          // Thử cấp cứu lần cuối nếu bị cắt ngang
+          const emergency = emergencyRepair(ultraRepair(cleaned));
+          return JSON.parse(emergency);
+        } catch (e3) {
+          console.error("JSON Parse Failed completely.", { original: text, emergency: emergencyRepair(ultraRepair(cleaned)) });
+          throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+        }
       }
     }
   }
