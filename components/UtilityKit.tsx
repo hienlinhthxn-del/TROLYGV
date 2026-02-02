@@ -118,9 +118,13 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
 
       <div className="flex-1 flex flex-col justify-center">
         {currentQuestion.image && (
-          <div className="flex justify-center mb-6">
-            <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
-          </div>
+          currentQuestion.image.trim().startsWith('<svg') ? (
+            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200" dangerouslySetInnerHTML={{ __html: currentQuestion.image }} />
+          ) : (
+            <div className="flex justify-center mb-6">
+              <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
+            </div>
+          )
         )}
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{currentQuestion.question}</h3>
 
@@ -519,30 +523,35 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     setResult(null);
     setAudioUrl(null);
 
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
         const base64Data = (reader.result as string).split(',')[1];
         const mimeType = quizFile.type;
 
         const prompt = `
-          Đóng vai trò là một trợ lý soạn đề thi chuyên nghiệp.
-          Nhiệm vụ: Phân tích hình ảnh/tài liệu đính kèm và bóc tách các câu hỏi trắc nghiệm.
+          Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
+          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm có trong đề (kể cả đề dài 20-40 câu).
           
-          Yêu cầu đầu ra:
-          1. Trích xuất chính xác nội dung câu hỏi và các phương án.
-          2. Xác định đáp án đúng (nếu có trong đề, hoặc tự giải).
-          3. Giải thích ngắn gọn.
-          4. Trả về kết quả dưới dạng JSON Array:
+          Yêu cầu xử lý:
+          1. Giữ nguyên nội dung câu hỏi và các phương án, không tự ý tóm tắt.
+          2. Nếu câu hỏi hoặc đáp án có hình ảnh:
+             - Hãy mô tả chi tiết hình ảnh đó trong ngoặc vuông [Hình ảnh: mô tả...] hoặc tạo mã SVG nếu đơn giản.
+             - Đưa nội dung này vào trường "image" (đối với câu hỏi) hoặc kèm vào text phương án.
+          3. Xác định đáp án đúng (nếu có trong đề, hoặc tự giải).
+          4. Giải thích ngắn gọn.
+          
+          Định dạng đầu ra JSON Array (Bắt buộc):
           [
             {
-              "question": "...",
+              "question": "Nội dung câu hỏi...",
               "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-              "answer": "...", 
-              "explanation": "..."
+              "answer": "Đáp án đúng (VD: A. Nội dung)", 
+              "explanation": "Giải thích...",
+              "image": "Mã SVG hoặc Mô tả hình ảnh (nếu có)"
             }
           ]
-          Lưu ý: Chỉ trả về JSON, không thêm lời dẫn.
+          Lưu ý: Chỉ trả về JSON hợp lệ, không thêm lời dẫn hay markdown thừa. Xử lý hết tất cả câu hỏi trong đề.
         `;
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
@@ -555,22 +564,27 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         }
 
         try {
-          const jsonStr = fullContent.replace(/```json/g, '').replace(/```/g, '').trim();
+          let jsonStr = fullContent.replace(/```json/g, '').replace(/```/g, '').trim();
+          const firstBracket = jsonStr.indexOf('[');
+          const lastBracket = jsonStr.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1) {
+            jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
+          }
           const json = JSON.parse(jsonStr);
           setResult(json);
         } catch (e) {
           console.error("JSON Parse Error", e);
-          alert("AI không thể tạo cấu trúc Quiz từ file này. Kết quả sẽ hiển thị dạng văn bản.");
+          alert("AI đã trả về kết quả nhưng định dạng chưa chuẩn JSON. Kết quả sẽ hiển thị dạng văn bản để Thầy/Cô kiểm tra.");
           setResult(fullContent);
         }
+      } catch (error: any) {
+        console.error("Quiz Upload Error:", error);
+        alert(`Lỗi bóc tách đề: ${error.message}`);
+      } finally {
         setIsProcessing(false);
-      };
-      reader.readAsDataURL(quizFile);
-    } catch (error: any) {
-      console.error("Quiz Upload Error:", error);
-      alert(`Lỗi bóc tách đề: ${error.message}`);
-      setIsProcessing(false);
-    }
+      }
+    };
+    reader.readAsDataURL(quizFile);
   };
 
   const handleShareQuiz = async () => {
