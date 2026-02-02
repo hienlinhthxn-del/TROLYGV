@@ -233,6 +233,7 @@ export class GeminiService {
     2. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
     3. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
     4. Không được xuống dòng thực sự bên trong giá trị của một trường, hãy dùng ký tự \\n.
+    5. Không thêm dấu phẩy (,) sau phần tử cuối cùng của mảng hoặc đối tượng.
     
     CẤU TRÚC JSON MẪU:
     { 
@@ -438,21 +439,32 @@ export class GeminiService {
   public parseJSONSafely(text: string): any {
     // 1. Dọn dẹp sơ bộ: xóa markdown blocks
     let cleaned = text.trim();
-    if (cleaned.includes('```')) {
-      const match = cleaned.match(/```(?:json)?([\s\S]*?)```/);
-      if (match) cleaned = match[1].trim();
+    // Regex bắt nội dung trong code block, hỗ trợ ```json, ```JSON, hoặc ``` không
+    const codeBlockMatch = cleaned.match(/```(?:\w+)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      cleaned = codeBlockMatch[1].trim();
     }
 
     // 2. Hàm cứu hộ JSON bị cắt ngang (Truncated)
     const rescueTruncated = (str: string): string => {
       let r = str.trim();
 
+      // Tìm điểm bắt đầu của JSON (Object hoặc Array)
       const startBrace = r.indexOf('{');
       const startBracket = r.indexOf('[');
       let startIdx = -1;
-      if (startBrace !== -1 && (startBracket === -1 || startBrace < startBracket)) startIdx = startBrace;
-      else if (startBracket !== -1) startIdx = startBracket;
-      if (startIdx !== -1) r = r.substring(startIdx);
+
+      if (startBrace !== -1 && startBracket !== -1) {
+        startIdx = Math.min(startBrace, startBracket);
+      } else if (startBrace !== -1) {
+        startIdx = startBrace;
+      } else if (startBracket !== -1) {
+        startIdx = startBracket;
+      }
+
+      if (startIdx !== -1) {
+        r = r.substring(startIdx);
+      }
 
       let braces = 0;
       let brackets = 0;
@@ -462,50 +474,75 @@ export class GeminiService {
       for (let i = 0; i < r.length; i++) {
         const char = r[i];
 
-        if (char === '\\') {
-          output += char;
-          if (i + 1 < r.length) {
-            output += r[i + 1];
-            i++;
+        if (inString) {
+          if (char === '\\') {
+            output += char;
+            if (i + 1 < r.length) {
+              output += r[i + 1];
+              i++;
+            }
+            continue;
           }
+          if (char === '"') {
+            inString = false;
+          }
+          output += char;
           continue;
         }
 
+        // Not in string
         if (char === '"') {
-          inString = !inString;
+          inString = true;
+          output += char;
+          continue;
         }
 
-        if (!inString) {
-          if (char === '{') braces++;
-          else if (char === '}') braces--;
-          else if (char === '[') brackets++;
-          else if (char === ']') brackets--;
+        if (char === '{') braces++;
+        else if (char === '}') braces--;
+        else if (char === '[') brackets++;
+        else if (char === ']') brackets--;
 
-          if (braces === 0 && brackets === 0 && output.length > 0) {
-            output += char;
-            return output;
-          }
-        }
         output += char;
+
+        // Nếu đã đóng hết ngoặc và có nội dung, dừng lại (bỏ qua phần rác phía sau)
+        if (braces === 0 && brackets === 0 && (char === '}' || char === ']')) {
+          return output;
+        }
       }
 
+      // Nếu chạy hết chuỗi mà vẫn chưa đóng ngoặc (JSON bị cắt cụt)
       let final = output.trim();
+
+      // Xử lý lỗi cắt cụt giữa chừng
       if (final.endsWith('\\')) final = final.slice(0, -1);
-      if (inString) final += '"';
       if (final.endsWith(',')) final = final.slice(0, -1);
 
+      // Nếu đang trong chuỗi, đóng chuỗi
+      if (inString) final += '"';
+
+      // Đóng các ngoặc còn thiếu
       while (brackets > 0) { final += ']'; brackets--; }
       while (braces > 0) { final += '}'; braces--; }
 
       return final;
     };
 
-    // 3. Hàm sửa lỗi ký tự điều khiển
-    const fixCharacters = (str: string): string => {
-      return str.replace(/[\u0000-\u001F]/g, (match) => {
+    // 3. Hàm sửa lỗi ký tự điều khiển và trailing commas
+    const fixCommonErrors = (str: string): string => {
+      // Xóa trailing commas (dấu phẩy thừa trước dấu đóng ngoặc)
+      let s = str.replace(/,\s*([\]}])/g, '$1');
+
+      // Sửa ký tự điều khiển
+      s = s.replace(/[\u0000-\u001F]+/g, (match) => {
         const charCodes: Record<number, string> = { 10: "\\n", 13: "\\r", 9: "\\t" };
-        return charCodes[match.charCodeAt(0)] || "";
+        let res = "";
+        for (let i = 0; i < match.length; i++) {
+          res += charCodes[match.charCodeAt(i)] || "";
+        }
+        return res;
       });
+
+      return s;
     };
 
     // 4. Chiến lược Parse
@@ -515,11 +552,12 @@ export class GeminiService {
       return JSON.parse(rescued);
     } catch (e1) {
       try {
-        return JSON.parse(fixCharacters(rescued));
+        return JSON.parse(fixCommonErrors(rescued));
       } catch (e2) {
         try {
+          // Cố gắng escape backslash một lần nữa
           const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
-          return JSON.parse(fixCharacters(superFix));
+          return JSON.parse(fixCommonErrors(superFix));
         } catch (e3) {
           console.error("JSON Rescue Failed.", { original: text, rescued });
           throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
