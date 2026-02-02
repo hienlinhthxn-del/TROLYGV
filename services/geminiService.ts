@@ -221,8 +221,8 @@ export class GeminiService {
     YÊU CẦU XỬ LÝ DẠNG BÀI VIOLYMPIC / TRẠNG NGUYÊN TIẾNG VIỆT (BẮT BUỘC):
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
        - Hãy phân tích nội dung hình ảnh thật kỹ.
-       - Vẽ lại bằng mã SVG CỰC KỲ ĐƠN GIẢN (chỉ dùng rect, circle, line, polygon cơ bản, tối đa 5 đối tượng) nếu thực sự cần cho việc giải bài. Mã SVG phải trên 1 dòng.
-       - Nếu hình phức tạp hoặc không thể vẽ đơn giản, hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
+       - **ƯU TIÊN HÀNG ĐẦU:** Mô tả hình ảnh bằng văn bản một cách chi tiết và rõ ràng trong trường "image". Ví dụ: "image": "[HÌNH ẢNH: Một hình vuông bên trong có một hình tròn màu xanh]".
+       - **CHỈ KHI THẬT SỰ CẦN THIẾT:** Nếu hình học quá đơn giản (ví dụ: một tam giác), bạn có thể dùng mã SVG. SVG phải trên một dòng và không chứa ký tự đặc biệt có thể làm hỏng JSON.
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
        - Với dạng bài ĐIỀN SỐ/CHỮ VÀO HÌNH: Hãy chuyển thành câu hỏi văn bản. Ví dụ: "Số thích hợp điền vào hình tròn cuối cùng là bao nhiêu? (Quy luật: Số sau gấp đôi số trước)".
        - Với dạng bài ĐIỀN TỪ (Trạng Nguyên Tiếng Việt): Hãy mô tả rõ ngữ cảnh. Ví dụ: "Điền từ thích hợp vào chỗ trống: 'Học ... đôi với hành'".
@@ -709,7 +709,7 @@ export class GeminiService {
 
         // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
         if (nextIdx === 0 && currentIdx !== -1) {
-          throw new Error("Hệ thống đang quá tải do file đề thi quá dài hoặc nhiều hình ảnh. Thầy/Cô hãy thử:\n1. Dùng tính năng 'Cắt PDF' để chia nhỏ đề thi (khuyên dùng).\n2. Đợi 1-2 phút rồi thử lại.\n3. Nhập API Key cá nhân để có giới hạn cao hơn.");
+          throw new Error("AI không thể xử lý được file này, ngay cả khi đã chia nhỏ. Nguyên nhân có thể do:\n1. File PDF chứa định dạng phức tạp hoặc ảnh chất lượng quá cao.\n2. Lỗi tạm thời từ máy chủ của Google.\n\nGiải pháp:\n- Thử lại sau vài phút.\n- Chụp ảnh màn hình (screenshot) các câu hỏi và tải lên dưới dạng file ảnh (PNG/JPG) thay vì PDF.");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);

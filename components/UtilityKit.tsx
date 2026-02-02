@@ -626,24 +626,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     } catch (error: any) {
       console.error("Quiz Upload Error:", error);
 
-      // Nếu đang xử lý file PDF mà gặp lỗi (bất kể lỗi gì), khả năng cao là do file nặng
-      // -> Gợi ý dùng công cụ Cắt PDF ngay lập tức
-      const isPdfUpload = pendingAttachments.some(f => f.mimeType?.includes('pdf')) || (quizFile?.type === 'application/pdf');
-      const isOverload = error.message?.includes("quá tải") || error.message?.includes("chia nhỏ") || isPdfUpload;
-
-      if (isOverload) {
-        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file: ${error.message}\n\nNguyên nhân thường do file đề thi quá dài hoặc nhiều hình ảnh.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không? (Khuyên dùng)`)) {
+      id ì | ossage Lỗi bóc tách đề: \n\n${ errorMessage } `);      } 
+i chung khi tải file PDF -> Gợi ý cắt file.
+ if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${ errorMessage } \n\nNguyên nhân thường do file đề thi quá dài hoặc có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không ? (Khuyên dùng)`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
         }
       } else {
-        alert(`Lỗi bóc tách đề: ${error.message}`);
+        // Kịch bản 3: Lỗi chung với các loại file khác (ảnh,...)
+        alert(`Lỗi bóc tách đề: ${ errorMessage } `);
       }
     } finally {
       setIsProcessing(false);
     }
-  };
 
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
@@ -682,7 +678,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       }
 
-      const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      const url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
       await navigator.clipboard.writeText(url);
       alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
     } catch (e) {
@@ -698,7 +694,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${pendingAttachments.length} tệp đính kèm]` : ''),
+      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${ pendingAttachments.length } tệp đính kèm]` : ''),
       timestamp: new Date(),
     };
 
@@ -723,7 +719,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
-      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${errorMessage}`, isThinking: false, isStreaming: false } : msg));
+      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${ errorMessage } `, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsAssistantLoading(false);
     }
@@ -773,7 +769,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
     try {
       // Dịch và tối ưu prompt sang tiếng Anh để AI video hiểu tốt hơn
-      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt. Style: ${videoStyle}, short animation, simple, for kids, educational. Script: "${topic}"`;
+      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${ videoStyle }, short animation, simple, for kids, educational.Script: "${topic}"`;
 
       let optimizedPrompt = topic;
       try {
@@ -781,13 +777,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
       } catch (err) {
         console.warn("Translation failed, using original topic", err);
-        optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+        optimizedPrompt = `${ topic }, ${ videoStyle }, animation for kids`; // Fallback
       }
 
       const videoUrl = await geminiService.generateVideo(optimizedPrompt);
       setResult(videoUrl);
     } catch (error: any) {
-      alert(`Không thể tạo video: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      alert(`Không thể tạo video: ${ error.message || "Lỗi kết nối" }. Thầy Cô vui lòng thử lại nhé!`);
     } finally {
       setIsProcessing(false);
     }
@@ -859,7 +855,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleSaveToLibrary = () => {
     if (!result) return;
-    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${subject}`);
+    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${ subject } `);
     if (name) {
       const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       onSaveToLibrary(name, contentToSave);
@@ -887,55 +883,55 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
     });
 
-    let gridHtml = `<div class="grid" style="grid-template-columns: repeat(${size}, 1fr);">`;
+    let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const isActive = gridMap[r][c];
-        gridHtml += `<div class="cell ${isActive ? 'active' : 'black'}"></div>`;
+        gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
       }
     }
-    gridHtml += `</div>`;
+    gridHtml += `</div > `;
 
     const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Ô chữ: ${topic}</title>
-        <style>
-          body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-          h1 { text-align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
-          .sub-title { text-align: center; margin-bottom: 30px; font-style: italic; color: #666; }
-          .container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
-          .grid { display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
-          .cell { background: #fff; position: relative; }
-          .cell.black { background: #333; }
-          .clues-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-          .clues-col h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-          ul { list-style: none; padding: 0; }
-          li { margin-bottom: 10px; line-height: 1.4; }
-          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
-        </style>
-      </head>
-      <body>
-        <h1>Trò chơi Ô chữ</h1>
-        <p class="sub-title">Chủ đề: ${topic}</p>
-        <div class="container">
-          ${gridHtml}
-          <div class="clues-container">
-            <div class="clues-col">
-              <h3>Hàng ngang</h3>
-              <ul>${words.filter((w: any) => w.direction === 'across').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
-            </div>
-            <div class="clues-col">
-              <h3>Hàng dọc</h3>
-              <ul>${words.filter((w: any) => w.direction === 'down').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
-            </div>
-          </div>
-        </div>
-        <div class="footer">Được tạo bởi Trợ lý Giáo viên AI</div>
-        <script>setTimeout(() => window.print(), 500);</script>
-      </body>
-      </html>`;
+        < !DOCTYPE html >
+          <html>
+            <head>
+              <title>Ô chữ: ${topic}</title>
+              <style>
+                body {font - family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+                h1 {text - align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
+                .sub-title {text - align: center; margin-bottom: 30px; font-style: italic; color: #666; }
+                .container {display: flex; flex-direction: column; align-items: center; gap: 30px; }
+                .grid {display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
+                .cell {background: #fff; position: relative; }
+                .cell.black {background: #333; }
+                .clues-container {width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+                .clues-col h3 {border - bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+                ul {list - style: none; padding: 0; }
+                li {margin - bottom: 10px; line-height: 1.4; }
+                .footer {margin - top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+              </style>
+            </head>
+            <body>
+              <h1>Trò chơi Ô chữ</h1>
+              <p class="sub-title">Chủ đề: ${topic}</p>
+              <div class="container">
+                ${gridHtml}
+                <div class="clues-container">
+                  <div class="clues-col">
+                    <h3>Hàng ngang</h3>
+                    <ul>${words.filter((w: any) => w.direction === 'across').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+                  </div>
+                  <div class="clues-col">
+                    <h3>Hàng dọc</h3>
+                    <ul>${words.filter((w: any) => w.direction === 'down').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+                  </div>
+                </div>
+              </div>
+              <div class="footer">Được tạo bởi Trợ lý Giáo viên AI</div>
+              <script>setTimeout(() => window.print(), 500);</script>
+            </body>
+          </html>`;
 
     printWindow.document.write(html);
     printWindow.document.close();
@@ -978,7 +974,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `Cat_Trang_${splitRange.start}-${splitRange.end}_${pdfToolFile.name}`;
+    link.download = `Cat_Trang_${ splitRange.start } -${ splitRange.end }_${ pdfToolFile.name } `;
     link.click();
   };
 
@@ -994,49 +990,49 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-file-signature"></i>
           <span>Giáo án 2345</span>
         </button>
         <button
           onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-gamepad"></i>
           <span>Trò chơi</span>
         </button>
         <button
           onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-image"></i>
           <span>Minh họa AI</span>
         </button>
         <button
           onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-volume-up"></i>
           <span>Giọng đọc</span>
         </button>
         <button
           onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-film"></i>
           <span>Tạo Video</span>
         </button>
         <button
           onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-user-robot"></i>
           <span>Trợ lý Chat</span>
         </button>
         <button
           onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-scissors"></i>
           <span>Cắt PDF</span>
@@ -1061,14 +1057,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 <button
                   key={persona.id}
                   onClick={() => setActiveAssistant(persona)}
-                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start space-x-4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'}`}
+                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${ activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200' } `}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'}`}>
-                    <i className={`fas ${persona.icon} ${activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600'}`}></i>
+                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${ activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white' } `}>
+                    <i className={`fas ${ persona.icon } ${ activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600' } `}></i>
                   </div>
                   <div>
                     <p className="font-black text-sm">{persona.name}</p>
-                    <p className={`text-xs mt-1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'}`}>{persona.description}</p>
+                    <p className={`text - xs mt - 1 ${ activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500' } `}>{persona.description}</p>
                   </div>
                 </button>
               ))}
@@ -1091,10 +1087,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       {pendingAttachments.map((att, idx) => (
                         <div key={idx} className="relative shrink-0 group">
                           {att.type === 'image' ? (
-                            <img src={`data:${att.mimeType};base64,${att.data}`} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            <img src={`data:${ att.mimeType }; base64, ${ att.data } `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
+                              <i className={`fas ${ att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } text - xl mb - 1`}></i>
                               <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                             </div>
                           )}
@@ -1117,16 +1113,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       value={assistantInput}
                       onChange={e => setAssistantInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
-                      placeholder={`Hỏi ${activeAssistant.name}...`}
+                      placeholder={`Hỏi ${ activeAssistant.name }...`}
                       className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
                       rows={1}
                     />
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${ assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400' } `}
                     >
-                      <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'}`}></i>
+                      <i className={`fas ${ isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane' } `}></i>
                     </button>
                   </div>
                 </div>
@@ -1151,15 +1147,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     <div className="mb-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
                       <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
-                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Soạn Ý tưởng</button>
-                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
-                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
+                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Soạn Ý tưởng</button>
+                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Tạo Ô chữ</button>
+                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Quiz Thi đua</button>
                       </div>
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                            <button onClick={() => setQuizMode('topic')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ Chủ đề</button>
-                            <button onClick={() => setQuizMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ File Ảnh/PDF</button>
+                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ Chủ đề</button>
+                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ File Ảnh/PDF</button>
                           </div>
 
                           {quizMode === 'topic' ? (
@@ -1170,7 +1166,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                                   <button
                                     key={num}
                                     onClick={() => setQuizCount(num)}
-                                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${ quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100' } `}
                                   >
                                     {num} câu
                                   </button>
@@ -1201,9 +1197,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     <div className="flex justify-end mb-2 space-x-2">
                       <button
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
-                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
+                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${ useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100' } `}
                       >
-                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>
+                        <i className={`fas ${ useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off' } mr - 1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
                       </button>
                       <button
@@ -1373,13 +1369,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={() => setVoiceName('Kore')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
                     >
                       <i className="fas fa-mars mr-2"></i>Giọng Nam
                     </button>
                     <button
                       onClick={() => setVoiceName('Puck')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
                     >
                       <i className="fas fa-venus mr-2"></i>Giọng Nữ
                     </button>
@@ -1424,7 +1420,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                     {pendingAttachments.map((at, i) => (
                       <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
                         <div className="flex items-center space-x-2 truncate">
-                          <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'}`}></i>
+                          <i className={`fas ${ at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } `}></i>
                           <span className="truncate">{at.name}</span>
                         </div>
                         <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
@@ -1441,7 +1437,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                 disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className={`w-full py-4 mt-auto rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'}`}
+                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${ activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700' } `}
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
                 {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
@@ -1485,7 +1481,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                         </select>
                       </div>
                       <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
+                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${ topic.replace(/\s+/g, '_') }.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
                       >
                         <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
@@ -1558,7 +1554,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                         <img
                           src={result}
                           alt="Video Scene"
-                          className={`w-full h-full object-cover transition-transform duration-[20s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
+                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${ isPlaying ? 'scale-125' : 'scale-100' } `}
                         />
                         {!isPlaying && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
@@ -1570,8 +1566,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       </div>
                       <div className="mt-8 flex flex-col items-center space-y-3">
                         <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
-                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
+                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${ isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700' } `}>
+                            <i className={`fas ${ isPlaying ? 'fa-stop' : 'fa-play' } mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
                           <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
                             <i className="fas fa-download mr-2"></i>Tải Ảnh nền
@@ -1619,9 +1615,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                                     window.speechSynthesis.speak(utterance);
                                   }
                                 }}
-                                className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${ isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700' } `}
                               >
-                                <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text-xl ${!isPlaying && 'ml-1'}`}></i>
+                                <i className={`fas ${ isPlaying ? 'fa-waveform' : 'fa-play' } text - xl ${ !isPlaying && 'ml-1' } `}></i>
                               </button>
                               <button
                                 onClick={() => {
@@ -1637,7 +1633,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                               </button>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'}`}
+                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${ voiceName === 'Kore' ? 'Nam' : 'Nữ' } • ${ audioUrl ? 'Máy chủ' : 'Hệ thống' } `}
                             </p>
                           </div>
                         )}
@@ -1661,7 +1657,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                    <i className={`fas ${ activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone' } text - 5xl text - slate - 300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>
