@@ -98,6 +98,18 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
 
   const currentQuestion = data[currentIndex];
 
+  // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung
+  let displayQuestion = currentQuestion.question;
+  let displayImage = currentQuestion.image;
+
+  if (!displayImage && displayQuestion) {
+    const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):(.*?)\]/i);
+    if (imgMatch) {
+      displayImage = imgMatch[0]; // Lấy cả cụm [HÌNH ẢNH: ...]
+      displayQuestion = displayQuestion.replace(imgMatch[0], '').trim();
+    }
+  }
+
   return (
     <div className="flex flex-col h-full p-4">
       <div className="flex justify-between items-center mb-6">
@@ -117,23 +129,23 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
-        {currentQuestion.image && (
-          currentQuestion.image.trim().startsWith('<svg') ? (
-            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto" dangerouslySetInnerHTML={{ __html: currentQuestion.image }} />
+        {displayImage && (
+          displayImage.trim().startsWith('<svg') ? (
+            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
           ) : (
-            currentQuestion.image.match(/^(http|data:)/) ? (
+            displayImage.match(/^(http|data:)/) ? (
               <div className="flex justify-center mb-6">
-                <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
+                <img src={displayImage} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
               </div>
             ) : (
-              <div className="flex justify-center mb-6 p-6 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium italic text-center max-w-md mx-auto">
-                <i className="fas fa-image text-2xl mb-2 block text-slate-300"></i>
-                {currentQuestion.image.replace(/[\[\]]/g, '')}
+              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm">
+                <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
+                {displayImage.replace(/[\[\]]/g, '')}
               </div>
             )
           )
         )}
-        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{currentQuestion.question}</h3>
+        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
           {currentQuestion.options.map((option: string, index: number) => {
@@ -157,7 +169,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
               >
                 <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
                 {option.trim().startsWith('<svg') ? (
-                  <div className="inline-block align-middle [&>svg]:h-16 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: option }} />
+                  <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: option }} />
                 ) : (
                   option
                 )}
@@ -541,21 +553,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         const mimeType = quizFile.type;
 
         const prompt = `
-          Bạn là một trợ lý số hóa đề thi chuyên nghiệp, đặc biệt là các kỳ thi Trạng Nguyên Tiếng Việt, Violympic Toán.
-          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm có trong đề.
+          Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
+          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm.
           
-          YÊU CẦU XỬ LÝ HÌNH ẢNH (CỰC KỲ QUAN TRỌNG):
-          1. Đối với các câu hỏi dựa vào hình ảnh (đếm số lượng, hình học, quy luật hình ảnh, nhìn hình đoán chữ...):
-             - BẮT BUỘC phải tạo mã SVG để tái hiện lại nội dung hình ảnh đó.
-             - Mã SVG phải đơn giản, rõ ràng, thể hiện đúng dữ kiện của câu hỏi (Ví dụ: vẽ 5 quả cam, vẽ hình tam giác ABC, vẽ sơ đồ...).
-             - Đặt mã SVG hoặc đoạn mô tả vào trường "image".
-          2. Nếu các phương án lựa chọn (A, B, C, D) là hình ảnh, hãy tạo mã SVG nhỏ gọn cho từng phương án trong mảng "options".
-          3. Chỉ khi hình ảnh là ảnh chụp thực tế quá phức tạp (như phong cảnh, chân dung cụ thể) mới dùng mô tả văn bản trong ngoặc vuông [Hình ảnh: ...].
+          QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC):
+          1. Rất nhiều câu hỏi trong đề này có hình ảnh minh họa (hình học, đồ thị, phép tính, hình vẽ...).
+          2. Với mỗi câu hỏi, bạn phải kiểm tra xem có hình ảnh đi kèm không.
+          3. Nếu có hình ảnh:
+             - Ưu tiên 1: Tạo mã SVG đơn giản để vẽ lại hình đó (ví dụ: hình tam giác, hình tròn, sơ đồ cây...). Mã SVG phải nằm gọn trên 1 dòng, không xuống dòng.
+             - Ưu tiên 2: Nếu hình quá phức tạp (ảnh chụp phong cảnh, người...), hãy mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả chi tiết...].
+             - Đưa kết quả (SVG hoặc Mô tả) vào trường "image".
+          4. Nếu ĐÁP ÁN là hình ảnh: Hãy tạo mã SVG hoặc mô tả cho từng đáp án trong mảng "options".
           
-          Yêu cầu khác:
-          1. Giữ nguyên nội dung câu hỏi và các phương án.
-          2. Xác định đáp án đúng.
-          3. Giải thích ngắn gọn.
+          Ví dụ SVG mẫu (để tham khảo):
+          "<svg width=\\"100\\" height=\\"100\\"><circle cx=\\"50\\" cy=\\"50\\" r=\\"40\\" stroke=\\"black\\" stroke-width=\\"3\\" fill=\\"none\\" /></svg>"
           
           Định dạng đầu ra JSON Array (Bắt buộc):
           [
@@ -564,7 +575,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
               "answer": "Đáp án đúng (VD: A. Nội dung)", 
               "explanation": "Giải thích...",
-              "image": "Mã SVG hoặc Mô tả hình ảnh"
+              "image": "Mã SVG hoặc [HÌNH ẢNH: Mô tả...]"
             }
           ]
           LƯU Ý QUAN TRỌNG VỀ ĐỊNH DẠNG JSON:
