@@ -415,13 +415,30 @@ export class GeminiService {
       // Xác định xem là Object hay Array dựa vào cái nào xuất hiện trước
       if (firstOpenBracket !== -1 && (firstOpenBrace === -1 || firstOpenBracket < firstOpenBrace)) {
         start = firstOpenBracket;
-        end = input.lastIndexOf(']');
+        // Đếm ngoặc để tìm đúng ngoặc đóng tương ứng, tránh lấy thừa text phía sau
+        let depth = 0;
+        for (let i = start; i < input.length; i++) {
+          if (input[i] === '[') depth++;
+          else if (input[i] === ']') depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
       } else if (firstOpenBrace !== -1) {
         start = firstOpenBrace;
-        end = input.lastIndexOf('}');
+        let depth = 0;
+        for (let i = start; i < input.length; i++) {
+          if (input[i] === '{') depth++;
+          else if (input[i] === '}') depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
       }
 
-      if (start !== -1 && end !== -1 && end > start) {
+      if (start !== -1 && end !== -1) {
         return input.substring(start, end + 1);
       }
       return input;

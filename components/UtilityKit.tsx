@@ -586,6 +586,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           2. Đối với mã SVG trong trường "image": BẮT BUỘC phải escape dấu ngoặc kép (") thành (\") để đảm bảo JSON hợp lệ.
           3. Không được xuống dòng trong giá trị của chuỗi JSON (dùng \\n nếu cần).
           4. Tuyệt đối xử lý đúng ký tự escape: Backslash (\\) phải viết là (\\\\).
+          5. Đảm bảo tất cả các chuỗi đều được đóng ngoặc kép đúng cách.
         `;
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
