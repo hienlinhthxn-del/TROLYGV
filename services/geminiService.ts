@@ -10,7 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+const MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
 const MODEL_ALIASES: Record<string, string> = {
   'gemini-1.5-flash': 'gemini-flash-latest',
   'gemini-1.5-flash-8b': 'gemini-flash-lite-latest',
@@ -616,33 +616,36 @@ export class GeminiService {
       }
     }
 
-    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại
+    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại hoặc đổi Model
     if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
-      // Tự động đọc thời gian chờ từ thông báo lỗi của Google (VD: Please retry in 44s)
-      let waitMs = this.retryAttempt === 0 ? 5000 : 15000;
+      // Tự động đọc thời gian chờ từ thông báo lỗi của Google
+      let waitMs = this.retryAttempt === 0 ? 2000 : 5000;
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Cộng thêm 2s cho chắc chắn
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
       }
 
-      if (this.retryAttempt < 3) {
-        this.retryAttempt++;
-        this.setStatus(`Google báo bận, đang đợi ${Math.round(waitMs / 1000)} giây để thử lại...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        return retryFn();
-      } else {
-        // Đổi model ngay nếu thử lại 2 lần không được
+      // Nếu Google bảo chờ quá lâu (> 10s), hoặc đã thử lại 2 lần bận liên tiếp
+      // thì đổi model luôn cho nhanh, không bắt người dùng chờ vô ích
+      if (waitMs > 10000 || this.retryAttempt >= 2) {
         this.retryAttempt = 0;
-        const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
-        if (nextIdx < MODELS.length) {
-          this.setStatus(`Đang đổi sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
-          this.setupModel(MODELS[nextIdx], 'v1beta');
-          return retryFn();
-        } else {
-          this.setStatus("Tạm thời hết lượt.");
-          throw new Error("Lượt dùng miễn phí của Google hiện đã hết trong lúc này. Thầy Cô vui lòng đợi khoảng 1 phút rồi bấm nút lại nhé. (Mách nhỏ: Thầy Cô có thể vào Trung tâm Bảo mật để nhập API Key cá nhân để dùng thoải mái hơn ạ!)");
+        const currentIdx = MODELS.indexOf(this.currentModelName);
+        const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
+
+        // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
+        if (nextIdx === 0 && currentIdx !== -1) {
+          throw new Error("Tất cả các đường truyền AI hiện đang bận do quá tải. Thầy/Cô vui lòng đợi khoảng 1 phút rồi thử lại, hoặc nhập API Key cá nhân để dùng ổn định hơn nhé!");
         }
+
+        this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
+        this.setupModel(MODELS[nextIdx], 'v1beta');
+        return retryFn();
       }
+
+      this.retryAttempt++;
+      this.setStatus(`Google báo bận, đang thử lại sau ${Math.round(waitMs / 1000)} giây...`);
+      await new Promise(r => setTimeout(r, waitMs));
+      return retryFn();
     }
 
     this.retryAttempt = 0; // Reset nếu là lỗi khác
