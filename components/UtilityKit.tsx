@@ -684,7 +684,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         }
 
-        const url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
+        const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
         await navigator.clipboard.writeText(url);
         alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
       } catch (e) {
@@ -889,33 +889,33 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         }
       });
 
-      let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
+      let gridHtml = `<div class="grid" style="grid-template-columns: repeat(${size}, 1fr);">`;
       for (let r = 0; r < size; r++) {
         for (let c = 0; c < size; c++) {
           const isActive = gridMap[r][c];
-          gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
+          gridHtml += `<div class="cell ${isActive ? 'active' : 'black'}"></div>`;
         }
       }
-      gridHtml += `</div > `;
+      gridHtml += `</div>`;
 
       const html = `
-        < !DOCTYPE html >
+        <!DOCTYPE html>
           <html>
             <head>
               <title>Ô chữ: ${topic}</title>
               <style>
-                body {font - family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-                h1 {text - align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
-                .sub-title {text - align: center; margin-bottom: 30px; font-style: italic; color: #666; }
-                .container {display: flex; flex-direction: column; align-items: center; gap: 30px; }
-                .grid {display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
-                .cell {background: #fff; position: relative; }
-                .cell.black {background: #333; }
-                .clues-container {width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-                .clues-col h3 {border - bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-                ul {list - style: none; padding: 0; }
-                li {margin - bottom: 10px; line-height: 1.4; }
-                .footer {margin - top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+                body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+                h1 { text-align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
+                .sub-title { text-align: center; margin-bottom: 30px; font-style: italic; color: #666; }
+                .container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+                .grid { display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
+                .cell { background: #fff; position: relative; }
+                .cell.black { background: #333; }
+                .clues-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+                .clues-col h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+                ul { list-style: none; padding: 0; }
+                li { margin-bottom: 10px; line-height: 1.4; }
+                .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
               </style>
             </head>
             <body>
