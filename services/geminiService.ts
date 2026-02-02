@@ -230,10 +230,11 @@ export class GeminiService {
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. Trả về DUY NHẤT mã JSON, không chứa bất kỳ văn bản giải thích nào ở trước hoặc sau.
-    2. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
-    3. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
-    4. Không được xuống dòng thực sự bên trong giá trị của một trường, hãy dùng ký tự \\n.
-    5. Không thêm dấu phẩy (,) sau phần tử cuối cùng của mảng hoặc đối tượng.
+    2. KHÔNG ĐƯỢC chứa comment (// hoặc /* */) trong JSON.
+    3. Nếu trong nội dung câu hỏi hoặc đáp án có dấu ngoặc kép ("), PHẢI viết là \\"
+    4. Tránh sử dụng các ký tự điều khiển lạ. Các công thức toán học nếu có dấu \\ thì phải viết double thành \\\\
+    5. Không được xuống dòng thực sự bên trong giá trị của một trường, hãy dùng ký tự \\n.
+    6. Không thêm dấu phẩy (,) sau phần tử cuối cùng của mảng hoặc đối tượng.
     
     CẤU TRÚC JSON MẪU:
     { 
@@ -439,10 +440,20 @@ export class GeminiService {
   public parseJSONSafely(text: string): any {
     // 1. Dọn dẹp sơ bộ: xóa markdown blocks
     let cleaned = text.trim();
-    // Regex bắt nội dung trong code block, hỗ trợ ```json, ```JSON, hoặc ``` không
-    const codeBlockMatch = cleaned.match(/```(?:\w+)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      cleaned = codeBlockMatch[1].trim();
+    // Regex bắt nội dung trong code block, ưu tiên ```json
+    const jsonBlockMatch = cleaned.match(/```(?:json)\s*([\s\S]*?)```/i);
+    if (jsonBlockMatch) {
+      cleaned = jsonBlockMatch[1].trim();
+    } else {
+      const codeBlockMatch = cleaned.match(/```(?:\w+)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        cleaned = codeBlockMatch[1].trim();
+      }
+    }
+
+    // Xử lý trường hợp JSON bị bao bởi ngoặc đơn (JSONP style)
+    if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+      cleaned = cleaned.slice(1, -1).trim();
     }
 
     // 2. Hàm cứu hộ JSON bị cắt ngang (Truncated)
@@ -529,8 +540,15 @@ export class GeminiService {
 
     // 3. Hàm sửa lỗi ký tự điều khiển và trailing commas
     const fixCommonErrors = (str: string): string => {
+      let s = str;
+
+      // Xóa comments (//... hoặc /*...*/) nhưng bảo vệ chuỗi
+      s = s.replace(/("(?:\\[\s\S]|[^"\\])*")|(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, (match, group1) => {
+        return group1 ? match : "";
+      });
+
       // Xóa trailing commas (dấu phẩy thừa trước dấu đóng ngoặc)
-      let s = str.replace(/,\s*([\]}])/g, '$1');
+      s = s.replace(/,\s*([\]}])/g, '$1');
 
       // Sửa ký tự điều khiển
       s = s.replace(/[\u0000-\u001F]+/g, (match) => {
