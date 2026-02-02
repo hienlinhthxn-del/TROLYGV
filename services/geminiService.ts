@@ -436,111 +436,43 @@ export class GeminiService {
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
   public parseJSONSafely(text: string): any {
-    // 1. Tìm và bóc tách khối JSON (Hỗ trợ cả Object {} và Array [])
-    const extractJSON = (input: string): string => {
-      const firstOpenBrace = input.indexOf('{');
-      const firstOpenBracket = input.indexOf('[');
+    // 1. Dọn dẹp sơ bộ: xóa markdown blocks
+    let cleaned = text.trim();
+    if (cleaned.includes('```')) {
+      const match = cleaned.match(/```(?:json)?([\s\S]*?)```/);
+      if (match) cleaned = match[1].trim();
+    }
 
-      let start = -1;
-      let end = -1;
-
-      // Xác định xem là Object hay Array dựa vào cái nào xuất hiện trước
-      if (firstOpenBracket !== -1 && (firstOpenBrace === -1 || firstOpenBracket < firstOpenBrace)) {
-        start = firstOpenBracket;
-        // Đếm ngoặc để tìm đúng ngoặc đóng tương ứng, tránh lấy thừa text phía sau
-        let depth = 0;
-        for (let i = start; i < input.length; i++) {
-          if (input[i] === '[') depth++;
-          else if (input[i] === ']') depth--;
-          if (depth === 0) {
-            end = i;
-            break;
-          }
-        }
-      } else if (firstOpenBrace !== -1) {
-        start = firstOpenBrace;
-        let depth = 0;
-        for (let i = start; i < input.length; i++) {
-          if (input[i] === '{') depth++;
-          else if (input[i] === '}') depth--;
-          if (depth === 0) {
-            end = i;
-            break;
-          }
-        }
-      }
-
-      if (start !== -1 && end !== -1) {
-        return input.substring(start, end + 1);
-      }
-      return input;
-    };
-
-    let cleaned = extractJSON(text.trim());
-
-    // 2. Hàm sửa lỗi JSON "siêu cấp"
-    const ultraRepair = (str: string): string => {
-      let r = str;
-
-      // A. Sửa lỗi backslash: Chỉ giữ lại các escape hơp lệ, còn lại biến thành double backslash
-      // Các escape hợp lệ: " \ / b f n r t uXXXX
-      r = r.replace(/\\/g, '__BACKSLASH__'); // Tạm thời ẩn tất cả backslash
-
-      // Khôi phục các escape chuẩn
-      r = r.replace(/__BACKSLASH__(["\\\/bfnrt])/g, '\\$1');
-      r = r.replace(/__BACKSLASH__u([0-9a-fA-F]{4})/g, '\\u$1');
-
-      // Những gì còn lại là backslash đơn lẻ gây lỗi -> biến thành \\
-      r = r.replace(/__BACKSLASH__/g, '\\\\');
-
-      // B. Sửa lỗi ký tự điều khiển (Newline, Tab...) bên trong chuỗi
-      r = r.replace(/[\u0000-\u001F]/g, (match) => {
-        const charCode = match.charCodeAt(0);
-        if (charCode === 10) return "\\n";
-        if (charCode === 13) return "\\r";
-        if (charCode === 9) return "\\t";
-        return "";
-      });
-
-      return r;
-    };
-
-    // 3. Hàm "Cấp cứu" JSON bị cắt ngang (Truncated) do chạm giới hạn token
-    const emergencyRepair = (str: string): string => {
+    // 2. Hàm cứu hộ JSON bị cắt ngang (Truncated)
+    const rescueTruncated = (str: string): string => {
       let r = str.trim();
 
-      // Tìm vị trí mở { hoặc [ đầu tiên để cắt bỏ rác phía trước
       const startBrace = r.indexOf('{');
       const startBracket = r.indexOf('[');
       let startIdx = -1;
       if (startBrace !== -1 && (startBracket === -1 || startBrace < startBracket)) startIdx = startBrace;
       else if (startBracket !== -1) startIdx = startBracket;
-
       if (startIdx !== -1) r = r.substring(startIdx);
 
-      // Nếu kết thúc bằng dấu phẩy, bỏ đi
-      if (r.endsWith(',')) r = r.slice(0, -1);
-
-      // Đếm các dấu ngoặc để đóng lại một cách cơ học
       let braces = 0;
       let brackets = 0;
       let inString = false;
-      let cleaned = '';
+      let output = '';
 
       for (let i = 0; i < r.length; i++) {
         const char = r[i];
 
-        // Xử lý chuỗi nháy kép (cẩn thận với escaped quotes)
+        if (char === '\\') {
+          output += char;
+          if (i + 1 < r.length) {
+            output += r[i + 1];
+            i++;
+          }
+          continue;
+        }
+
         if (char === '"') {
-          let backslashCount = 0;
-          let j = i - 1;
-          while (j >= 0 && r[j] === '\\') {
-            backslashCount++;
-            j--;
-          }
-          if (backslashCount % 2 === 0) {
-            inString = !inString;
-          }
+          inString = !inString;
         }
 
         if (!inString) {
@@ -548,46 +480,49 @@ export class GeminiService {
           else if (char === '}') braces--;
           else if (char === '[') brackets++;
           else if (char === ']') brackets--;
+
+          if (braces === 0 && brackets === 0 && output.length > 0) {
+            output += char;
+            return output;
+          }
         }
-        cleaned += char;
+        output += char;
       }
 
-      // VẤN ĐỀ TRUNCATION: Nếu kết thúc bằng dấu \ lẻ, nó sẽ escape ký tự tiếp theo
-      if (inString) {
-        let backslashCount = 0;
-        let k = cleaned.length - 1;
-        while (k >= 0 && cleaned[k] === '\\') {
-          backslashCount++;
-          k--;
-        }
-        if (backslashCount % 2 !== 0) {
-          cleaned = cleaned.slice(0, -1);
-        }
-        cleaned += '"';
-      }
+      let final = output.trim();
+      if (final.endsWith('\\')) final = final.slice(0, -1);
+      if (inString) final += '"';
+      if (final.endsWith(',')) final = final.slice(0, -1);
 
-      // Đóng các ngoặc nhọn/vuông còn thiếu
-      while (brackets > 0) { cleaned += ']'; brackets--; }
-      while (braces > 0) { cleaned += '}'; braces--; }
+      while (brackets > 0) { final += ']'; brackets--; }
+      while (braces > 0) { final += '}'; braces--; }
 
-      return cleaned;
+      return final;
     };
 
-    // 4. Thử Parse đa tầng
+    // 3. Hàm sửa lỗi ký tự điều khiển
+    const fixCharacters = (str: string): string => {
+      return str.replace(/[\u0000-\u001F]/g, (match) => {
+        const charCodes: Record<number, string> = { 10: "\\n", 13: "\\r", 9: "\\t" };
+        return charCodes[match.charCodeAt(0)] || "";
+      });
+    };
+
+    // 4. Chiến lược Parse
+    const rescued = rescueTruncated(cleaned);
+
     try {
-      return JSON.parse(cleaned);
+      return JSON.parse(rescued);
     } catch (e1) {
       try {
-        const repaired = ultraRepair(cleaned);
-        return JSON.parse(repaired);
+        return JSON.parse(fixCharacters(rescued));
       } catch (e2) {
         try {
-          // Thử cấp cứu lần cuối nếu bị cắt ngang
-          const emergency = emergencyRepair(ultraRepair(cleaned));
-          return JSON.parse(emergency);
+          const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
+          return JSON.parse(fixCharacters(superFix));
         } catch (e3) {
-          console.error("JSON Parse Failed completely.", { original: text, emergency: emergencyRepair(ultraRepair(cleaned)) });
-          throw new Error(`AI trả về định dạng không chuẩn (${e1 instanceof Error ? e1.message : 'JSON Error'}). Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+          console.error("JSON Rescue Failed.", { original: text, rescued });
+          throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
         }
       }
     }
