@@ -602,6 +602,61 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         return;
       }
 
+      // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
+      const convertPdfToImages = async (base64: string): Promise<any[]> => {
+        try {
+          // @ts-ignore
+          const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+          // @ts-ignore
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+
+          const loadingTask = pdfjsLib.getDocument({ data: atob(base64) });
+          const pdf = await loadingTask.promise;
+          const images: any[] = [];
+
+          // Giới hạn xử lý 12 trang đầu để tránh quá tải
+          const maxPages = Math.min(pdf.numPages, 12);
+
+          for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ canvasContext: context!, viewport: viewport }).promise;
+            const imgData = canvas.toDataURL('image/jpeg', 0.8);
+            images.push({
+              inlineData: {
+                data: imgData.split(',')[1],
+                mimeType: 'image/jpeg'
+              }
+            });
+          }
+          return images;
+        } catch (e) {
+          console.error("PDF Convert Error:", e);
+          return null as any; // Fallback to original
+        }
+      };
+
+      const finalFileParts: any[] = [];
+      for (const part of fileParts) {
+        if (part.inlineData.mimeType === 'application/pdf') {
+          const images = await convertPdfToImages(part.inlineData.data);
+          if (images) {
+            finalFileParts.push(...images);
+          } else {
+            finalFileParts.push(part); // Fallback nếu lỗi convert
+          }
+        } else {
+          finalFileParts.push(part);
+        }
+      }
+      // -------------------------------------------------------------
+
+
       const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
       Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi (thường từ 20 đến 30 câu).
       
@@ -616,7 +671,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       - Cố gắng trích xuất đủ số lượng câu hỏi có trong đề (thường là 20-30 câu).`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
-      const json = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
+      const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
 
       if (json && json.questions) {
         setResult(json.questions);
