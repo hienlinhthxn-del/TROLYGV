@@ -133,11 +133,13 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
           displayImage.trim().startsWith('<svg') ? (
             <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
           ) : (
-            displayImage.match(/^(http|data:)/) ? (
+            // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
+            /^(http|https|data:image)/i.test(displayImage) ? (
               <div className="flex justify-center mb-6">
                 <img src={displayImage} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
               </div>
             ) : (
+              // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
               <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm">
                 <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
                 {displayImage.replace(/[\[\]]/g, '')}
