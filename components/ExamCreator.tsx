@@ -103,12 +103,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           'Vận dụng cao': { mcq: 0, essay: 0 }
         };
       });
-      // Mặc định tạo khoảng 20 câu trắc nghiệm cho mạch đầu tiên mẫu
-      const first = strands[0];
-      const second = strands[1] || strands[0];
-      initial[first]['Nhận biết'].mcq = 10;
-      initial[first]['Thông hiểu'].mcq = 5;
-      initial[second]['Vận dụng'].mcq = 5;
+      // Mặc định để trống để giáo viên tự nhập theo ý muốn
       setStrandMatrix(initial);
     }
   }, [config.subject]);
@@ -265,7 +260,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ, hoặc DÃY QUY LUẬT HÌNH ẢNH, hãy bóc tách và cung cấp mã SVG hoặc mô tả chi tiết: [HÌNH ẢNH: Mô tả...] trong trường "image".
     - Với các câu hỏi Quy luật: Hãy mô tả rõ các thành phần của quy luật.
     - Nếu các ĐÁP ÁN là hình ảnh: Hãy trích xuất chúng vào trường "image" của từng option.
-    - Đảm bảo trích xuất số lượng câu hỏi đầy đủ (Thường 20-30 câu).`;
+    - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý bỏ bớt hay thêm vào.`;
 
     try {
       const fileParts: FilePart[] = pendingImportFiles.map(f => ({
@@ -658,11 +653,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               <div className="bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 flex items-center space-x-2">
                 <span className="text-[10px] font-black text-emerald-600 uppercase">{stats.total} câu</span>
               </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => applyQuickSetup(20)} className="flex-1 py-1.5 bg-slate-100 text-[9px] font-black uppercase rounded-lg border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all">20 Câu</button>
-              <button onClick={() => applyQuickSetup(30)} className="flex-1 py-1.5 bg-slate-100 text-[9px] font-black uppercase rounded-lg border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all">30 Câu</button>
             </div>
           </div>
 
