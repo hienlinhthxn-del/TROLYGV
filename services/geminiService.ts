@@ -225,11 +225,11 @@ export class GeminiService {
        - Nếu hình phức tạp hoặc không thể vẽ đơn giản, hãy viết mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả con vật/đồ vật...].
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
     2. Nếu ĐÁP ÁN là hình ảnh: Cung cấp SVG đơn giản hoặc Mô tả vào trường "image" của từng option.
-    3. Đảm bảo số lượng câu hỏi đầy đủ (Tối đa 30 câu). Đừng bỏ sót câu nào.
+    3. Đảm bảo trích xuất ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý giới hạn số lượng câu.
     4. GIẢI THÍCH (explanation) phải ngắn gọn, súc tích (dưới 100 chữ).
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
-    1. Chỉ trả về JSON thuần túy. Bắt buộc dùng dấu ngoặc kép (") cho tên trường và giá trị chuỗi. KHÔNG dùng dấu ngoặc đơn (').
+    1. QUAN TRỌNG NHẤT: Chỉ trả về JSON. KHÔNG có lời dẫn (Ví dụ: "Đây là kết quả..."). Bắt buộc dùng dấu ngoặc kép (") cho tên trường và giá trị chuỗi.
     2. KHÔNG ĐƯỢC chứa comment (// hoặc /* */).
     3. Escape kỹ các ký tự đặc biệt:
        - Dấu ngoặc kép (") -> \\"
@@ -441,6 +441,10 @@ export class GeminiService {
   public parseJSONSafely(text: string): any {
     // 1. Dọn dẹp sơ bộ: xóa markdown blocks
     let cleaned = text.trim();
+
+    // Xử lý Smart Quotes (dấu ngoặc kép cong do lỗi font/bộ gõ)
+    cleaned = cleaned.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+
     // Regex bắt nội dung trong code block, ưu tiên ```json
     const jsonBlockMatch = cleaned.match(/```(?:json)\s*([\s\S]*?)```/i);
     if (jsonBlockMatch) {
@@ -476,6 +480,8 @@ export class GeminiService {
 
       if (startIdx !== -1) {
         r = r.substring(startIdx);
+      } else {
+        return ""; // Không tìm thấy JSON
       }
 
       let braces = 0;
@@ -574,29 +580,51 @@ export class GeminiService {
     };
 
     // 4. Chiến lược Parse
-    const rescued = rescueTruncated(cleaned);
+    // CHIẾN THUẬT QUÉT ĐA TẦNG: Thử tìm JSON ở nhiều vị trí khác nhau
+    let currentText = cleaned;
+    const maxAttempts = 3;
 
-    try {
-      return JSON.parse(rescued);
-    } catch (e1) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const rescued = rescueTruncated(currentText);
+      if (!rescued) break;
+
       try {
-        return JSON.parse(fixCommonErrors(rescued));
-      } catch (e2) {
+        return JSON.parse(rescued);
+      } catch (e1) {
         try {
-          // Cố gắng escape backslash một lần nữa
-          const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
-          return JSON.parse(fixCommonErrors(superFix));
-        } catch (e3) {
+          return JSON.parse(fixCommonErrors(rescued));
+        } catch (e2) {
           try {
-            const singleQuoteFix = fixSingleQuotes(rescued);
-            return JSON.parse(fixCommonErrors(singleQuoteFix));
-          } catch (e4) {
-            console.error("JSON Rescue Failed.", { original: text, rescued });
-            throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+            const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
+            return JSON.parse(fixCommonErrors(superFix));
+          } catch (e3) {
+            try {
+              const singleQuoteFix = fixSingleQuotes(rescued);
+              return JSON.parse(fixCommonErrors(singleQuoteFix));
+            } catch (e4) {
+              // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
+              const startBrace = currentText.indexOf('{');
+              const startBracket = currentText.indexOf('[');
+              let startIdx = -1;
+              if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
+              else if (startBrace !== -1) startIdx = startBrace;
+              else if (startBracket !== -1) startIdx = startBracket;
+
+              if (startIdx !== -1) {
+                // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
+                currentText = currentText.substring(startIdx + 1);
+                continue;
+              } else {
+                break;
+              }
+            }
           }
         }
       }
     }
+
+    console.error("JSON Rescue Failed Final.", { original: text });
+    throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
   }
 
   private retryAttempt: number = 0;
