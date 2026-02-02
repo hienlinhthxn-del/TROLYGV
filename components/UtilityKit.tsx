@@ -117,6 +117,11 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
+        {currentQuestion.image && (
+          <div className="flex justify-center mb-6">
+            <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
+          </div>
+        )}
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{currentQuestion.question}</h3>
 
         <div className="grid grid-cols-1 gap-3">
@@ -165,6 +170,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant'>('games');
   const [subject, setSubject] = useState('Toán');
   const [gameType, setGameType] = useState<'idea' | 'crossword' | 'quiz'>('idea');
+  const [quizMode, setQuizMode] = useState<'topic' | 'file'>('topic');
+  const [quizFile, setQuizFile] = useState<File | null>(null);
   const [grade, setGrade] = useState('Lớp 1');
   const [topic, setTopic] = useState('');
   const [videoStyle, setVideoStyle] = useState('Hoạt hình đơn giản');
@@ -210,6 +217,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   // Xử lý dán ảnh trực tiếp
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
+      if (activeTab !== 'assistant') return;
+
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -236,7 +245,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, []);
+  }, [activeTab]);
 
   // Tải danh sách giọng đọc ngay khi mở tiện ích
   useEffect(() => {
@@ -501,6 +510,69 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     }
   };
 
+  const generateQuizFromUpload = async () => {
+    if (!quizFile) {
+      alert("Vui lòng chọn file đề thi (Ảnh/PDF)!");
+      return;
+    }
+    setIsProcessing(true);
+    setResult(null);
+    setAudioUrl(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        const mimeType = quizFile.type;
+
+        const prompt = `
+          Đóng vai trò là một trợ lý soạn đề thi chuyên nghiệp.
+          Nhiệm vụ: Phân tích hình ảnh/tài liệu đính kèm và bóc tách các câu hỏi trắc nghiệm.
+          
+          Yêu cầu đầu ra:
+          1. Trích xuất chính xác nội dung câu hỏi và các phương án.
+          2. Xác định đáp án đúng (nếu có trong đề, hoặc tự giải).
+          3. Giải thích ngắn gọn.
+          4. Trả về kết quả dưới dạng JSON Array:
+          [
+            {
+              "question": "...",
+              "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+              "answer": "...", 
+              "explanation": "..."
+            }
+          ]
+          Lưu ý: Chỉ trả về JSON, không thêm lời dẫn.
+        `;
+
+        const filePart = { inlineData: { data: base64Data, mimeType } };
+
+        let fullContent = '';
+        const stream = geminiService.sendMessageStream(prompt, [filePart]);
+
+        for await (const chunk of stream) {
+          fullContent += chunk.text;
+        }
+
+        try {
+          const jsonStr = fullContent.replace(/```json/g, '').replace(/```/g, '').trim();
+          const json = JSON.parse(jsonStr);
+          setResult(json);
+        } catch (e) {
+          console.error("JSON Parse Error", e);
+          alert("AI không thể tạo cấu trúc Quiz từ file này. Kết quả sẽ hiển thị dạng văn bản.");
+          setResult(fullContent);
+        }
+        setIsProcessing(false);
+      };
+      reader.readAsDataURL(quizFile);
+    } catch (error: any) {
+      console.error("Quiz Upload Error:", error);
+      alert(`Lỗi bóc tách đề: ${error.message}`);
+      setIsProcessing(false);
+    }
+  };
+
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
 
@@ -514,7 +586,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           q.options,
           q.answer,
           q.explanation,
-          '' // Image
+          q.image || '' // Image
         ]))
       };
 
@@ -965,18 +1037,37 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       </div>
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
-                          <div className="flex items-center space-x-2 mt-1">
-                            {[5, 10, 15].map(num => (
-                              <button
-                                key={num}
-                                onClick={() => setQuizCount(num)}
-                                className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
-                              >
-                                {num} câu
-                              </button>
-                            ))}
+                          <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
+                            <button onClick={() => setQuizMode('topic')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ Chủ đề</button>
+                            <button onClick={() => setQuizMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ File Ảnh/PDF</button>
                           </div>
+
+                          {quizMode === 'topic' ? (
+                            <>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
+                              <div className="flex items-center space-x-2 mt-1">
+                                {[5, 10, 15].map(num => (
+                                  <button
+                                    key={num}
+                                    onClick={() => setQuizCount(num)}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                                  >
+                                    {num} câu
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          ) : (
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF)</label>
+                              <input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => setQuizFile(e.target.files ? e.target.files[0] : null)}
+                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1139,7 +1230,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 </div>
               )}
 
-              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && (
+              {!showHistory && !(activeTab === 'lesson_plan' && useTemplateMode) && !(activeTab === 'games' && gameType === 'quiz' && quizMode === 'file') && (
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                     {activeTab === 'lesson_plan' ? 'Tên bài dạy' : activeTab === 'games' ? (gameType === 'crossword' ? 'Chủ đề ô chữ' : gameType === 'quiz' ? 'Chủ đề Quiz' : 'Chủ đề bài học') : activeTab === 'images' ? 'Mô tả hình ảnh' : activeTab === 'video' ? 'Kịch bản / Mô tả video' : 'Văn bản cần đọc'}
@@ -1191,8 +1282,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
             {!showHistory && (
               <button
-                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? generateQuiz : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
-                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : !topic.trim())}
+                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : generateTTS}
+                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? !quizFile : !topic.trim()))}
                 className="w-full py-4 mt-auto bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
