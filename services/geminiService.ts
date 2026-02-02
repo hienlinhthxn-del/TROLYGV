@@ -662,7 +662,7 @@ export class GeminiService {
   private retryAttempt: number = 0;
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
-    const msg = error.message || "";
+    const msg = (error.message || "").toLowerCase();
     console.warn("AI Encountered Error:", msg);
 
     // Xử lý lỗi 404 hoặc Model Not Found
@@ -683,9 +683,18 @@ export class GeminiService {
     }
 
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại hoặc đổi Model
-    if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
+    // Bổ sung thêm các lỗi 503, 500, overloaded, busy
+    if (
+      msg.includes("429") ||
+      msg.includes("quota") ||
+      msg.includes("limit") ||
+      msg.includes("overloaded") ||
+      msg.includes("busy") ||
+      msg.includes("503") ||
+      msg.includes("500")
+    ) {
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = this.retryAttempt === 0 ? 4000 : 8000; // Tăng thời gian chờ cơ bản (4s -> 8s)
+      let waitMs = this.retryAttempt === 0 ? 5000 : 10000; // Tăng thời gian chờ cơ bản (5s -> 10s)
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Thêm buffer 2s an toàn

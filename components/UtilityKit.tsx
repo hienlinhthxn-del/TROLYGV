@@ -626,10 +626,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     } catch (error: any) {
       console.error("Quiz Upload Error:", error);
 
-      // Kiểm tra nếu là lỗi quá tải để gợi ý dùng công cụ Cắt PDF
-      const isOverload = error.message?.includes("quá tải") || error.message?.includes("chia nhỏ");
+      // Nếu đang xử lý file PDF mà gặp lỗi (bất kể lỗi gì), khả năng cao là do file nặng
+      // -> Gợi ý dùng công cụ Cắt PDF ngay lập tức
+      const isPdfUpload = pendingAttachments.some(f => f.mimeType?.includes('pdf')) || (quizFile?.type === 'application/pdf');
+      const isOverload = error.message?.includes("quá tải") || error.message?.includes("chia nhỏ") || isPdfUpload;
+
       if (isOverload) {
-        if (window.confirm(`⚠️ ${error.message}\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file ngay không?`)) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file: ${error.message}\n\nNguyên nhân thường do file đề thi quá dài hoặc nhiều hình ảnh.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không? (Khuyên dùng)`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
