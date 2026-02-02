@@ -191,17 +191,17 @@ export class GeminiService {
 
   // --- TẠO NỘI DUNG VĂN BẢN ---
 
-  public async generateText(prompt: string): Promise<string> {
+  public async generateText(prompt: string, fileParts?: FilePart[]): Promise<string> {
     await this.ensureInitialized();
     try {
-      const result = await this.model.generateContent([
-        { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }
-      ]);
+      const parts = [...(fileParts || []), { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }];
+      const result = await this.model.generateContent(parts);
       return result.response.text();
     } catch (error: any) {
       try {
-        return await this.handleError(error, () => this.generateText(prompt));
+        return await this.handleError(error, () => this.generateText(prompt, fileParts));
       } catch (finalError) {
+        if (fileParts && fileParts.length > 0) throw finalError;
         return this.fallbackToOtherProviders(`${this.currentInstruction}\n\nYêu cầu: ${prompt}`);
       }
     }

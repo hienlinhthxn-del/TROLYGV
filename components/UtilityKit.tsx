@@ -576,12 +576,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
 
-        let fullContent = '';
-        const stream = geminiService.sendMessageStream(prompt, [filePart]);
-
-        for await (const chunk of stream) {
-          fullContent += chunk.text;
-        }
+        // Sử dụng generateText thay vì stream để tận dụng cơ chế tự động thử lại (retry) khi gặp lỗi 429
+        const fullContent = await geminiService.generateText(prompt, [filePart]);
 
         try {
           // Sử dụng hàm parse an toàn từ service để tự sửa lỗi JSON (Bad escaped character)
