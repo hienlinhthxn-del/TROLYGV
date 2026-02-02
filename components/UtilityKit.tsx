@@ -996,49 +996,49 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
           <button
             onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-file-signature"></i>
             <span>Giáo án 2345</span>
           </button>
           <button
             onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-gamepad"></i>
             <span>Trò chơi</span>
           </button>
           <button
             onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-image"></i>
             <span>Minh họa AI</span>
           </button>
           <button
             onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-volume-up"></i>
             <span>Giọng đọc</span>
           </button>
           <button
             onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-film"></i>
             <span>Tạo Video</span>
           </button>
           <button
             onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-user-robot"></i>
             <span>Trợ lý Chat</span>
           </button>
           <button
             onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-            className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+            className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
           >
             <i className="fas fa-scissors"></i>
             <span>Cắt PDF</span>
@@ -1443,7 +1443,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 <button
                   onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                   disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                  className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'} `}
+                  className={`w-full py-4 mt-auto rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'}`}
                 >
                   {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
                   {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
