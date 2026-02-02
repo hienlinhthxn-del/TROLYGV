@@ -237,7 +237,7 @@ export class GeminiService {
     4. Không xuống dòng trong chuỗi, dùng \\n.
     5. Không để dấu phẩy thừa cuối mảng/đối tượng.
     
-    CẤU TRÚC JSON MẪU:
+    CẤU TRÚC JSON MẪU (BẮT BUỘC):
     { 
       "title": "Tên đề thi", 
       "subject": "Môn học", 
@@ -273,7 +273,12 @@ export class GeminiService {
 
       const result = await jsonModel.generateContent(parts);
       const text = result.response.text();
-      const json = this.parseJSONSafely(text);
+      let json = this.parseJSONSafely(text);
+
+      // Fallback: Nếu AI chỉ trả về mảng câu hỏi (do lỗi format), tự động bọc lại
+      if (Array.isArray(json)) {
+        json = { questions: json };
+      }
 
       if (json.questions) {
         json.questions = json.questions.map((q: any) => ({
@@ -579,6 +584,13 @@ export class GeminiService {
       return s;
     };
 
+    // 6. Hàm sửa lỗi thiếu dấu phẩy (Missing Commas) - Thường gặp khi list quá dài
+    const fixMissingCommas = (str: string): string => {
+      let s = str.replace(/}\s*[\r\n]+\s*{/g, '},{'); // Giữa các object
+      s = s.replace(/}\s*{/g, '},{');
+      return s;
+    };
+
     // 4. Chiến lược Parse
     // CHIẾN THUẬT QUÉT ĐA TẦNG: Thử tìm JSON ở nhiều vị trí khác nhau
     let currentText = cleaned;
@@ -602,20 +614,34 @@ export class GeminiService {
               const singleQuoteFix = fixSingleQuotes(rescued);
               return JSON.parse(fixCommonErrors(singleQuoteFix));
             } catch (e4) {
-              // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
-              const startBrace = currentText.indexOf('{');
-              const startBracket = currentText.indexOf('[');
-              let startIdx = -1;
-              if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
-              else if (startBrace !== -1) startIdx = startBrace;
-              else if (startBracket !== -1) startIdx = startBracket;
+              try {
+                // Cấp cứu 5: Sửa lỗi thiếu dấu phẩy
+                const commaFix = fixMissingCommas(rescued);
+                return JSON.parse(fixCommonErrors(commaFix));
+              } catch (e5) {
+                // Cấp cứu 6: Nếu object ngoài cùng lỗi, thử tìm mảng bên trong (thường là questions)
+                const arrayMatch = rescued.match(/\[\s*\{[\s\S]*\}\s*\]/);
+                if (arrayMatch) {
+                  try {
+                    return JSON.parse(fixCommonErrors(arrayMatch[0]));
+                  } catch (e6) { }
+                }
 
-              if (startIdx !== -1) {
-                // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
-                currentText = currentText.substring(startIdx + 1);
-                continue;
-              } else {
-                break;
+                // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
+                const startBrace = currentText.indexOf('{');
+                const startBracket = currentText.indexOf('[');
+                let startIdx = -1;
+                if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
+                else if (startBrace !== -1) startIdx = startBrace;
+                else if (startBracket !== -1) startIdx = startBracket;
+
+                if (startIdx !== -1) {
+                  // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
+                  currentText = currentText.substring(startIdx + 1);
+                  continue;
+                } else {
+                  break;
+                }
               }
             }
           }
