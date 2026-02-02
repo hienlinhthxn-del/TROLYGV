@@ -119,11 +119,18 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
       <div className="flex-1 flex flex-col justify-center">
         {currentQuestion.image && (
           currentQuestion.image.trim().startsWith('<svg') ? (
-            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200" dangerouslySetInnerHTML={{ __html: currentQuestion.image }} />
+            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto" dangerouslySetInnerHTML={{ __html: currentQuestion.image }} />
           ) : (
-            <div className="flex justify-center mb-6">
-              <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
-            </div>
+            currentQuestion.image.match(/^(http|data:)/) ? (
+              <div className="flex justify-center mb-6">
+                <img src={currentQuestion.image} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
+              </div>
+            ) : (
+              <div className="flex justify-center mb-6 p-6 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium italic text-center max-w-md mx-auto">
+                <i className="fas fa-image text-2xl mb-2 block text-slate-300"></i>
+                {currentQuestion.image.replace(/[\[\]]/g, '')}
+              </div>
+            )
           )
         )}
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{currentQuestion.question}</h3>
@@ -149,7 +156,11 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
                 className={btnClass}
               >
                 <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
-                {option}
+                {option.trim().startsWith('<svg') ? (
+                  <div className="inline-block align-middle [&>svg]:h-16 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: option }} />
+                ) : (
+                  option
+                )}
                 {selectedOption === option && (
                   <span className="absolute right-4 top-1/2 -translate-y-1/2">
                     {option === currentQuestion.answer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
@@ -530,16 +541,21 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         const mimeType = quizFile.type;
 
         const prompt = `
-          Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
-          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm có trong đề (kể cả đề dài 20-40 câu).
+          Bạn là một trợ lý số hóa đề thi chuyên nghiệp, đặc biệt là các kỳ thi Trạng Nguyên Tiếng Việt, Violympic Toán.
+          Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm có trong đề.
           
-          Yêu cầu xử lý:
-          1. Giữ nguyên nội dung câu hỏi và các phương án, không tự ý tóm tắt.
-          2. Nếu câu hỏi hoặc đáp án có hình ảnh:
-             - Hãy mô tả chi tiết hình ảnh đó trong ngoặc vuông [Hình ảnh: mô tả...] hoặc tạo mã SVG nếu đơn giản.
-             - Đưa nội dung này vào trường "image" (đối với câu hỏi) hoặc kèm vào text phương án.
-          3. Xác định đáp án đúng (nếu có trong đề, hoặc tự giải).
-          4. Giải thích ngắn gọn.
+          YÊU CẦU XỬ LÝ HÌNH ẢNH (CỰC KỲ QUAN TRỌNG):
+          1. Đối với các câu hỏi dựa vào hình ảnh (đếm số lượng, hình học, quy luật hình ảnh, nhìn hình đoán chữ...):
+             - BẮT BUỘC phải tạo mã SVG để tái hiện lại nội dung hình ảnh đó.
+             - Mã SVG phải đơn giản, rõ ràng, thể hiện đúng dữ kiện của câu hỏi (Ví dụ: vẽ 5 quả cam, vẽ hình tam giác ABC, vẽ sơ đồ...).
+             - Đặt mã SVG hoặc đoạn mô tả vào trường "image".
+          2. Nếu các phương án lựa chọn (A, B, C, D) là hình ảnh, hãy tạo mã SVG nhỏ gọn cho từng phương án trong mảng "options".
+          3. Chỉ khi hình ảnh là ảnh chụp thực tế quá phức tạp (như phong cảnh, chân dung cụ thể) mới dùng mô tả văn bản trong ngoặc vuông [Hình ảnh: ...].
+          
+          Yêu cầu khác:
+          1. Giữ nguyên nội dung câu hỏi và các phương án.
+          2. Xác định đáp án đúng.
+          3. Giải thích ngắn gọn.
           
           Định dạng đầu ra JSON Array (Bắt buộc):
           [
@@ -548,10 +564,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
               "answer": "Đáp án đúng (VD: A. Nội dung)", 
               "explanation": "Giải thích...",
-              "image": "Mã SVG hoặc Mô tả hình ảnh (nếu có)"
+              "image": "Mã SVG hoặc Mô tả hình ảnh"
             }
           ]
-          Lưu ý: Chỉ trả về JSON hợp lệ, không thêm lời dẫn hay markdown thừa. Xử lý hết tất cả câu hỏi trong đề.
+          Lưu ý: Chỉ trả về JSON hợp lệ.
         `;
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
