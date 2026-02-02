@@ -345,15 +345,14 @@ export class GeminiService {
       {
         "question": "Câu hỏi ở đây?",
         "options": [
-          { "text": "Đáp án A", "image": "" },
+          { "text": "Đáp án A", "image": "Mô tả hình/SVG nếu đáp án là hình" },
           { "text": "Đáp án B", "image": "" },
           { "text": "Đáp án C", "image": "" },
           { "text": "Đáp án D", "image": "" }
         ],
-        "answer": "Đáp án A",
-        "explanation": "Giải thích ngắn gọn vì sao đúng"
       }
-    ]`;
+    ]
+    LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
 
     try {
       const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;

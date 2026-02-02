@@ -35,10 +35,15 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
     setTimeLeft(15);
   }, [currentIndex]);
 
-  const handleAnswerClick = (option: string) => {
+  const handleAnswerClick = (option: any) => {
     if (selectedOption) return; // Chặn click nhiều lần
 
-    const correct = option === data[currentIndex].answer;
+    const optText = typeof option === 'string' ? option : (option.text || '');
+    const correctText = typeof data[currentIndex].answer === 'string'
+      ? data[currentIndex].answer
+      : (data[currentIndex].answer.text || '');
+
+    const correct = optText === correctText;
     setSelectedOption(option);
     setIsCorrect(correct);
 
@@ -150,13 +155,18 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
-          {currentQuestion.options.map((option: string, index: number) => {
+          {currentQuestion.options.map((option: any, index: number) => {
+            const optText = typeof option === 'string' ? option : (option.text || '');
+            const optImg = typeof option === 'string' ? '' : (option.image || '');
+            const isSelected = selectedOption === option;
+            const isCorrectAnswer = optText === (typeof currentQuestion.answer === 'string' ? currentQuestion.answer : currentQuestion.answer.text);
+
             let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
-            if (selectedOption === option) {
-              btnClass += option === currentQuestion.answer
+            if (isSelected) {
+              btnClass += isCorrectAnswer
                 ? "bg-emerald-100 border-emerald-500 text-emerald-800"
                 : "bg-rose-100 border-rose-500 text-rose-800";
-            } else if (selectedOption && option === currentQuestion.answer) {
+            } else if (selectedOption && isCorrectAnswer) {
               btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700"; // Hiện đáp án đúng nếu chọn sai
             } else {
               btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
@@ -169,15 +179,37 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
                 disabled={!!selectedOption}
                 className={btnClass}
               >
-                <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
-                {option.trim().startsWith('<svg') ? (
-                  <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: option }} />
-                ) : (
-                  option
+                <div className="flex items-center">
+                  <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
+                  <div className="flex-1">
+                    {optText.trim().startsWith('<svg') ? (
+                      <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
+                    ) : (
+                      <span className="text-[15px] font-bold">{optText}</span>
+                    )}
+                  </div>
+                </div>
+
+                {optImg && (
+                  <div className="mt-3">
+                    {optImg.trim().startsWith('<svg') ? (
+                      <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
+                    ) : (
+                      <img src={optImg} alt="Option placeholder" className="h-20 object-contain rounded-lg" onError={(e) => {
+                        // Fallback nếu không phải URL/base64
+                        e.currentTarget.style.display = 'none';
+                      }} />
+                    )}
+                    {/* Hiển thị mô tả nếu không phải SVG hay Image */}
+                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg) && (
+                      <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
+                    )}
+                  </div>
                 )}
-                {selectedOption === option && (
+
+                {isSelected && (
                   <span className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {option === currentQuestion.answer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
+                    {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
                   </span>
                 )}
               </button>
@@ -575,8 +607,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           [
             {
               "question": "Nội dung câu hỏi...",
-              "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-              "answer": "Đáp án đúng (VD: A. Nội dung)", 
+              "options": [
+                { "text": "Đáp án A", "image": "SVG/Mô tả nếu là hình" },
+                { "text": "Đáp án B", "image": "" },
+                { "text": "Đáp án C", "image": "" },
+                { "text": "Đáp án D", "image": "" }
+              ],
+              "answer": "Nội dung đáp án đúng (khớp chính xác trường text của một option)", 
               "explanation": "Giải thích...",
               "image": "Mã SVG hoặc [HÌNH ẢNH: Mô tả...]"
             }
