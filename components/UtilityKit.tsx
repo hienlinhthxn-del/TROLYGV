@@ -571,6 +571,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           1. Chỉ trả về duy nhất mảng JSON, không có lời dẫn hay markdown thừa.
           2. Đối với mã SVG trong trường "image": BẮT BUỘC phải escape dấu ngoặc kép (") thành (\") để đảm bảo JSON hợp lệ.
           3. Không được xuống dòng trong giá trị của chuỗi JSON (dùng \\n nếu cần).
+          4. Tuyệt đối xử lý đúng ký tự escape: Backslash (\\) phải viết là (\\\\).
         `;
 
         const filePart = { inlineData: { data: base64Data, mimeType } };
@@ -583,13 +584,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         }
 
         try {
-          let jsonStr = fullContent.replace(/```json/g, '').replace(/```/g, '').trim();
-          const firstBracket = jsonStr.indexOf('[');
-          const lastBracket = jsonStr.lastIndexOf(']');
-          if (firstBracket !== -1 && lastBracket !== -1) {
-            jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
-          }
-          const json = JSON.parse(jsonStr);
+          // Sử dụng hàm parse an toàn từ service để tự sửa lỗi JSON (Bad escaped character)
+          const json = geminiService.parseJSONSafely(fullContent);
           setResult(json);
         } catch (e) {
           console.error("JSON Parse Error", e);

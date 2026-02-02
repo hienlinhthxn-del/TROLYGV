@@ -403,7 +403,7 @@ export class GeminiService {
 
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
-  private parseJSONSafely(text: string): any {
+  public parseJSONSafely(text: string): any {
     // 1. Tìm và bóc tách khối JSON (Hỗ trợ cả Object {} và Array [])
     const extractJSON = (input: string): string => {
       const firstOpenBrace = input.indexOf('{');
