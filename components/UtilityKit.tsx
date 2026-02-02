@@ -142,7 +142,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
               // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
               <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm">
                 <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
-                {displayImage.replace(/[\[\]]/g, '')}
+                {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH):/i, '').trim()}
               </div>
             )
           )
@@ -558,7 +558,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
           Nhiệm vụ: Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm.
           
-          QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC):
+          QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):
           1. Rất nhiều câu hỏi trong đề này có hình ảnh minh họa (hình học, đồ thị, phép tính, hình vẽ...).
           2. Với mỗi câu hỏi, bạn phải kiểm tra xem có hình ảnh đi kèm không.
           3. Nếu có hình ảnh:
@@ -566,6 +566,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
              - Ưu tiên 2: Nếu hình quá phức tạp (ảnh chụp phong cảnh, người...), hãy mô tả chi tiết trong ngoặc vuông: [HÌNH ẢNH: Mô tả chi tiết...].
              - Đưa kết quả (SVG hoặc Mô tả) vào trường "image".
           4. Nếu ĐÁP ÁN là hình ảnh: Hãy tạo mã SVG hoặc mô tả cho từng đáp án trong mảng "options".
+          5. Nếu câu hỏi có chứa các từ như "hình bên", "hình dưới", "quan sát hình", "biểu đồ", BẮT BUỘC phải có dữ liệu trong trường "image".
           
           Ví dụ SVG mẫu (để tham khảo):
           "<svg width=\\"100\\" height=\\"100\\"><circle cx=\\"50\\" cy=\\"50\\" r=\\"40\\" stroke=\\"black\\" stroke-width=\\"3\\" fill=\\"none\\" /></svg>"

@@ -495,10 +495,16 @@ export class GeminiService {
 
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại
     if (msg.includes("429") || msg.includes("quota") || msg.includes("limit reached")) {
-      if (this.retryAttempt < 2) {
+      // Tự động đọc thời gian chờ từ thông báo lỗi của Google (VD: Please retry in 44s)
+      let waitMs = this.retryAttempt === 0 ? 5000 : 15000;
+      const match = msg.match(/retry in (\d+(\.\d+)?)s/);
+      if (match) {
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Cộng thêm 2s cho chắc chắn
+      }
+
+      if (this.retryAttempt < 3) {
         this.retryAttempt++;
-        const waitMs = this.retryAttempt === 1 ? 5000 : 15000;
-        this.setStatus(`Google báo bận, đang đợi ${waitMs / 1000} giây để thử lại...`);
+        this.setStatus(`Google báo bận, đang đợi ${Math.round(waitMs / 1000)} giây để thử lại...`);
         await new Promise(r => setTimeout(r, waitMs));
         return retryFn();
       } else {
