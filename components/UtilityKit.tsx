@@ -692,7 +692,24 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       - Hãy mô tả kỹ các quy luật này trong nội dung câu hỏi để học sinh có thể hiểu được mà không cần nhìn ảnh gốc (nếu ảnh gốc quá phức tạp).
       - Nếu đáp án là hình ảnh, hãy mô tả chúng trong trường image của options.
       - BẮT BUỘC: Nếu câu hỏi có hình ảnh, phải điền mô tả hoặc SVG vào trường "image".
-      - Cố gắng trích xuất đủ số lượng câu hỏi có trong đề (thường là 20-30 câu).`;
+      - Cố gắng trích xuất đủ số lượng câu hỏi có trong đề (thường là 20-30 câu).
+      
+      YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
+      {
+        "questions": [
+          {
+            "type": "Trắc nghiệm",
+            "content": "Câu hỏi...",
+            "image": "URL hoặc SVG hoặc Mô tả",
+            "options": [
+              { "text": "Đáp án A", "image": "" },
+              { "text": "Đáp án B", "image": "" }
+            ],
+            "answer": "Đáp án đúng",
+            "explanation": "Giải thích"
+          }
+        ]
+      }`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
