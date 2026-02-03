@@ -949,13 +949,35 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
                         {editingId === q.id && (
                           <div className="animate-in fade-in slide-in-from-top-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Hình ảnh minh họa (URL hoặc SVG)</label>
-                            <input
-                              value={q.image || ''}
-                              onChange={(e) => updateQuestionField(q.id, 'image', e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                              placeholder="Dán đường dẫn ảnh hoặc mã SVG vào đây..."
-                            />
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Hình ảnh minh họa</label>
+                              {q.image && <button onClick={() => updateQuestionField(q.id, 'image', '')} className="text-[9px] text-rose-500 hover:underline">Xóa ảnh</button>}
+                            </div>
+                            <div className="flex gap-2">
+                              <input
+                                value={q.image || ''}
+                                onChange={(e) => updateQuestionField(q.id, 'image', e.target.value)}
+                                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Dán URL/SVG hoặc tải ảnh..."
+                              />
+                              <label className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl cursor-pointer hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center justify-center shrink-0" title="Tải ảnh từ máy tính">
+                                <i className="fas fa-upload mr-2"></i>Tải ảnh
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onloadend = () => updateQuestionField(q.id, 'image', reader.result as string);
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            <p className="text-[9px] text-slate-400 mt-1 italic">Mẹo: Dùng công cụ chụp màn hình (Snipping Tool) cắt ảnh câu hỏi rồi tải lên đây.</p>
                           </div>
                         )}
 
@@ -980,13 +1002,34 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
                                   {editingId === q.id && (
                                     <div className="pt-2 border-t border-slate-50 flex flex-col space-y-2">
-                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hình ảnh đáp án (Mô tả/SVG)</p>
-                                      <input
-                                        value={optImg}
-                                        onChange={(e) => updateOption(q.id, i, e.target.value, true)}
-                                        className="w-full bg-slate-50 border-none rounded-xl px-3 py-2 text-[10px] outline-none focus:ring-2 focus:ring-indigo-100"
-                                        placeholder="Mô tả hình ảnh cho đáp án này..."
-                                      />
+                                      <div className="flex justify-between items-center">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hình ảnh đáp án</p>
+                                        {optImg && <button onClick={() => updateOption(q.id, i, '', true)} className="text-[8px] text-rose-500 hover:underline">Xóa</button>}
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <input
+                                          value={optImg}
+                                          onChange={(e) => updateOption(q.id, i, e.target.value, true)}
+                                          className="flex-1 bg-slate-50 border-none rounded-xl px-3 py-2 text-[10px] outline-none focus:ring-2 focus:ring-indigo-100"
+                                          placeholder="URL/SVG..."
+                                        />
+                                        <label className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl cursor-pointer hover:bg-slate-200 transition-all flex items-center justify-center shrink-0" title="Tải ảnh">
+                                          <i className="fas fa-upload text-xs"></i>
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => updateOption(q.id, i, reader.result as string, true);
+                                                reader.readAsDataURL(file);
+                                              }
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
                                     </div>
                                   )}
 
