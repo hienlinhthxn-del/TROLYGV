@@ -10,12 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
-const MODEL_ALIASES: Record<string, string> = {
-  'gemini-1.5-flash': 'gemini-flash-latest',
-  'gemini-1.5-flash-8b': 'gemini-flash-lite-latest',
-  'gemini-1.5-pro': 'gemini-pro-latest'
-};
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -69,15 +64,12 @@ export class GeminiService {
   private setupModel(modelName: string, version: 'v1' | 'v1beta' = 'v1beta') {
     if (!this.genAI) return;
 
-    // Sử dụng alias nếu có (để tăng khả năng tương thích)
-    const activeModelName = MODEL_ALIASES[modelName] || modelName;
-
     this.currentModelName = modelName;
     this.currentVersion = version;
     this.chat = null;
 
     this.model = this.genAI.getGenerativeModel({
-      model: activeModelName,
+      model: modelName,
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -85,7 +77,7 @@ export class GeminiService {
         { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     }, { apiVersion: version });
-    this.setStatus(`AI Sẵn sàng (${activeModelName})`);
+    this.setStatus(`AI Sẵn sàng (${modelName})`);
   }
 
   private async ensureInitialized() {
@@ -268,9 +260,8 @@ export class GeminiService {
       const parts = [...(fileParts || []), { text: combinedPrompt }];
 
       // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
+        model: this.currentModelName,
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
@@ -340,9 +331,8 @@ export class GeminiService {
     }`;
 
     try {
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
+        model: this.currentModelName,
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
@@ -390,9 +380,8 @@ export class GeminiService {
     LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
 
     try {
-      const activeModelName = MODEL_ALIASES[this.currentModelName] || this.currentModelName;
       const jsonModel = this.genAI!.getGenerativeModel({
-        model: activeModelName,
+        model: this.currentModelName,
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,

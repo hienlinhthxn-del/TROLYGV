@@ -260,6 +260,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ, hoặc DÃY QUY LUẬT HÌNH ẢNH, hãy bóc tách và cung cấp mã SVG hoặc mô tả chi tiết: [HÌNH ẢNH: Mô tả...] trong trường "image".
     - Với các câu hỏi Quy luật: Hãy mô tả rõ các thành phần của quy luật.
     - Nếu các ĐÁP ÁN là hình ảnh: Hãy trích xuất chúng vào trường "image" của từng option.
+    - BẮT BUỘC: Nếu đề bài gốc có hình ảnh, phải giữ lại thông tin hình ảnh đó trong trường "image" (Mô tả chi tiết hoặc SVG).
     - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý bỏ bớt hay thêm vào.`;
 
     try {

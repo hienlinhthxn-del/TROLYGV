@@ -78,7 +78,8 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
         Yêu cầu:
         1. So sánh "studentAnswer" với "correctAnswer".
         2. feedback: Nhận xét ngắn gọn, cụ thể, khích lệ (Tiếng Việt).
-        Trả về JSON: { "results": [{ "id": "...", "isCorrect": boolean, "feedback": "..." }] }`;
+        QUAN TRỌNG: Chỉ trả về JSON hợp lệ, không kèm lời dẫn hay markdown.
+        Format: { "results": [{ "id": "...", "isCorrect": boolean, "feedback": "..." }] }`;
 
         const response = await geminiService.generateText(prompt);
         const parsed = geminiService.parseJSONSafely(response);
