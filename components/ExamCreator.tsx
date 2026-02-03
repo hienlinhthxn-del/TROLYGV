@@ -212,11 +212,27 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         throw new Error("AI không trả về đúng định dạng câu hỏi.");
       }
 
-      const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => ({
-        id: 'gen-' + Date.now().toString() + i,
-        ...q,
-        options: q.type === 'Trắc nghiệm' ? (Array.isArray(q.options) ? q.options : []) : undefined
-      }));
+      const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => {
+        const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
+          ? q.options.map((opt: any) => {
+            if (typeof opt === 'string') {
+              return { text: opt, image: '' };
+            }
+            return { text: opt.text || '', image: opt.image || '' };
+          })
+          : undefined;
+
+        return {
+          id: 'gen-' + Date.now().toString() + i,
+          type: q.type || 'Trắc nghiệm',
+          level: q.level || 'Thông hiểu',
+          content: q.content || q.question || '',
+          image: q.image || '',
+          options: normalizedOptions,
+          answer: q.answer || '',
+          explanation: q.explanation || '',
+        };
+      });
       setQuestions(formatted);
       setReadingPassage(result.readingPassage || '');
       if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${stats.total * 3} phút`);
@@ -294,11 +310,29 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         throw new Error("AI không tìm thấy câu hỏi nào.");
       }
 
-      const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => ({
-        id: 'imp-' + Date.now().toString() + i,
-        ...q,
-        options: q.type === 'Trắc nghiệm' ? q.options : undefined
-      }));
+      const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => {
+        // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
+        const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
+          ? q.options.map((opt: any) => {
+            if (typeof opt === 'string') {
+              return { text: opt, image: '' }; // Chuyển đổi chuỗi thành object
+            }
+            // Đảm bảo object luôn có cả text và image
+            return { text: opt.text || '', image: opt.image || '' };
+          })
+          : undefined;
+
+        return {
+          id: 'imp-' + Date.now().toString() + i,
+          type: q.type || 'Trắc nghiệm',
+          level: q.level || 'Thông hiểu',
+          content: q.content || q.question || '',
+          image: q.image || '',
+          options: normalizedOptions,
+          answer: q.answer || '',
+          explanation: q.explanation || '',
+        };
+      });
 
       setQuestions(prev => [...prev, ...formatted]);
       if (result.readingPassage) setReadingPassage(result.readingPassage);

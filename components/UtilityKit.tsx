@@ -583,12 +583,34 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
     try {
       const quizContent = await geminiService.generateQuiz(topic, quizCount, additionalPrompt);
-      if (Array.isArray(quizContent)) {
-        setResult(quizContent);
-      } else if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
-        setResult(quizContent.questions);
+
+      let rawQuestions = [];
+      if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
+        rawQuestions = quizContent.questions;
+      } else if (Array.isArray(quizContent)) {
+        rawQuestions = quizContent;
+      }
+
+      if (rawQuestions.length > 0) {
+        const formattedQuestions = rawQuestions.map((q: any, i: number) => {
+          const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
+            ? q.options.map((opt: any) => {
+              if (typeof opt === 'string') return { text: opt, image: '' };
+              return { text: opt.text || '', image: opt.image || '' };
+            }) : [];
+          return {
+            id: q.id || `quiz-topic-${Date.now()}-${i}`,
+            type: q.type || 'Trắc nghiệm',
+            question: q.content || q.question || '',
+            image: q.image || '',
+            options: normalizedOptions,
+            answer: q.answer || '',
+            explanation: q.explanation || '',
+          };
+        });
+        setResult(formattedQuestions);
       } else {
-        setResult(quizContent);
+        throw new Error("AI không tạo được câu hỏi hoặc định dạng trả về không đúng.");
       }
     } catch (error: any) {
       alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
@@ -714,10 +736,38 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       // Sử dụng hàm đã được tối ưu trong geminiService
       const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
 
-      if (json && json.questions) {
-        setResult(json.questions);
+      let rawQuestions = [];
+      if (json && json.questions && Array.isArray(json.questions)) {
+        rawQuestions = json.questions;
+      } else if (Array.isArray(json)) {
+        rawQuestions = json; // AI có thể trả về một mảng câu hỏi trực tiếp
+      }
+
+      if (rawQuestions.length > 0) {
+        const formattedQuestions = rawQuestions.map((q: any, i: number) => {
+          // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
+          const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
+            ? q.options.map((opt: any) => {
+              if (typeof opt === 'string') {
+                return { text: opt, image: '' }; // Chuyển đổi chuỗi thành object
+              }
+              return { text: opt.text || '', image: opt.image || '' };
+            })
+            : []; // QuizPlayer luôn cần một mảng
+
+          return {
+            id: q.id || `quiz-${Date.now()}-${i}`,
+            type: q.type || 'Trắc nghiệm',
+            question: q.content || q.question || '', // QuizPlayer dùng 'question'
+            image: q.image || '',
+            options: normalizedOptions,
+            answer: q.answer || '',
+            explanation: q.explanation || '',
+          };
+        });
+        setResult(formattedQuestions);
       } else {
-        setResult(json);
+        throw new Error("AI không trích xuất được câu hỏi nào hoặc định dạng trả về không đúng.");
       }
     } catch (error: any) {
       console.error("Quiz Upload Error:", error);
