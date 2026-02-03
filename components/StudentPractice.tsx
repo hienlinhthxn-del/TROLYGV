@@ -182,9 +182,18 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
   const renderQuestionImage = (imageSrc?: string) => {
     if (!imageSrc) return null;
-    if (imageSrc.startsWith('<svg')) {
+    const trimmedSrc = imageSrc.trim();
+    if (trimmedSrc.startsWith('<svg')) {
       return (
-        <div className="my-6 p-6 bg-white rounded-[32px] border border-slate-100 flex justify-center shadow-inner" dangerouslySetInnerHTML={{ __html: imageSrc }} />
+        <div className="my-6 p-6 bg-white rounded-[32px] border border-slate-100 flex justify-center shadow-inner" dangerouslySetInnerHTML={{ __html: trimmedSrc }} />
+      );
+    }
+    // Hỗ trợ hiển thị ảnh từ URL hoặc Base64 (ảnh tải lên)
+    if (/^(http|https|data:image)/i.test(trimmedSrc)) {
+      return (
+        <div className="my-6 flex justify-center">
+          <img src={trimmedSrc} alt="Minh họa" className="max-h-64 rounded-2xl border border-slate-200 shadow-sm object-contain" />
+        </div>
       );
     }
     return (

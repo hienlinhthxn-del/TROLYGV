@@ -209,12 +209,12 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
                   <div className="mt-3">
                     {optImg.trim().startsWith('<svg') ? (
                       <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
-                    ) : (
+                    ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
                       <img src={optImg} alt="Option placeholder" className="h-20 object-contain rounded-lg" onError={(e) => {
                         // Fallback nếu không phải URL/base64
                         e.currentTarget.style.display = 'none';
                       }} />
-                    )}
+                    ) : null}
                     {/* Hiển thị mô tả nếu không phải SVG hay Image */}
                     {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg) && (
                       <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
