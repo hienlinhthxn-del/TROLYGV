@@ -379,7 +379,6 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
   const [showCropper, setShowCropper] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1366,8 +1365,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
           className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
-          <i className="fas fa-scissors"></i>
-          <span>Cắt PDF</span>
+          <i className="fas fa-toolbox"></i>
+          <span>Công cụ PDF</span>
         </button>
       </div>
 
@@ -1778,7 +1777,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               )}
             </div>
 
-            {!showHistory && activeTab !== 'pdf_tools' && (
+            {!showHistory && (
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                 disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
