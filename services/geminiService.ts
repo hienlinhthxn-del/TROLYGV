@@ -135,7 +135,7 @@ export class GeminiService {
       } catch (e) { console.warn("Anthropic Fallback Error:", e); }
     }
 
-    throw new Error("Hết lượt dùng Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude). Thầy Cô vui lòng đợi 1-2 phút hoặc nhập Key cá nhân.");
+    throw new Error("Đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\nThầy/Cô vui lòng:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' để sử dụng không giới hạn.");
   }
 
   // --- TRÒ CHUYỆN (Chat & Streaming) ---
@@ -765,7 +765,7 @@ export class GeminiService {
 
         // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
         if (nextIdx === 0 && currentIdx !== -1) {
-          throw new Error("AI không thể xử lý được file này, ngay cả khi đã chia nhỏ. Nguyên nhân có thể do:\n1. File PDF chứa định dạng phức tạp hoặc ảnh chất lượng quá cao.\n2. Lỗi tạm thời từ máy chủ của Google.\n\nGiải pháp:\n- Thử lại sau vài phút.\n- Chụp ảnh màn hình (screenshot) các câu hỏi và tải lên dưới dạng file ảnh (PNG/JPG) thay vì PDF.");
+          throw new Error("Tất cả các model AI của Google đều đang bận hoặc đã hết lượt sử dụng. Hệ thống sẽ thử chuyển sang nhà cung cấp dự phòng (nếu có).");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
