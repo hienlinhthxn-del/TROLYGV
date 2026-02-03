@@ -10,7 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.5-pro'];
+const MODELS = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -412,55 +412,66 @@ export class GeminiService {
   public async generateImage(prompt: string): Promise<string> {
     // Sử dụng Pollinations.ai (đã ổn định hơn) hoặc dịch vụ tương đương
     const enhancedPrompt = `${prompt}, simple cute drawing for kids, educational illustration, high quality, white background`;
-    const seed = Math.floor(Math.random() * 1000000);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
 
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Máy chủ tạo ảnh báo lỗi: ${response.status} ${response.statusText}`);
+    // Thử lại tối đa 3 lần nếu lỗi kết nối
+    for (let i = 0; i < 3; i++) {
+      const seed = Math.floor(Math.random() * 1000000);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
+
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const blob = await response.blob();
+          if (blob.type.startsWith('image/')) {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(`Lỗi tạo ảnh lần ${i + 1}:`, error);
+        if (i === 2) {
+          throw new Error("Dịch vụ tạo ảnh đang gặp sự cố hoặc quá tải. Thầy Cô vui lòng thử lại sau ít phút.");
+        }
+        await new Promise(r => setTimeout(r, 1500)); // Đợi một chút trước khi thử lại
       }
-      const blob = await response.blob();
-      if (!blob.type.startsWith('image/')) {
-        throw new Error('Dịch vụ không trả về hình ảnh hợp lệ.');
-      }
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error("Lỗi khi fetch ảnh AI:", error);
-      throw new Error("Dịch vụ tạo ảnh đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
     }
+    throw new Error("Không thể tạo ảnh lúc này.");
   }
 
   public async generateVideo(prompt: string): Promise<string> {
     // Sử dụng Pollinations.ai cho ảnh video
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
-    const seed = Math.floor(Math.random() * 1000000);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
 
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Máy chủ tạo ảnh video báo lỗi: ${response.status} ${response.statusText}`);
+    for (let i = 0; i < 3; i++) {
+      const seed = Math.floor(Math.random() * 1000000);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
+
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const blob = await response.blob();
+          if (blob.type.startsWith('image/')) {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(`Lỗi tạo video lần ${i + 1}:`, error);
+        if (i === 2) {
+          throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
+        }
+        await new Promise(r => setTimeout(r, 1500));
       }
-      const blob = await response.blob();
-      if (!blob.type.startsWith('image/')) {
-        throw new Error('Dịch vụ không trả về hình ảnh hợp lệ cho video.');
-      }
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error("Lỗi khi fetch ảnh video AI:", error);
-      throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
     }
+    throw new Error("Không thể tạo video lúc này.");
   }
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
     if (history.length === 0) return [];
@@ -721,15 +732,15 @@ export class GeminiService {
       msg.includes("500")
     ) {
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = this.retryAttempt === 0 ? 5000 : 10000; // Tăng thời gian chờ cơ bản (5s -> 10s)
+      let waitMs = this.retryAttempt === 0 ? 2000 : 5000; // Giảm thời gian chờ để chuyển model nhanh hơn
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Thêm buffer 2s an toàn
       }
 
-      // Nếu Google bảo chờ quá lâu (> 20s), hoặc đã thử lại 2 lần bận liên tiếp (Giảm từ 5 xuống 2 để đổi model nhanh hơn)
-      // thì đổi model luôn cho nhanh, không bắt người dùng chờ vô ích
-      if (waitMs > 20000 || this.retryAttempt >= 2) {
+      // Nếu Google bảo chờ quá lâu (> 8s), hoặc đã thử lại 1 lần bận liên tiếp
+      // thì đổi model luôn cho nhanh
+      if (waitMs > 8000 || this.retryAttempt >= 1) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
