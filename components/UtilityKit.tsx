@@ -1238,51 +1238,71 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleSplitPdf = async () => {
     if (!pdfToolFile) return;
-    setIsConverting(true); // Bắt đầu xử lý
+    setIsConverting(true);
 
     try {
+      // PHƯƠNG PHÁP MỚI: Render lại từng trang để đảm bảo nội dung không bị mất
+      // @ts-ignore
+      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+      // @ts-ignore
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
       // @ts-ignore
       const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
+      // Load PDF bằng pdf.js để render
       const arrayBuffer = await pdfToolFile.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true }); // Thêm tùy chọn bỏ qua lỗi mã hóa
+      const pdfToRender = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+      // Tạo file PDF mới bằng pdf-lib
       const newPdf = await PDFDocument.create();
 
       const start = Math.max(1, splitRange.start);
-      const end = Math.min(pdfDoc.getPageCount(), splitRange.end);
+      const end = Math.min(pdfToRender.numPages, splitRange.end);
 
       if (start > end) {
         throw new Error("Phạm vi trang được chọn không hợp lệ (Trang bắt đầu lớn hơn trang kết thúc).");
       }
 
-      const pageIndices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
+      for (let i = start; i <= end; i++) {
+        const page = await pdfToRender.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 }); // Scale 1.5 cho chất lượng tốt
 
-      const pages = await newPdf.copyPages(pdfDoc, pageIndices);
-      pages.forEach(page => newPdf.addPage(page));
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
 
-      const pdfBytes = await newPdf.save();
+        await page.render({ canvasContext: context!, viewport: viewport }).promise;
 
-      // Nếu file tạo ra bị trống, tự động đề xuất phương án thay thế
-      if (pdfBytes.length < 1000) { // Tăng ngưỡng kiểm tra file trống
-        if (window.confirm("⚠️ Không thể cắt file PDF này trực tiếp (do định dạng phức tạp).\n\nBạn có muốn thử chuyển các trang đã chọn thành file ảnh không? Đây là phương án thay thế hiệu quả.")) {
-          await handlePdfToImages(); // Tự động chuyển sang chức năng Chuyển thành Ảnh
-        }
-        // Dừng lại ở đây, không tải file PDF trống
-        return;
+        // Chuyển canvas thành ảnh và nhúng vào PDF mới
+        const pngDataUrl = canvas.toDataURL('image/png');
+        const pngImage = await newPdf.embedPng(pngDataUrl);
+
+        const newPage = newPdf.addPage([viewport.width, viewport.height]);
+        newPage.drawImage(pngImage, { x: 0, y: 0, width: viewport.width, height: viewport.height });
       }
 
+      if (newPdf.getPageCount() === 0) {
+        throw new Error("Không thể tạo file PDF mới. File gốc có thể bị lỗi.");
+      }
+
+      const pdfBytes = await newPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `Cat_Trang_${start}-${end}_${pdfToolFile.name}`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
       alert("✅ Đã cắt và tải xuống file PDF thành công!");
     } catch (error: any) {
-      console.error("PDF Split Error:", error);
-      alert("Lỗi khi cắt file PDF: " + error.message);
+      console.error("PDF Split Error (Render Method):", error);
+      if (window.confirm(`Lỗi khi cắt file PDF: ${error.message}\n\nĐây là lỗi phức tạp. Thầy/Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh (ZIP) không?`)) {
+        await handlePdfToImages();
+      }
     } finally {
-      setIsConverting(false); // Kết thúc xử lý
+      setIsConverting(false);
     }
   };
 
