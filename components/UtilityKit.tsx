@@ -583,7 +583,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
     try {
       const quizContent = await geminiService.generateQuiz(topic, quizCount, additionalPrompt);
-      setResult(quizContent);
+      if (Array.isArray(quizContent)) {
+        setResult(quizContent);
+      } else if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
+        setResult(quizContent.questions);
+      } else {
+        setResult(quizContent);
+      }
     } catch (error: any) {
       alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
     } finally {
