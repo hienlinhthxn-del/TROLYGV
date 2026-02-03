@@ -1238,14 +1238,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleSplitPdf = async () => {
     if (!pdfToolFile) return;
-    setIsConverting(true);
+    setIsConverting(true); // Bắt đầu xử lý
 
     try {
       // @ts-ignore
       const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
       const arrayBuffer = await pdfToolFile.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true }); // Thêm tùy chọn bỏ qua lỗi mã hóa
       const newPdf = await PDFDocument.create();
 
       const start = Math.max(1, splitRange.start);
@@ -1262,8 +1262,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       const pdfBytes = await newPdf.save();
 
-      if (pdfBytes.length < 100) { // Heuristic check for empty PDF
-        throw new Error("Kết quả tạo ra là một file PDF trống. File gốc có thể có định dạng phức tạp không được hỗ trợ. Vui lòng thử công cụ 'Chuyển thành Ảnh'.");
+      // Nếu file tạo ra bị trống, tự động đề xuất phương án thay thế
+      if (pdfBytes.length < 1000) { // Tăng ngưỡng kiểm tra file trống
+        if (window.confirm("⚠️ Không thể cắt file PDF này trực tiếp (do định dạng phức tạp).\n\nBạn có muốn thử chuyển các trang đã chọn thành file ảnh không? Đây là phương án thay thế hiệu quả.")) {
+          await handlePdfToImages(); // Tự động chuyển sang chức năng Chuyển thành Ảnh
+        }
+        // Dừng lại ở đây, không tải file PDF trống
+        return;
       }
 
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -1277,7 +1282,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       console.error("PDF Split Error:", error);
       alert("Lỗi khi cắt file PDF: " + error.message);
     } finally {
-      setIsConverting(false);
+      setIsConverting(false); // Kết thúc xử lý
     }
   };
 
