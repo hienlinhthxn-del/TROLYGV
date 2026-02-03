@@ -603,6 +603,14 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const handleShareLink = async (viewMode: 'link' | 'code' = 'link') => {
     if (questions.length === 0) return;
 
+    // Kiểm tra xem có ảnh lớn không (Base64 hoặc SVG dài)
+    const hasLargeImages = questions.some(q => q.image && (q.image.length > 500 || q.image.startsWith('data:image')));
+
+    if (viewMode === 'link' && hasLargeImages) {
+      const confirmMsg = `⚠️ CẢNH BÁO: Đề thi có chứa HÌNH ẢNH.\n\nDo giới hạn kỹ thuật của trình duyệt, "Link chia sẻ" KHÔNG THỂ chứa hình ảnh trực tiếp (Link sẽ quá dài và bị lỗi).\n\n✅ GIẢI PHÁP:\n1. Hãy chọn "Copy Mã Đề" (Nút bên cạnh) -> Gửi mã đó cho học sinh.\n2. Hoặc chấp nhận chia sẻ Link nhưng HÌNH ẢNH SẼ BỊ LƯỢC BỎ.\n\nBạn có muốn tiếp tục tạo Link (không ảnh) không?`;
+      if (!window.confirm(confirmMsg)) return;
+    }
+
     try {
       // 1. Tối ưu hóa dữ liệu (Minify)
       const prepareData = (isCompact: boolean) => {
@@ -618,7 +626,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             if (isCompact) {
               // Rút gọn mạnh nếu link quá dài
               explanation = explanation.length > 50 ? explanation.substring(0, 47) + '...' : explanation;
-              image = (image.length > 50 || image.startsWith('<svg')) ? '' : image;
+              image = (image.length > 200 || image.startsWith('<svg') || image.startsWith('data:image')) ? '' : image;
             }
 
             const item: any[] = [
@@ -700,35 +708,37 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         }
       };
 
-      let currentData = prepareData(false);
+      // Nếu chọn Link và có ảnh lớn -> Bắt buộc dùng compact mode (bỏ ảnh) để link hoạt động
+      // Nếu chọn Code -> Luôn dùng full mode
+      let currentData = prepareData(viewMode === 'link' && hasLargeImages);
 
       // Thử nén trước, nếu không hỗ trợ thì dùng cách cũ
       let finalCode = await compressData(currentData) || encodeData(currentData);
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
       // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
-      if (viewMode === 'link' && url.length > 1800) {
+      if (viewMode === 'link' && url.length > 2000 && !hasLargeImages) {
         console.warn(`Link quá dài (${url.length} ký tự), đang thử nén dữ liệu...`);
         currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
         finalCode = await compressData(currentData) || encodeData(currentData);
         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
-
-        if (url.length > 2000) {
-          const confirmMsg = `⚠️ ĐỀ THI QUÁ LỚN (${questions.length} câu)\n\nLink hiện tại dài ${url.length} ký tự, có thể bị lỗi (cụt link) khi gửi qua Zalo/Facebook.\n\n✅ KHUYẾN NGHỊ: Chọn "Copy Mã Đề" để gửi cho học sinh sẽ ổn định hơn.\n\nBạn vẫn muốn thử Copy Link?`;
-          if (!window.confirm(confirmMsg)) return;
-        }
       }
 
       if (viewMode === 'code') {
         // Chế độ copy mã đề: luôn dùng bản đầy đủ
         const fullBase64 = await compressData(prepareData(false)) || encodeData(prepareData(false));
         await navigator.clipboard.writeText(fullBase64);
-        alert(`📋 Đã sao chép MÃ ĐỀ THI.\n\nHướng dẫn: Gửi mã này cho học sinh. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
+        alert(`📋 Đã sao chép MÃ ĐỀ THI (Bao gồm cả hình ảnh).\n\n👉 Hướng dẫn: Gửi mã này cho học sinh qua Zalo/Mess. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
+        return;
+      }
+
+      if (url.length > 8000) {
+        alert("❌ Đề thi quá dài để tạo Link (ngay cả khi đã rút gọn). Vui lòng dùng tính năng 'Copy Mã Đề'.");
         return;
       }
 
       await navigator.clipboard.writeText(url);
-      alert(`🚀 Link đã được sao chép!\n\n${url.length > 1500 ? '⚠️ Lưu ý: Đề khá dài, nếu học sinh không mở được link, hãy dùng chức năng "Copy Mã Đề" nhé!' : 'Gửi ngay cho học sinh để bắt đầu luyện tập.'}`);
+      alert(`🚀 Link đã được sao chép!\n\n${hasLargeImages ? '⚠️ Lưu ý: Link này KHÔNG chứa hình ảnh (do giới hạn độ dài).' : ''}\n\nGửi ngay cho học sinh để bắt đầu luyện tập.`);
 
     } catch (e: any) {
       console.error("Link generation error:", e);

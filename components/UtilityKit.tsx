@@ -912,6 +912,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
 
+    // Kiểm tra ảnh lớn
+    const hasLargeImages = result.some((q: any) => q.image && (q.image.length > 500 || q.image.startsWith('data:image')));
+    if (hasLargeImages) {
+      if (!window.confirm("⚠️ Quiz này có chứa hình ảnh lớn. Link chia sẻ sẽ KHÔNG bao gồm hình ảnh để đảm bảo hoạt động. Bạn có muốn tiếp tục?")) return;
+    }
+
     try {
       const quizData = {
         s: subject,
@@ -922,7 +928,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           q.options,
           q.answer,
           q.explanation,
-          q.image || '' // Image
+          hasLargeImages ? '' : (q.image || '') // Bỏ ảnh nếu quá lớn
         ]))
       };
 
