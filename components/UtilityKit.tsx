@@ -748,6 +748,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
 
       // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
+      const base64ToUint8Array = (data: string) => {
+        const binary = atob(data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      };
+
       const convertPdfToImages = async (base64: string): Promise<any[]> => {
         try {
           // @ts-ignore
@@ -755,7 +764,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           // @ts-ignore
           pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
 
-          const loadingTask = pdfjsLib.getDocument({ data: atob(base64) });
+          const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
           const images: any[] = [];
 
@@ -763,8 +772,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const maxPages = Math.min(pdf.numPages, 5);
           // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
           // Nếu file có nhiều trang, giảm chất lượng và kích thước để tránh lỗi "payload too large"
-          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
-          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
+          const scale = 2.0; // Luôn dùng scale cao để ảnh rõ nét
+          const quality = 0.9;
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
@@ -815,12 +824,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       "${additionalPrompt}"
       (Hãy ưu tiên thực hiện yêu cầu này khi xử lý nội dung)` : ''}
 
-      Đặc biệt lưu ý đây là dạng đề thi kiểu ViOlympic Toán hoặc Trạng Nguyên Tiếng Việt:
-      - Rất nhiều câu hỏi dựa trên quy luật hình ảnh, dãy số trong hình, hoặc điền từ vào hình.
-      - Hãy mô tả kỹ các quy luật này trong nội dung câu hỏi để học sinh có thể hiểu được mà không cần nhìn ảnh gốc (nếu ảnh gốc quá phức tạp).
-      - Nếu đáp án là hình ảnh, hãy mô tả chúng trong trường image của options.
-      - BẮT BUỘC: Nếu câu hỏi có hình ảnh, phải điền mô tả hoặc SVG vào trường "image".
-      - Cố gắng trích xuất đủ số lượng câu hỏi có trong đề (thường là 20-30 câu).
+      YÊU CẦU ĐẶC BIỆT VỀ HÌNH ẢNH (BẮT BUỘC):
+      - Rất nhiều câu hỏi trong file này có hình ảnh minh họa hoặc quy luật hình ảnh.
+      - Bạn PHẢI trích xuất nội dung hình ảnh đó vào trường "image".
+      - Nếu là hình học đơn giản: Hãy trả về mã SVG (chỉ thẻ <svg>...</svg>).
+      - Nếu là hình ảnh phức tạp hoặc tranh vẽ: Hãy mô tả chi tiết bằng lời trong ngoặc vuông, ví dụ: "[HÌNH ẢNH: Một chiếc cân đĩa, bên trái có 2 quả táo, bên phải có 1 quả cam...]".
+      - TUYỆT ĐỐI KHÔNG ĐỂ TRỐNG trường "image" nếu câu hỏi gốc có hình.
       
       YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
       {

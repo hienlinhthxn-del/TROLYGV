@@ -272,12 +272,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     const prompt = `Bạn là chuyên gia số hóa đề thi đa phương thức. Hãy trích xuất TOÀN BỘ câu hỏi từ các tài liệu đính kèm.
     
-    YÊU CẦU QUAN TRỌNG VỀ HÌNH ẢNH & QUY LUẬT:
-    - Nếu câu hỏi có hình minh họa, đồ thị, sơ đồ, hoặc DÃY QUY LUẬT HÌNH ẢNH, hãy bóc tách và cung cấp mã SVG hoặc mô tả chi tiết: [HÌNH ẢNH: Mô tả...] trong trường "image".
-    - Với các câu hỏi Quy luật: Hãy mô tả rõ các thành phần của quy luật.
-    - Nếu các ĐÁP ÁN là hình ảnh: Hãy trích xuất chúng vào trường "image" của từng option.
-    - BẮT BUỘC: Nếu đề bài gốc có hình ảnh, phải giữ lại thông tin hình ảnh đó trong trường "image" (Mô tả chi tiết hoặc SVG).
-    - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý bỏ bớt hay thêm vào.
+    YÊU CẦU ĐẶC BIỆT VỀ HÌNH ẢNH (BẮT BUỘC):
+    - Rất nhiều câu hỏi trong file này có hình ảnh minh họa hoặc quy luật hình ảnh.
+    - Bạn PHẢI trích xuất nội dung hình ảnh đó vào trường "image".
+    - Nếu là hình học đơn giản: Hãy trả về mã SVG (chỉ thẻ <svg>...</svg>).
+    - Nếu là hình ảnh phức tạp hoặc tranh vẽ: Hãy mô tả chi tiết bằng lời trong ngoặc vuông, ví dụ: "[HÌNH ẢNH: Một chiếc cân đĩa, bên trái có 2 quả táo, bên phải có 1 quả cam...]".
+    - TUYỆT ĐỐI KHÔNG ĐỂ TRỐNG trường "image" nếu câu hỏi gốc có hình.
+    
+    YÊU CẦU VỀ QUY LUẬT:
+    - Với các câu hỏi tìm quy luật dãy số/hình: Hãy mô tả rõ quy luật đó trong nội dung câu hỏi hoặc trường "explanation".
+    - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu.
     
     YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
       {
@@ -318,8 +322,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           const pdf = await loadingTask.promise;
           const images: any[] = [];
           const maxPages = Math.min(pdf.numPages, 5);
-          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
-          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
+          const scale = 2.0; // Luôn dùng scale cao để ảnh rõ nét
+          const quality = 0.9;
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
