@@ -768,8 +768,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const pdf = await loadingTask.promise;
           const images: any[] = [];
 
-          // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
-          const maxPages = Math.min(pdf.numPages, 5);
+          // Giới hạn xử lý 10 trang đầu để tăng khả năng giữ đủ hình ảnh
+          const maxPages = Math.min(pdf.numPages, 10);
           // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
           // Nếu file có nhiều trang, giảm chất lượng và kích thước để tránh lỗi "payload too large"
           const scale = pdf.numPages > 2 ? 1.5 : 2.0;
