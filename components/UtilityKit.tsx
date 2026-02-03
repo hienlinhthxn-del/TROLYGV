@@ -1238,24 +1238,47 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleSplitPdf = async () => {
     if (!pdfToolFile) return;
+    setIsConverting(true);
 
-    // @ts-ignore
-    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+    try {
+      // @ts-ignore
+      const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
-    const arrayBuffer = await pdfToolFile.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
-    const newPdf = await PDFDocument.create();
+      const arrayBuffer = await pdfToolFile.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const newPdf = await PDFDocument.create();
 
-    const pageIndices = Array.from({ length: splitRange.end - splitRange.start + 1 }, (_, i) => splitRange.start - 1 + i);
-    const pages = await newPdf.copyPages(pdfDoc, pageIndices);
-    pages.forEach(page => newPdf.addPage(page));
+      const start = Math.max(1, splitRange.start);
+      const end = Math.min(pdfDoc.getPageCount(), splitRange.end);
 
-    const pdfBytes = await newPdf.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Cat_Trang_${splitRange.start}-${splitRange.end}_${pdfToolFile.name}`;
-    link.click();
+      if (start > end) {
+        throw new Error("Phạm vi trang được chọn không hợp lệ (Trang bắt đầu lớn hơn trang kết thúc).");
+      }
+
+      const pageIndices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
+
+      const pages = await newPdf.copyPages(pdfDoc, pageIndices);
+      pages.forEach(page => newPdf.addPage(page));
+
+      const pdfBytes = await newPdf.save();
+
+      if (pdfBytes.length < 100) { // Heuristic check for empty PDF
+        throw new Error("Kết quả tạo ra là một file PDF trống. File gốc có thể có định dạng phức tạp không được hỗ trợ. Vui lòng thử công cụ 'Chuyển thành Ảnh'.");
+      }
+
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Cat_Trang_${start}-${end}_${pdfToolFile.name}`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      alert("✅ Đã cắt và tải xuống file PDF thành công!");
+    } catch (error: any) {
+      console.error("PDF Split Error:", error);
+      alert("Lỗi khi cắt file PDF: " + error.message);
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   const handlePdfToImages = async () => {
@@ -1627,11 +1650,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                               </div>
                             </div>
                             <div className="flex gap-2 pt-2">
-                              <button onClick={handleSplitPdf} className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all">
-                                <i className="fas fa-scissors mr-2"></i>Cắt PDF
+                              <button onClick={handleSplitPdf} disabled={isConverting} className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all disabled:opacity-50">
+                                {isConverting ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-scissors mr-2"></i>}
+                                {isConverting ? 'Đang xử lý...' : 'Cắt PDF'}
                               </button>
-                              <button onClick={handlePdfToImages} disabled={isConverting} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
+                              <button onClick={handlePdfToImages} disabled={isConverting} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50">
                                 {isConverting ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-images mr-2"></i>Chuyển thành Ảnh</>}
+                                {isConverting ? 'Đang xử lý...' : 'Chuyển thành Ảnh'}
                               </button>
                             </div>
                           </div>
