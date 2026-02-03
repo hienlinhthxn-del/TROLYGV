@@ -379,6 +379,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
   const [showCropper, setShowCropper] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1258,6 +1259,56 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     link.click();
   };
 
+  const handlePdfToImages = async () => {
+    if (!pdfToolFile) return;
+    setIsConverting(true);
+
+    try {
+      // @ts-ignore
+      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+      // @ts-ignore
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+      // @ts-ignore
+      const JSZip = (await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm')).default;
+
+      const arrayBuffer = await pdfToolFile.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+      const zip = new JSZip();
+
+      const start = Math.max(1, splitRange.start);
+      const end = Math.min(pdf.numPages, splitRange.end);
+
+      for (let i = start; i <= end; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context!, viewport: viewport }).promise;
+
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          zip.file(`page_${i}.png`, blob);
+        }
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `Anh_tu_PDF_${pdfToolFile.name.replace('.pdf', '')}.zip`;
+      link.click();
+      alert("✅ Đã chuyển đổi và tải xuống file ZIP thành công!");
+
+    } catch (error: any) {
+      console.error("PDF to Image Error:", error);
+      alert("Lỗi: " + error.message);
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       {showCropper && <ImageCropper onClose={() => setShowCropper(false)} />}
@@ -1576,6 +1627,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                                 <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
                               </div>
                             </div>
+                            <div className="flex gap-2 pt-2">
+                              <button onClick={handleSplitPdf} className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all">
+                                <i className="fas fa-scissors mr-2"></i>Cắt PDF
+                              </button>
+                              <button onClick={handlePdfToImages} disabled={isConverting} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
+                                {isConverting ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-images mr-2"></i>Chuyển thành Ảnh</>}
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1719,7 +1778,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               )}
             </div>
 
-            {!showHistory && (
+            {!showHistory && activeTab !== 'pdf_tools' && (
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                 disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
