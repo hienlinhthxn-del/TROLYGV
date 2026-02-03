@@ -297,20 +297,74 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       }`;
 
     try {
-      const fileParts: FilePart[] = pendingImportFiles.map(f => ({
-        inlineData: {
-          data: f.data!,
-          mimeType: f.mimeType!
+      // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
+      const convertPdfToImages = async (base64: string): Promise<any[]> => {
+        try {
+          // @ts-ignore
+          const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+          // @ts-ignore
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+
+          const loadingTask = pdfjsLib.getDocument({ data: atob(base64) });
+          const pdf = await loadingTask.promise;
+          const images: any[] = [];
+          const maxPages = Math.min(pdf.numPages, 5);
+          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
+          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
+
+          for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: context!, viewport: viewport }).promise;
+            const imgData = canvas.toDataURL('image/jpeg', quality);
+            images.push({
+              inlineData: { data: imgData.split(',')[1], mimeType: 'image/jpeg' }
+            });
+          }
+          return images;
+        } catch (e) {
+          console.error("PDF Convert Error:", e);
+          return []; // Fallback nếu lỗi
         }
-      }));
+      };
 
-      const result = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
+      const finalFileParts: FilePart[] = [];
+      for (const f of pendingImportFiles) {
+        if (f.mimeType === 'application/pdf' && f.data) {
+          const images = await convertPdfToImages(f.data);
+          if (images.length > 0) {
+            finalFileParts.push(...images);
+          } else {
+            finalFileParts.push({ inlineData: { data: f.data, mimeType: f.mimeType! } });
+          }
+        } else if (f.data && f.mimeType) {
+          finalFileParts.push({ inlineData: { data: f.data, mimeType: f.mimeType } });
+        }
+      }
 
-      if (!result || !result.questions || result.questions.length === 0) {
+      const result = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+
+      // Xử lý linh hoạt kết quả trả về (Mảng hoặc Object)
+      let rawQuestions: any[] = [];
+      if (result && Array.isArray(result.questions)) {
+        rawQuestions = result.questions;
+      } else if (Array.isArray(result)) {
+        rawQuestions = result;
+      } else if (result && typeof result === 'object') {
+        // Tìm key nào chứa mảng dữ liệu (phòng trường hợp AI trả về key khác 'questions')
+        const key = Object.keys(result).find(k => Array.isArray(result[k]) && result[k].length > 0);
+        if (key) rawQuestions = result[key];
+      }
+
+      if (rawQuestions.length === 0) {
         throw new Error("AI không tìm thấy câu hỏi nào.");
       }
 
-      const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => {
+      const formatted: ExamQuestion[] = rawQuestions.map((q: any, i: number) => {
         // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
         const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
           ? q.options.map((opt: any) => {

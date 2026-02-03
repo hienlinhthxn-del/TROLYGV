@@ -847,6 +847,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         rawQuestions = json.questions;
       } else if (Array.isArray(json)) {
         rawQuestions = json; // AI có thể trả về một mảng câu hỏi trực tiếp
+      } else if (json && typeof json === 'object') {
+        // Fallback: tìm key nào là mảng
+        const key = Object.keys(json).find(k => Array.isArray(json[k]) && json[k].length > 0);
+        if (key) rawQuestions = json[key];
       }
 
       if (rawQuestions.length > 0) {
