@@ -465,8 +465,9 @@ export class GeminiService {
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
 
     for (let i = 0; i < 3; i++) {
+      // Thêm tham số ngẫu nhiên để tránh cache
       const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720&model=flux`;
 
       try {
         const response = await fetch(url);
@@ -480,16 +481,19 @@ export class GeminiService {
               reader.readAsDataURL(blob);
             });
           }
+        } else {
+          console.warn(`Video gen attempt ${i + 1} failed with status: ${response.status}`);
         }
       } catch (error) {
         console.warn(`Lỗi tạo video lần ${i + 1}:`, error);
         if (i === 2) {
-          throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
+          // Ném lỗi cụ thể hơn để UI xử lý
+          throw new Error("Máy chủ tạo video đang quá tải (502). Thầy/Cô vui lòng thử lại sau giây lát.");
         }
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
-    throw new Error("Không thể tạo video lúc này.");
+    throw new Error("Không thể kết nối đến dịch vụ tạo video.");
   }
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
     if (history.length === 0) return [];

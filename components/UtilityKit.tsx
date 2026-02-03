@@ -853,23 +853,29 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     setResult(null);
     setAudioUrl(null);
 
+    let optimizedPrompt = topic;
+
+    // Bước 1: Dịch (Có thể lỗi Key, nhưng không nên chặn quy trình)
     try {
-      // Dịch và tối ưu prompt sang tiếng Anh để AI video hiểu tốt hơn
       const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${videoStyle}, short animation, simple, for kids, educational.Script: "${topic}"`;
-
-      let optimizedPrompt = topic;
-      try {
-        const translation = await geminiService.generateText(translationPrompt);
-        optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
-      } catch (err) {
-        console.warn("Translation failed, using original topic", err);
-        optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+      const translation = await geminiService.generateText(translationPrompt);
+      optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
+    } catch (err: any) {
+      console.warn("Translation failed, using original topic. Error:", err);
+      // Nếu lỗi do hết Key, thông báo nhẹ nhưng vẫn tiếp tục
+      if (err.message && (err.message.includes("429") || err.message.includes("quota"))) {
+        // Không làm gì cả, silent fallback
       }
+      optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+    }
 
+    // Bước 2: Tạo video (Quan trọng)
+    try {
       const videoUrl = await geminiService.generateVideo(optimizedPrompt);
       setResult(videoUrl);
     } catch (error: any) {
-      alert(`Không thể tạo video: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      console.error("Video Gen Error:", error);
+      alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi kết nối"}. \n\nMẹo: Thầy Cô vui lòng thử lại sau 1-2 phút vì máy chủ tạo ảnh có thể đang quá tải.`);
     } finally {
       setIsProcessing(false);
     }
