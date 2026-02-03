@@ -467,7 +467,7 @@ export class GeminiService {
     for (let i = 0; i < 3; i++) {
       // Thêm tham số ngẫu nhiên để tránh cache
       const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720&model=flux`;
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
 
       try {
         const response = await fetch(url);
