@@ -10,7 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-8b'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -262,6 +262,12 @@ export class GeminiService {
       // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
@@ -333,6 +339,12 @@ export class GeminiService {
     try {
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
@@ -382,6 +394,12 @@ export class GeminiService {
     try {
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
         generationConfig: {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
