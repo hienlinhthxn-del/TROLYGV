@@ -434,7 +434,7 @@ export class GeminiService {
     // Thử lại tối đa 3 lần nếu lỗi kết nối
     for (let i = 0; i < 3; i++) {
       const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
+      const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
 
       try {
         const response = await fetch(url);
@@ -467,7 +467,7 @@ export class GeminiService {
     for (let i = 0; i < 3; i++) {
       // Thêm tham số ngẫu nhiên để tránh cache
       const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
+      const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
 
       try {
         const response = await fetch(url);
