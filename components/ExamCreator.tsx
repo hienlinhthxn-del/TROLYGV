@@ -298,6 +298,15 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     try {
       // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
+      const base64ToUint8Array = (data: string) => {
+        const binary = atob(data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      };
+
       const convertPdfToImages = async (base64: string): Promise<any[]> => {
         try {
           // @ts-ignore
@@ -305,7 +314,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           // @ts-ignore
           pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
 
-          const loadingTask = pdfjsLib.getDocument({ data: atob(base64) });
+          const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
           const images: any[] = [];
           const maxPages = Math.min(pdf.numPages, 5);
