@@ -81,8 +81,7 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
         Trả về JSON: { "results": [{ "id": "...", "isCorrect": boolean, "feedback": "..." }] }`;
 
         const response = await geminiService.generateText(prompt);
-        const cleanJson = response.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(cleanJson);
+        const parsed = geminiService.parseJSONSafely(response);
 
         const newAiResults: Record<string, { isCorrect: boolean, feedback: string }> = {};
         if (parsed.results && Array.isArray(parsed.results)) {

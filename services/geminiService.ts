@@ -222,6 +222,7 @@ export class GeminiService {
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
        - Hãy phân tích nội dung hình ảnh thật kỹ.
        - **QUAN TRỌNG:** Nếu là file ảnh/PDF scan, hãy OCR chính xác nội dung văn bản và công thức.
+       - **BẮT BUỘC:** Nếu câu hỏi gốc có hình ảnh, trường "image" trong JSON KHÔNG ĐƯỢC ĐỂ TRỐNG. Hãy điền mô tả chi tiết [HÌNH ẢNH: ...] hoặc mã SVG.
        - **ƯU TIÊN HÀNG ĐẦU:** Mô tả hình ảnh bằng văn bản một cách chi tiết và rõ ràng trong trường "image". Ví dụ: "image": "[HÌNH ẢNH: Một hình vuông bên trong có một hình tròn màu xanh]".
        - **CHỈ KHI THẬT SỰ CẦN THIẾT:** Nếu hình học quá đơn giản (ví dụ: một tam giác), bạn có thể dùng mã SVG. SVG phải trên một dòng và không chứa ký tự đặc biệt có thể làm hỏng JSON.
        - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
