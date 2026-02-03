@@ -1066,7 +1066,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `Cat_Trang_${splitRange.start} -${splitRange.end}_${pdfToolFile.name} `;
+    link.download = `Cat_Trang_${splitRange.start}-${splitRange.end}_${pdfToolFile.name}`;
     link.click();
   };
 
@@ -1179,10 +1179,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                       {pendingAttachments.map((att, idx) => (
                         <div key={idx} className="relative shrink-0 group">
                           {att.type === 'image' ? (
-                            <img src={`data:${att.mimeType}; base64, ${att.data} `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            <img src={`data:${att.mimeType};base64,${att.data}`} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text - xl mb - 1`}></i>
+                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
                               <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                             </div>
                           )}
@@ -1291,7 +1291,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
                         className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
                       >
-                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr - 1`}></i>
+                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
                       </button>
                       <button
@@ -1749,7 +1749,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text - 5xl text - slate - 300`}></i>
+                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text-5xl text-slate-300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>
