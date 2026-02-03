@@ -317,10 +317,22 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
           const images: any[] = [];
-          // Tăng giới hạn lên 10 trang để giảm nguy cơ thiếu hình ảnh
-          const maxPages = Math.min(pdf.numPages, 10);
-          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
-          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
+          // Tăng giới hạn lên 30 trang để giảm nguy cơ thiếu hình ảnh
+          const maxPages = Math.min(pdf.numPages, 30);
+          let scale = 2.0;
+          let quality = 0.9;
+          if (pdf.numPages > 2) {
+            scale = 1.5;
+            quality = 0.8;
+          }
+          if (pdf.numPages > 10) {
+            scale = 1.2;
+            quality = 0.7;
+          }
+          if (pdf.numPages > 20) {
+            scale = 1.0;
+            quality = 0.6;
+          }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);

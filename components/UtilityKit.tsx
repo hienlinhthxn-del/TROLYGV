@@ -768,12 +768,24 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const pdf = await loadingTask.promise;
           const images: any[] = [];
 
-          // Giới hạn xử lý 10 trang đầu để tăng khả năng giữ đủ hình ảnh
-          const maxPages = Math.min(pdf.numPages, 10);
+          // Giới hạn xử lý 30 trang đầu để tăng khả năng giữ đủ hình ảnh
+          const maxPages = Math.min(pdf.numPages, 30);
           // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
           // Nếu file có nhiều trang, giảm chất lượng và kích thước để tránh lỗi "payload too large"
-          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
-          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
+          let scale = 2.0;
+          let quality = 0.9;
+          if (pdf.numPages > 2) {
+            scale = 1.5;
+            quality = 0.8;
+          }
+          if (pdf.numPages > 10) {
+            scale = 1.2;
+            quality = 0.7;
+          }
+          if (pdf.numPages > 20) {
+            scale = 1.0;
+            quality = 0.6;
+          }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
