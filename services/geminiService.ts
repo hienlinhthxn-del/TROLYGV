@@ -10,7 +10,7 @@ export interface FilePart {
 
 // Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
 // Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.5-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -410,10 +410,10 @@ export class GeminiService {
   }
 
   public async generateImage(prompt: string): Promise<string> {
-    // Pollinations.ai thường không ổn định và có thể gây lỗi 502 (Bad Gateway).
-    // Chuyển sang một dịch vụ thay thế (dựa trên Stable Diffusion qua Cloudflare Worker) để tăng độ tin cậy.
+    // Sử dụng Pollinations.ai (đã ổn định hơn) hoặc dịch vụ tương đương
     const enhancedPrompt = `${prompt}, simple cute drawing for kids, educational illustration, high quality, white background`;
-    const url = `https://image.gen.workers.dev/?prompt=${encodeURIComponent(enhancedPrompt)}`;
+    const seed = Math.floor(Math.random() * 1000000);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
 
     try {
       const response = await fetch(url);
@@ -432,19 +432,15 @@ export class GeminiService {
       });
     } catch (error) {
       console.error("Lỗi khi fetch ảnh AI:", error);
-      if (error instanceof Error && (error.message.includes('502') || error.message.includes('Failed to fetch'))) {
-        throw new Error("Dịch vụ tạo ảnh đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
-      }
-      throw error;
+      throw new Error("Dịch vụ tạo ảnh đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
     }
   }
 
   public async generateVideo(prompt: string): Promise<string> {
-    // Pollinations.ai thường không ổn định và có thể gây lỗi 502 (Bad Gateway).
-    // Chuyển sang một dịch vụ thay thế (dựa trên Stable Diffusion qua Cloudflare Worker) để tăng độ tin cậy.
-    // Dịch vụ này chỉ tạo ảnh tĩnh, hiệu ứng video được thực hiện bằng CSS.
+    // Sử dụng Pollinations.ai cho ảnh video
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
-    const url = `https://image.gen.workers.dev/?prompt=${encodeURIComponent(enhancedPrompt)}`;
+    const seed = Math.floor(Math.random() * 1000000);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
 
     try {
       const response = await fetch(url);
@@ -463,10 +459,7 @@ export class GeminiService {
       });
     } catch (error) {
       console.error("Lỗi khi fetch ảnh video AI:", error);
-      if (error instanceof Error && (error.message.includes('502') || error.message.includes('Failed to fetch'))) {
-        throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
-      }
-      throw error;
+      throw new Error("Dịch vụ tạo ảnh cho video đang gặp sự cố. Thầy Cô vui lòng thử lại sau ít phút.");
     }
   }
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
