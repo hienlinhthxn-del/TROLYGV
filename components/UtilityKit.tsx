@@ -154,7 +154,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
             <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
           ) : (
             // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
-            /^(http|https|data:image)/i.test(displayImage) ? (
+            /^(http|https|data:image)/i.test(displayImage.trim()) ? (
               <div className="flex justify-center mb-6">
                 <img src={displayImage} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
               </div>
@@ -242,6 +242,107 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
   );
 };
 
+// Component Cắt ảnh đơn giản
+const ImageCropper: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [src, setSrc] = useState<string | null>(null);
+  const [croppedImage, setCroppedImage] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [start, setStart] = useState({ x: 0, y: 0 });
+  const imgRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setSrc(ev.target?.result as string);
+      reader.readAsDataURL(e.target.files[0]);
+      setSelection(null);
+      setCroppedImage(null);
+    }
+  };
+
+  const getCoords = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!containerRef.current) return { x: 0, y: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!src) return;
+    setIsDragging(true);
+    const coords = getCoords(e);
+    setStart(coords);
+    setSelection({ x: coords.x, y: coords.y, w: 0, h: 0 });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDragging || !src) return;
+    e.preventDefault();
+    const coords = getCoords(e);
+    const w = coords.x - start.x;
+    const h = coords.y - start.y;
+    setSelection({ x: w > 0 ? start.x : coords.x, y: h > 0 ? start.y : coords.y, w: Math.abs(w), h: Math.abs(h) });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const cropImage = () => {
+    if (!imgRef.current || !selection || selection.w === 0 || selection.h === 0) return;
+    const canvas = document.createElement('canvas');
+    const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
+    const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
+    canvas.width = selection.w * scaleX;
+    canvas.height = selection.h * scaleY;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(imgRef.current, selection.x * scaleX, selection.y * scaleY, selection.w * scaleX, selection.h * scaleY, 0, 0, canvas.width, canvas.height);
+      setCroppedImage(canvas.toDataURL('image/png'));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Công cụ Cắt ảnh</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-500 flex items-center justify-center transition-all"><i className="fas fa-times"></i></button>
+        </div>
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          <div className="flex-1 bg-slate-50 p-4 flex items-center justify-center overflow-auto relative select-none" onMouseUp={handleMouseUp} onTouchEnd={handleMouseUp} onMouseLeave={handleMouseUp}>
+            {!src ? (
+              <div className="text-center">
+                <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all"><i className="fas fa-upload mr-2"></i>Tải ảnh lên</button>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+              </div>
+            ) : (
+              <div ref={containerRef} className="relative inline-block shadow-lg" onMouseDown={handleMouseDown} onTouchStart={handleMouseDown} onMouseMove={handleMouseMove} onTouchMove={handleMouseMove}>
+                <img ref={imgRef} src={src} alt="Source" className="max-h-[60vh] max-w-full object-contain pointer-events-none" />
+                {selection && <div className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" style={{ left: selection.x, top: selection.y, width: selection.w, height: selection.h, pointerEvents: 'none' }}><div className="absolute inset-0 border border-dashed border-black/50"></div></div>}
+              </div>
+            )}
+          </div>
+          <div className="w-full md:w-72 bg-white border-l border-slate-100 p-6 flex flex-col space-y-6 shrink-0">
+            {croppedImage ? (
+              <div className="space-y-4">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Kết quả</p>
+                <div className="bg-slate-100 rounded-xl p-2 border border-slate-200"><img src={croppedImage} className="w-full h-auto rounded-lg" /></div>
+                <button onClick={() => { const link = document.createElement('a'); link.download = `cropped_${Date.now()}.png`; link.href = croppedImage; link.click(); }} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all"><i className="fas fa-download mr-2"></i>Tải về</button>
+                <button onClick={() => { setCroppedImage(null); setSelection(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cắt lại</button>
+              </div>
+            ) : (
+              <div className="space-y-4"><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hướng dẫn</p><p className="text-xs text-slate-600">Kéo chuột trên ảnh để chọn vùng cần cắt.</p><button onClick={cropImage} disabled={!selection || selection.w < 5} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-all"><i className="fas fa-crop-simple mr-2"></i>Cắt ảnh</button>{src && <button onClick={() => { setSrc(null); setSelection(null); }} className="w-full py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-rose-50 transition-all">Chọn ảnh khác</button>}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibrary }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'images' | 'tts' | 'lesson_plan' | 'video' | 'assistant' | 'pdf_tools'>('games');
   const [subject, setSubject] = useState('Toán');
@@ -277,6 +378,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfToolFile, setPdfToolFile] = useState<File | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
+  const [showCropper, setShowCropper] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1139,6 +1241,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
+      {showCropper && <ImageCropper onClose={() => setShowCropper(false)} />}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
@@ -1310,6 +1413,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                         <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
                         <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
                       </div>
+                      {gameType === 'quiz' && (
+                        <button onClick={() => setShowCropper(true)} className="w-full mt-2 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center">
+                          <i className="fas fa-crop-simple mr-2"></i>Công cụ Cắt ảnh
+                        </button>
+                      )}
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex bg-slate-100 p-1 rounded-xl mb-3">

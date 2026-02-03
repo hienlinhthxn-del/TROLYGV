@@ -524,9 +524,18 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
   const renderImage = (imageSrc?: string) => {
     if (!imageSrc) return null;
-    if (imageSrc.startsWith('<svg')) {
+    const trimmedSrc = imageSrc.trim();
+    if (trimmedSrc.startsWith('<svg')) {
       return (
-        <div className="my-4 p-4 bg-white rounded-2xl border border-slate-100 flex justify-center shadow-inner" dangerouslySetInnerHTML={{ __html: imageSrc }} />
+        <div className="my-4 p-4 bg-white rounded-2xl border border-slate-100 flex justify-center shadow-inner" dangerouslySetInnerHTML={{ __html: trimmedSrc }} />
+      );
+    }
+    // Hỗ trợ hiển thị ảnh từ URL hoặc Base64
+    if (/^(http|https|data:image)/i.test(trimmedSrc)) {
+      return (
+        <div className="my-4 flex justify-center">
+          <img src={trimmedSrc} alt="Minh họa" className="max-h-64 rounded-2xl border border-slate-200 shadow-sm object-contain" />
+        </div>
       );
     }
     return (
