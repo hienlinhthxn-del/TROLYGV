@@ -761,18 +761,22 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
           const maxPages = Math.min(pdf.numPages, 5);
+          // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
+          // Nếu file có nhiều trang, giảm chất lượng và kích thước để tránh lỗi "payload too large"
+          const scale = pdf.numPages > 2 ? 1.5 : 2.0;
+          const quality = pdf.numPages > 2 ? 0.8 : 0.9;
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
             // Tăng scale lên 2.0 để ảnh rõ nét hơn cho AI nhận diện hình vẽ/chữ nhỏ
-            const viewport = page.getViewport({ scale: 2.0 });
+            const viewport = page.getViewport({ scale });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL('image/jpeg', 0.85); // Tăng chất lượng ảnh
+            const imgData = canvas.toDataURL('image/jpeg', quality);
             images.push({
               inlineData: {
                 data: imgData.split(',')[1],
@@ -875,20 +879,25 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       console.error("Quiz Upload Error:", error);
 
       const errorMessage = error.message || "Lỗi không xác định";
+      const isPayloadError = /payload|size|large/i.test(errorMessage);
 
-      // Kịch bản 1: Lỗi đặc biệt, đã có hướng dẫn cụ thể (như chụp ảnh màn hình) -> Chỉ hiển thị alert.
-      if (errorMessage.includes("chụp ảnh màn hình") || errorMessage.includes("screenshot")) {
-        alert(`⚠️ Lỗi bóc tách đề:\n\n${errorMessage}`);
+      // Kịch bản 1: Lỗi do dung lượng quá lớn
+      if (isPayloadError) {
+        if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy/Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file (thử với 1-2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay?`)) {
+          setActiveTab('pdf_tools');
+          setResult(null);
+          setPendingAttachments([]);
+        }
       }
-      // Kịch bản 2: Lỗi chung khi tải file PDF -> Gợi ý cắt file.
+      // Kịch bản 2: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf'))) {
-        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân thường do file đề thi quá dài hoặc có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để chia nhỏ file và thử lại không? (Khuyên dùng)`)) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không?`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
         }
       } else {
-        // Kịch bản 3: Lỗi chung với các loại file khác (ảnh,...)
+        // Kịch bản 3: Lỗi chung khác
         alert(`Lỗi bóc tách đề: ${errorMessage}`);
       }
     } finally {
