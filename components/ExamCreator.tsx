@@ -261,7 +261,24 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     - Với các câu hỏi Quy luật: Hãy mô tả rõ các thành phần của quy luật.
     - Nếu các ĐÁP ÁN là hình ảnh: Hãy trích xuất chúng vào trường "image" của từng option.
     - BẮT BUỘC: Nếu đề bài gốc có hình ảnh, phải giữ lại thông tin hình ảnh đó trong trường "image" (Mô tả chi tiết hoặc SVG).
-    - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý bỏ bớt hay thêm vào.`;
+    - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu. KHÔNG tự ý bỏ bớt hay thêm vào.
+    
+    YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
+      {
+        "questions": [
+          {
+            "type": "Trắc nghiệm",
+            "content": "Câu hỏi...",
+            "image": "URL hoặc SVG hoặc Mô tả",
+            "options": [
+              { "text": "Đáp án A", "image": "" },
+              { "text": "Đáp án B", "image": "" }
+            ],
+            "answer": "Đáp án đúng",
+            "explanation": "Giải thích"
+          }
+        ]
+      }`;
 
     try {
       const fileParts: FilePart[] = pendingImportFiles.map(f => ({
