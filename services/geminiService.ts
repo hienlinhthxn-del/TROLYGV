@@ -481,19 +481,22 @@ export class GeminiService {
               reader.readAsDataURL(blob);
             });
           }
-        } else {
-          console.warn(`Video gen attempt ${i + 1} failed with status: ${response.status}`);
+        }
+        // Nếu phản hồi không OK, hoặc blob không phải là ảnh, nó sẽ rơi xuống logic thử lại.
+        console.warn(`Video gen attempt ${i + 1} failed with status: ${response.status}`);
+        if (i === 2) { // Lần thử cuối cùng thất bại với lỗi từ máy chủ
+          throw new Error(`Máy chủ tạo video đang quá tải (Lỗi ${response.status}). Thầy/Cô vui lòng thử lại sau giây lát.`);
         }
       } catch (error) {
         console.warn(`Lỗi tạo video lần ${i + 1}:`, error);
-        if (i === 2) {
-          // Ném lỗi cụ thể hơn để UI xử lý
-          throw new Error("Máy chủ tạo video đang quá tải (502). Thầy/Cô vui lòng thử lại sau giây lát.");
+        if (i === 2) { // Lần thử cuối cùng thất bại do lỗi mạng
+          throw new Error("Không thể kết nối đến dịch vụ tạo video. Vui lòng kiểm tra kết nối mạng.");
         }
-        await new Promise(r => setTimeout(r, 2000));
       }
+      // Đợi một chút trước khi thử lại
+      await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error("Không thể kết nối đến dịch vụ tạo video.");
+    throw new Error("Không thể tạo video sau nhiều lần thử. Dịch vụ có thể đang bảo trì.");
   }
   public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
     if (history.length === 0) return [];

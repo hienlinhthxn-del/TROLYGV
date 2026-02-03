@@ -875,8 +875,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       setResult(videoUrl);
     } catch (error: any) {
       console.error("Video Gen Error:", error);
-      alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi kết nối"}. \n\nMẹo: Thầy Cô vui lòng thử lại sau 1-2 phút vì máy chủ tạo ảnh có thể đang quá tải.`);
-    } finally {
+      alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi k
       setIsProcessing(false);
     }
   };
