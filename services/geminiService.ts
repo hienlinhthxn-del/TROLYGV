@@ -8,9 +8,8 @@ export interface FilePart {
   }
 }
 
-// Ưu tiên các model Lite vì có Quota (hạn mức) cao hơn cho tài khoản miễn phí
-// Ưu tiên các model ổn định và có Quota cao
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-8b'];
+// Sử dụng các model Gemini mới nhất (2026)
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;

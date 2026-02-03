@@ -4,6 +4,7 @@ import { Message, TeacherPersona, GroundingSource, Classroom, CloudDocument, Att
 import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS } from './constants';
 import { geminiService, FilePart } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
+import ApiKeySettings from './components/ApiKeySettings';
 
 // Lazy loading các component lớn
 const ClassroomManager = lazy(() => import('./components/ClassroomManager'));
@@ -55,6 +56,7 @@ const App: React.FC = () => {
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [tempLink, setTempLink] = useState('');
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [classroom, setClassroom] = useState<Classroom>({
@@ -636,6 +638,7 @@ const App: React.FC = () => {
         <header className="flex items-center justify-between h-16 px-6 border-b border-slate-200 lg:border-none bg-white lg:bg-transparent z-10">
           <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><i className="fas fa-bars"></i></button>
           <div className="flex items-center space-x-3">
+            <button onClick={() => setShowApiKeySettings(true)} title="Cài đặt API Key" className="w-10 h-10 flex items-center justify-center text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"><i className="fas fa-key"></i></button>
             <button onClick={() => setView('security')} className="w-10 h-10 flex items-center justify-center text-emerald-500 hover:text-emerald-600 hover:bg-white rounded-xl transition-all"><i className="fas fa-shield-halved"></i></button>
           </div>
         </header>
@@ -715,6 +718,9 @@ const App: React.FC = () => {
           </button>
         </div>
       </main>
+
+      {/* API Key Settings Modal */}
+      <ApiKeySettings isOpen={showApiKeySettings} onClose={() => setShowApiKeySettings(false)} />
     </div>
   );
 };
