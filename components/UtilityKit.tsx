@@ -771,14 +771,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
           const maxPages = Math.min(pdf.numPages, 5);
           // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
-          // Nếu file có nhiều trang, giảm chất lượng và kích thước để tránh lỗi "payload too large"
-          const scale = 2.0; // Luôn dùng scale cao để ảnh rõ nét
-          const quality = 0.9;
+          let scale = 2.0;
+          let quality = 0.9;
+
+          // Tối ưu hóa: Nếu file nhiều trang, giảm chất lượng để tránh lỗi payload
+          if (maxPages >= 3) {
+            scale = 1.5;
+            quality = 0.8;
+          }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
-            // Tăng scale lên 2.0 để ảnh rõ nét hơn cho AI nhận diện hình vẽ/chữ nhỏ
-            const viewport = page.getViewport({ scale });
+
+            // Kiểm tra kích thước gốc, nếu trang quá lớn (>2000px) thì không phóng to thêm
+            const originalViewport = page.getViewport({ scale: 1.0 });
+            const currentScale = (originalViewport.width > 2000 || originalViewport.height > 2000) ? 1.0 : scale;
+
+            const viewport = page.getViewport({ scale: currentScale });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
@@ -903,7 +912,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         }
       }
       // Kịch bản 2: Lỗi chung khi tải file PDF (không phải do dung lượng)
-      else if (pendingAttachments.some(f => f.mimeType?.includes('pdf'))) {
+      else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
         if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không?`)) {
           setActiveTab('pdf_tools');
           setResult(null);
