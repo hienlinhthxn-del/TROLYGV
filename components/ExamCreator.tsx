@@ -295,7 +295,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               { "text": "Đáp án B", "image": "" }
             ],
             "answer": "Đáp án đúng",
-            "explanation": "Giải thích"
+            "explanation": "Giải thích",
+            "page_index": 0
           }
         ]
       }`;
@@ -311,6 +312,47 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         return bytes;
       };
 
+      const trimCanvasWhitespace = (sourceCanvas: HTMLCanvasElement) => {
+        const ctx = sourceCanvas.getContext('2d');
+        if (!ctx) return sourceCanvas;
+        const { width, height } = sourceCanvas;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const { data } = imageData;
+        let minX = width;
+        let minY = height;
+        let maxX = 0;
+        let maxY = 0;
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const idx = (y * width + x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const a = data[idx + 3];
+            // Tìm pixel không phải màu trắng (có nội dung)
+            if (a > 10 && (r < 245 || g < 245 || b < 245)) {
+              if (x < minX) minX = x;
+              if (y < minY) minY = y;
+              if (x > maxX) maxX = x;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+
+        if (minX >= maxX || minY >= maxY) return sourceCanvas;
+
+        const croppedWidth = maxX - minX + 1;
+        const croppedHeight = maxY - minY + 1;
+        const croppedCanvas = document.createElement('canvas');
+        croppedCanvas.width = croppedWidth;
+        croppedCanvas.height = croppedHeight;
+        const croppedCtx = croppedCanvas.getContext('2d');
+        if (!croppedCtx) return sourceCanvas;
+        croppedCtx.drawImage(sourceCanvas, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+        return croppedCanvas;
+      };
+
       const convertPdfToImages = async (base64: string): Promise<any[]> => {
         try {
           // @ts-ignore
@@ -321,9 +363,15 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
           const images: any[] = [];
-          const maxPages = Math.min(pdf.numPages, 5);
-          const scale = 2.0; // Luôn dùng scale cao để ảnh rõ nét
-          const quality = 0.9;
+          // Tăng giới hạn trang để xử lý được nhiều hơn
+          const maxPages = Math.min(pdf.numPages, 30);
+          let scale = 2.0;
+          let quality = 0.9;
+
+          // Tự động điều chỉnh chất lượng dựa trên số trang để tránh tràn bộ nhớ
+          if (pdf.numPages > 2) { scale = 1.5; quality = 0.8; }
+          if (pdf.numPages > 10) { scale = 1.2; quality = 0.7; }
+          if (pdf.numPages > 20) { scale = 1.0; quality = 0.6; }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
@@ -333,9 +381,15 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL('image/jpeg', quality);
+
+            // Cắt bỏ khoảng trắng thừa xung quanh trang
+            const trimmedCanvas = trimCanvasWhitespace(canvas);
+            const imgData = trimmedCanvas.toDataURL('image/jpeg', quality);
+            const base64Jpeg = imgData.split(',')[1];
+
             images.push({
-              inlineData: { data: imgData.split(',')[1], mimeType: 'image/jpeg' }
+              inlineData: { data: base64Jpeg, mimeType: 'image/jpeg' },
+              dataUrl: `data:image/jpeg;base64,${base64Jpeg}` // Lưu lại để hiển thị trên UI
             });
           }
           return images;
@@ -346,11 +400,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       };
 
       const finalFileParts: FilePart[] = [];
+      const pageImageUrls: string[] = [];
+
       for (const f of pendingImportFiles) {
         if (f.mimeType === 'application/pdf' && f.data) {
           const images = await convertPdfToImages(f.data);
           if (images.length > 0) {
-            finalFileParts.push(...images);
+            images.forEach((img: any) => {
+              finalFileParts.push({ inlineData: img.inlineData });
+              if (img.dataUrl) pageImageUrls.push(img.dataUrl);
+            });
           } else {
             finalFileParts.push({ inlineData: { data: f.data, mimeType: f.mimeType! } });
           }
@@ -359,42 +418,105 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         }
       }
 
-      const result = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+      // Cập nhật prompt để yêu cầu AI trả về page_index
+      const enhancedPrompt = prompt + "\nQUAN TRỌNG: Nếu câu hỏi nằm trên một trang cụ thể, hãy trả về thuộc tính 'page_index' (số thứ tự trang trong file, bắt đầu từ 0).";
 
-      // Xử lý linh hoạt kết quả trả về (Mảng hoặc Object)
-      let rawQuestions: any[] = [];
-      if (result && Array.isArray(result.questions)) {
-        rawQuestions = result.questions;
-      } else if (Array.isArray(result)) {
-        rawQuestions = result;
-      } else if (result && typeof result === 'object') {
-        // Tìm key nào chứa mảng dữ liệu (phòng trường hợp AI trả về key khác 'questions')
-        const key = Object.keys(result).find(k => Array.isArray(result[k]) && result[k].length > 0);
-        if (key) rawQuestions = result[key];
+      const extractQuestions = (result: any) => {
+        if (result && Array.isArray(result.questions)) return result.questions;
+        if (Array.isArray(result)) return result;
+        if (result && typeof result === 'object') {
+          const key = Object.keys(result).find(k => Array.isArray(result[k]) && result[k].length > 0);
+          if (key) return result[key];
+        }
+        return [];
+      };
+
+      const runExtraction = async (filePartsToUse: FilePart[]) => {
+        const result = await geminiService.generateExamQuestionsStructured(enhancedPrompt, filePartsToUse);
+        return { result, rawQuestions: extractQuestions(result) };
+      };
+
+      let { result, rawQuestions } = await runExtraction(finalFileParts);
+
+      // Fallback: Nếu không tìm thấy câu hỏi và file quá dài, thử lại với 10 trang đầu
+      if (rawQuestions.length === 0 && finalFileParts.length > 10) {
+        const fallbackParts = finalFileParts.slice(0, 10);
+        const fallbackRun = await runExtraction(fallbackParts);
+        result = fallbackRun.result;
+        rawQuestions = fallbackRun.rawQuestions;
       }
 
       if (rawQuestions.length === 0) {
-        throw new Error("AI không tìm thấy câu hỏi nào.");
+        throw new Error("AI không tìm thấy câu hỏi nào. Vui lòng thử lại với file PDF ít trang hơn hoặc dùng công cụ Cắt PDF.");
       }
 
+      const extractInlineImage = (text?: string) => {
+        if (!text) return { text: '', image: '' };
+        const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/i);
+        if (svgMatch) {
+          return {
+            text: text.replace(svgMatch[0], '').trim(),
+            image: svgMatch[0]
+          };
+        }
+        const bracketMatch = text.match(/\[(HÌNH ẢNH|HINH ANH|IMAGE|IMG|HÌNH)\s*:\s*([\s\S]*?)\]/i);
+        if (bracketMatch) {
+          return {
+            text: text.replace(bracketMatch[0], '').trim(),
+            image: bracketMatch[0]
+          };
+        }
+        const inlineMatch = text.match(/(?:^|\n)\s*(HÌNH ẢNH|HINH ANH|IMAGE|IMG|HÌNH)\s*[:\-]\s*([^\n]+)/i);
+        if (inlineMatch) {
+          return {
+            text: text.replace(inlineMatch[0], '').trim(),
+            image: `[HÌNH ẢNH: ${inlineMatch[2].trim()}]`
+          };
+        }
+        return { text, image: '' };
+      };
+
+      const shouldAttachImage = (text?: string) => {
+        if (!text) return false;
+        return /(hình|ảnh|image|img)/i.test(text);
+      };
+
+      let pageImageIndex = 0;
+
       const formatted: ExamQuestion[] = rawQuestions.map((q: any, i: number) => {
+        const normalizedContent = extractInlineImage(q.content || q.question || '');
+
         // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
         const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
           ? q.options.map((opt: any) => {
             if (typeof opt === 'string') {
-              return { text: opt, image: '' }; // Chuyển đổi chuỗi thành object
+              const normalizedOpt = extractInlineImage(opt);
+              return { text: normalizedOpt.text, image: normalizedOpt.image };
             }
             // Đảm bảo object luôn có cả text và image
-            return { text: opt.text || '', image: opt.image || '' };
+            const normalizedOpt = extractInlineImage(opt.text || '');
+            return { text: normalizedOpt.text, image: opt.image || normalizedOpt.image || '' };
           })
           : undefined;
+
+        let image = q.image || normalizedContent.image || '';
+
+        // LOGIC GÁN ẢNH THÔNG MINH:
+        // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó
+        if (typeof q.page_index === 'number' && pageImageUrls[q.page_index]) {
+          image = pageImageUrls[q.page_index];
+        }
+        // 2. Fallback: Nếu câu hỏi có từ khóa "hình ảnh" mà chưa có ảnh, lấy ảnh theo thứ tự
+        else if (!image && shouldAttachImage(normalizedContent.text) && pageImageUrls[pageImageIndex]) {
+          image = pageImageUrls[pageImageIndex++];
+        }
 
         return {
           id: 'imp-' + Date.now().toString() + i,
           type: q.type || 'Trắc nghiệm',
           level: q.level || 'Thông hiểu',
-          content: q.content || q.question || '',
-          image: q.image || '',
+          content: normalizedContent.text,
+          image: image,
           options: normalizedOptions,
           answer: q.answer || '',
           explanation: q.explanation || '',
