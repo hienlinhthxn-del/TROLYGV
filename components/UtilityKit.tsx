@@ -962,7 +962,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               ...opt,
               image: normalizeImage(opt.image || '', pageImage)
             })),
-            answer: answerText || '',
+            answer: q.answer || '',
             explanation: q.explanation || '',
           };
         });
