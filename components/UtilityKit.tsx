@@ -24,6 +24,12 @@ interface SavedLessonPlan {
 
 // Component Quiz Player nội bộ
 const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onShare }) => {
+  const toSafeText = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    return '';
+  };
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showScore, setShowScore] = useState(false);
@@ -116,11 +122,12 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
     );
   }
 
-  const currentQuestion = data[currentIndex];
+  const currentQuestion = data[currentIndex] || { question: '', image: '', options: [] };
+  const questionOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : [];
 
   // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung
-  let displayQuestion = currentQuestion.question;
-  let displayImage = currentQuestion.image;
+  let displayQuestion = toSafeText(currentQuestion.question);
+  let displayImage = toSafeText(currentQuestion.image);
 
   if (!displayImage && displayQuestion) {
     const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):(.*?)\]/i);
@@ -170,9 +177,9 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
-          {currentQuestion.options.map((option: any, index: number) => {
-            const optText = typeof option === 'string' ? option : (option.text || '');
-            const optImg = typeof option === 'string' ? '' : (option.image || '');
+          {questionOptions.map((option: any, index: number) => {
+            const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
+            const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
             const isSelected = selectedOption === option;
             const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
 
@@ -216,7 +223,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
                       }} />
                     ) : null}
                     {/* Hiển thị mô tả nếu không phải SVG hay Image */}
-                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg) && (
+                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg.trim()) && (
                       <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
                     )}
                   </div>
@@ -757,7 +764,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         return bytes;
       };
 
-      const convertPdfToImages = async (base64: string): Promise<{ inlineData: any, dataUrl: string }[]> => {
+      const convertPdfToImages = async (base64: string): Promise<{ imageParts: any[]; pageImages: string[] } | null> => {
         try {
           // @ts-ignore
           const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
@@ -766,16 +773,21 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
-          const images: { inlineData: any, dataUrl: string }[] = [];
+          const imageParts: any[] = [];
+          const pageImages: string[] = [];
 
-          // Tăng giới hạn lên 30 trang để xử lý được nhiều câu hỏi hơn
-          const maxPages = Math.min(pdf.numPages, 30);
+          // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
+          const maxPages = Math.min(pdf.numPages, 5);
 
           // Tự động điều chỉnh chất lượng để tránh quá tải payload
-          let scale = 1.5;
-          let quality = 0.8;
-          if (pdf.numPages > 5) { scale = 1.2; quality = 0.7; }
-          if (pdf.numPages > 15) { scale = 1.0; quality = 0.6; }
+          let scale = 2.0;
+          let quality = 0.9;
+
+          // Tối ưu hóa: Nếu file nhiều trang, giảm chất lượng để tránh lỗi payload
+          if (maxPages >= 3) {
+            scale = 1.5;
+            quality = 0.8;
+          }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
@@ -792,19 +804,19 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
             const imgData = canvas.toDataURL('image/jpeg', quality);
-            images.push({
+            pageImages.push(imgData);
+            imageParts.push({
               inlineData: {
                 data: imgData.split(',')[1],
                 mimeType: 'image/jpeg'
-              },
-              dataUrl: imgData
+              }
             });
           }
-          return images;
+          return { imageParts, pageImages };
         } catch (e) {
           console.error("PDF Convert Error:", e);
           alert("Không thể chuyển đổi PDF tự động. Hệ thống sẽ thử gửi file gốc...");
-          return [];
+          return null; // Fallback to original
         }
       };
 
@@ -813,19 +825,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       for (const part of fileParts) {
         if (part.inlineData.mimeType === 'application/pdf') {
-          const images = await convertPdfToImages(part.inlineData.data);
-          if (images && images.length > 0) {
-            images.forEach(img => {
-              finalFileParts.push({ inlineData: img.inlineData });
-              pageImageUrls.push(img.dataUrl);
-            });
+          const converted = await convertPdfToImages(part.inlineData.data);
+          if (converted && converted.imageParts.length > 0) {
+            finalFileParts.push(...converted.imageParts);
+            pageImageUrls.push(...converted.pageImages);
           } else {
             finalFileParts.push(part); // Fallback nếu lỗi convert
           }
         } else {
           finalFileParts.push(part);
-          // Với ảnh đơn lẻ, tạo dataUrl để dùng nếu cần
-          pageImageUrls.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
         }
       }
       // -------------------------------------------------------------
@@ -836,9 +844,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       YÊU CẦU XỬ LÝ:
       1. Trích xuất tất cả câu hỏi tìm thấy. Đừng bỏ sót câu nào.
-      2. Với câu hỏi có hình ảnh: 
-         - Nếu câu hỏi nằm trên trang nào, hãy trả về thuộc tính "page_index" (số thứ tự trang, bắt đầu từ 0).
-         - Mô tả chi tiết hình ảnh vào trường "image" (ví dụ: "[HÌNH ẢNH: Hình tam giác ABC...]").
+      2. Với câu hỏi/đáp án có hình ảnh: BẮT BUỘC điền trường "image" (và options[].image).
+         - Nếu có ảnh trong tài liệu, hãy đặt "image" là mô tả [HÌNH ẢNH: ...] và thêm "page" là số trang (1-based) nơi ảnh xuất hiện.
       3. Nếu tài liệu mờ, hãy cố gắng luận ra nội dung hợp lý nhất.
       4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
@@ -859,33 +866,74 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       if (rawQuestions.length > 0) {
         const formattedQuestions = rawQuestions.map((q: any, i: number) => {
           // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
-          const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
-            ? q.options.map((opt: any) => {
-              if (typeof opt === 'string') {
-                return { text: opt, image: '' }; // Chuyển đổi chuỗi thành object
-              }
-              return { text: opt.text || '', image: opt.image || '' };
-            })
-            : []; // QuizPlayer luôn cần một mảng
-
-          // Logic gán ảnh thông minh:
-          // Nếu AI trả về page_index, dùng ảnh trang đó.
-          // Nếu không, và chỉ có 1 trang ảnh, dùng ảnh đó.
-          let image = q.image || '';
-          const pageIndex = typeof q.page_index === 'number' ? q.page_index : (typeof q.page === 'number' ? q.page - 1 : -1);
-
-          if (pageIndex >= 0 && pageIndex < pageImageUrls.length) {
-            image = pageImageUrls[pageIndex];
-          } else if (pageImageUrls.length === 1 && (!image || image.includes('[HÌNH ẢNH'))) {
-            image = pageImageUrls[0];
+          const resolveOptions = (candidate: unknown) => {
+            if (Array.isArray(candidate)) return candidate;
+            if (candidate && typeof candidate === 'object') {
+              return Object.values(candidate as Record<string, unknown>);
+            }
+            return [];
+          };
+          const rawOptions = resolveOptions(
+            q.options
+            ?? q.choices
+            ?? q.answers
+            ?? q.luaChon
+            ?? q.luachon
+          );
+          let normalizedOptions = rawOptions.map((opt: any) => {
+            if (typeof opt === 'string' || typeof opt === 'number') {
+              return { text: String(opt), image: '' };
+            }
+            return { text: opt.text || opt.label || '', image: opt.image || '' };
+          });
+          if (normalizedOptions.length === 0 && q.answer) {
+            normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
+          const pageIndex = Number(q.page || q.pageIndex || q.pageNumber);
+          const pageImage = Number.isFinite(pageIndex) && pageIndex > 0 ? pageImageUrls[pageIndex - 1] : '';
+
+          const normalizeImage = (value: string, fallback: string) => {
+            if (!value) return '';
+            const trimmed = value.trim();
+            if (trimmed.startsWith('<svg')) return trimmed;
+            if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
+            return fallback || trimmed;
+          };
+
+          const pickQuestionText = (...values: Array<unknown>) => {
+            const stringValue = values.find((val) => typeof val === 'string' && val.trim().length > 0) as string | undefined;
+            if (stringValue) return stringValue.trim();
+            const numberValue = values.find((val) => typeof val === 'number');
+            return typeof numberValue === 'number' ? String(numberValue).trim() : '';
+          };
+
+          const questionText = pickQuestionText(
+            q.content,
+            q.question,
+            q.text,
+            q.prompt,
+            q.title,
+            q.cauHoi,
+            q.cau_hoi,
+            q['câu hỏi']
+          );
+          const imageMarkerMatch = questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):.*?\]/i);
+          const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
+          const questionImage = normalizeImage(q.image || imageMarker, pageImage);
+          const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;
+          const cleanedQuestionText = strippedQuestionText
+            || questionText
+            || (questionImage ? 'Xem hình và chọn đáp án đúng.' : 'Câu hỏi chưa rõ nội dung, vui lòng xem lại đề.');
 
           return {
             id: q.id || `quiz-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
-            question: q.content || q.question || '', // QuizPlayer dùng 'question'
-            image: image,
-            options: normalizedOptions,
+            question: cleanedQuestionText, // QuizPlayer dùng 'question'
+            image: questionImage,
+            options: normalizedOptions.map((opt: any) => ({
+              ...opt,
+              image: normalizeImage(opt.image || '', pageImage)
+            })),
             answer: q.answer || '',
             explanation: q.explanation || '',
           };
