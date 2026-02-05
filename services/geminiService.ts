@@ -208,6 +208,7 @@ export class GeminiService {
     
     NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ tài liệu (Ảnh/PDF). Tài liệu này thường chứa khoảng 20 đến 30 câu hỏi.
     HÃY KIÊN NHẪN ĐỌC HẾT TÀI LIỆU VÀ TRÍCH XUẤT KHÔNG BỎ SÓT CÂU NÀO.
+    NẾU TÀI LIỆU MỜ HOẶC KHÓ ĐỌC, HÃY CỐ GẮNG SUY LUẬN ĐỂ TÌM RA NỘI DUNG CÂU HỎI HỢP LÝ NHẤT.
 
     YÊU CẦU XỬ LÝ DẠNG BÀI VIOLYMPIC / TRẠNG NGUYÊN TIẾNG VIỆT (BẮT BUỘC):
     1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):

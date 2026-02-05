@@ -814,7 +814,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       for (const part of fileParts) {
         if (part.inlineData.mimeType === 'application/pdf') {
           const images = await convertPdfToImages(part.inlineData.data);
-          if (images) {
+          if (images && images.length > 0) {
             finalFileParts.push(...images);
           } else {
             finalFileParts.push(part); // Fallback nếu lỗi convert
@@ -825,37 +825,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-
-      const prompt = `Bạn là một trợ lý số hóa đề thi chuyên nghiệp.
-      Hãy phân tích tài liệu (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi (thường từ 20 đến 30 câu).
+      const prompt = `Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm.
       
-      ${additionalPrompt ? `YÊU CẦU CỤ THỂ CỦA GIÁO VIÊN:
-      "${additionalPrompt}"
-      (Hãy ưu tiên thực hiện yêu cầu này khi xử lý nội dung)` : ''}
+      ${additionalPrompt ? `YÊU CẦU CỤ THỂ: "${additionalPrompt}"` : ''}
 
-      YÊU CẦU ĐẶC BIỆT VỀ HÌNH ẢNH (BẮT BUỘC):
-      - Rất nhiều câu hỏi trong file này có hình ảnh minh họa hoặc quy luật hình ảnh.
-      - Bạn PHẢI trích xuất nội dung hình ảnh đó vào trường "image".
-      - Nếu là hình học đơn giản: Hãy trả về mã SVG (chỉ thẻ <svg>...</svg>).
-      - Nếu là hình ảnh phức tạp hoặc tranh vẽ: Hãy mô tả chi tiết bằng lời trong ngoặc vuông, ví dụ: "[HÌNH ẢNH: Một chiếc cân đĩa, bên trái có 2 quả táo, bên phải có 1 quả cam...]".
-      - TUYỆT ĐỐI KHÔNG ĐỂ TRỐNG trường "image" nếu câu hỏi gốc có hình.
-      
-      YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
-      {
-        "questions": [
-          {
-            "type": "Trắc nghiệm",
-            "content": "Câu hỏi...",
-            "image": "URL hoặc SVG hoặc Mô tả",
-            "options": [
-              { "text": "Đáp án A", "image": "" },
-              { "text": "Đáp án B", "image": "" }
-            ],
-            "answer": "Đáp án đúng",
-            "explanation": "Giải thích"
-          }
-        ]
-      }`;
+      YÊU CẦU XỬ LÝ:
+      1. Trích xuất tất cả câu hỏi tìm thấy. Đừng bỏ sót câu nào.
+      2. Với câu hỏi có hình ảnh: BẮT BUỘC mô tả chi tiết hình ảnh vào trường "image" (ví dụ: "[HÌNH ẢNH: Hình tam giác ABC...]").
+      3. Nếu tài liệu mờ, hãy cố gắng luận ra nội dung hợp lý nhất.
+      4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
@@ -867,7 +845,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         rawQuestions = json; // AI có thể trả về một mảng câu hỏi trực tiếp
       } else if (json && typeof json === 'object') {
         // Fallback: tìm key nào là mảng
-        const key = Object.keys(json).find(k => Array.isArray(json[k]) && json[k].length > 0);
+        const key = Object.keys(json).find(k => Array.isArray(json[k]));
         if (key) rawQuestions = json[key];
       }
 
