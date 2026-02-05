@@ -233,7 +233,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           explanation: q.explanation || '',
         };
       });
-      setQuestions(formatted);
+      setQuestions(formatted.filter(q => q.content.trim() !== '' || q.image.trim() !== ''));
       setReadingPassage(result.readingPassage || '');
       if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${stats.total * 3} phút`);
       setViewMode('config');

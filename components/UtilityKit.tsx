@@ -709,7 +709,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             answer: q.answer || '',
             explanation: q.explanation || '',
           };
-        });
+        }).filter((q: any) => q.question.trim() !== '' || q.image.trim() !== '');
         setResult(formattedQuestions);
       } else {
         throw new Error("AI không tạo được câu hỏi hoặc định dạng trả về không đúng.");
@@ -770,7 +770,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           // Tăng giới hạn lên 30 trang để xử lý được nhiều câu hỏi hơn
           const maxPages = Math.min(pdf.numPages, 30);
-          
+
           // Tự động điều chỉnh chất lượng để tránh quá tải payload
           let scale = 1.5;
           let quality = 0.8;
@@ -873,11 +873,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           // Nếu không, và chỉ có 1 trang ảnh, dùng ảnh đó.
           let image = q.image || '';
           const pageIndex = typeof q.page_index === 'number' ? q.page_index : (typeof q.page === 'number' ? q.page - 1 : -1);
-          
+
           if (pageIndex >= 0 && pageIndex < pageImageUrls.length) {
-             image = pageImageUrls[pageIndex];
+            image = pageImageUrls[pageIndex];
           } else if (pageImageUrls.length === 1 && (!image || image.includes('[HÌNH ẢNH'))) {
-             image = pageImageUrls[0];
+            image = pageImageUrls[0];
           }
 
           return {
@@ -889,7 +889,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             answer: q.answer || '',
             explanation: q.explanation || '',
           };
-        });
+        }).filter((q: any) => q.question.trim() !== '' || q.image.trim() !== '');
         setResult(formattedQuestions);
       } else {
         throw new Error("AI không trích xuất được câu hỏi nào hoặc định dạng trả về không đúng.");
