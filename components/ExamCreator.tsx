@@ -283,6 +283,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     - Với các câu hỏi tìm quy luật dãy số/hình: Hãy mô tả rõ quy luật đó trong nội dung câu hỏi hoặc trường "explanation".
     - Đảm bảo trích xuất CHÍNH XÁC và ĐẦY ĐỦ số lượng câu hỏi có trong tài liệu.
     
+    QUAN TRỌNG: KHÔNG trả về các câu hỏi rỗng (không có nội dung và không có hình ảnh).
     YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
       {
         "questions": [
@@ -438,12 +439,22 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
       let { result, rawQuestions } = await runExtraction(finalFileParts);
 
+      // Hàm kiểm tra câu hỏi hợp lệ (có nội dung hoặc hình ảnh)
+      const isValidRawQuestion = (q: any) => {
+        const c = q.content || q.question || '';
+        const i = q.image || '';
+        return c.toString().trim().length > 0 || i.toString().trim().length > 0;
+      };
+
+      // Lọc sơ bộ kết quả từ AI để loại bỏ câu hỏi rỗng
+      rawQuestions = rawQuestions.filter(isValidRawQuestion);
+
       // Fallback: Nếu không tìm thấy câu hỏi và file quá dài, thử lại với 10 trang đầu
       if (rawQuestions.length === 0 && finalFileParts.length > 10) {
         const fallbackParts = finalFileParts.slice(0, 10);
         const fallbackRun = await runExtraction(fallbackParts);
         result = fallbackRun.result;
-        rawQuestions = fallbackRun.rawQuestions;
+        rawQuestions = fallbackRun.rawQuestions.filter(isValidRawQuestion);
       }
 
       if (rawQuestions.length === 0) {
@@ -521,7 +532,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           answer: q.answer || '',
           explanation: q.explanation || '',
         };
-      });
+      }).filter(q => q.content.trim() !== '' || q.image.trim() !== ''); // Lọc lần cuối các câu hỏi rỗng
+
+      if (formatted.length === 0) {
+        throw new Error("Không tìm thấy câu hỏi hợp lệ nào sau khi xử lý.");
+      }
 
       setQuestions(prev => [...prev, ...formatted]);
       if (result.readingPassage) setReadingPassage(result.readingPassage);
