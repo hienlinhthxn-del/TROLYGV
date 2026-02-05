@@ -854,7 +854,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
-      const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+      const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+      let json;
+      try {
+        json = await runGenerateQuiz();
+      } catch (firstError: any) {
+        const firstMessage = String(firstError?.message || '');
+        const isTransientNetwork = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(firstMessage);
+
+        if (!isTransientNetwork) throw firstError;
+
+        // Thử lại 1 lần cho lỗi mạng ngắn hạn để giảm tỷ lệ thất bại giả
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        json = await runGenerateQuiz();
+      }
 
       let rawQuestions = [];
       if (json && json.questions && Array.isArray(json.questions)) {
@@ -944,10 +957,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               ...opt,
               image: normalizeImage(opt.image || '', pageImage)
             })),
-            answer: q.answer || '',
+            answer: answerText || '',
             explanation: q.explanation || '',
           };
-        }).filter((q: any) => q.question.trim() !== '' || q.image.trim() !== '');
+        });
         setResult(formattedQuestions);
       } else {
         throw new Error("AI không trích xuất được câu hỏi nào hoặc định dạng trả về không đúng.");
