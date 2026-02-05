@@ -754,10 +754,20 @@ export class GeminiService {
       msg.includes("overloaded") ||
       msg.includes("busy") ||
       msg.includes("503") ||
-      msg.includes("500")
+      msg.includes("500") ||
+      msg.includes("failed to fetch") ||
+      msg.includes("networkerror") ||
+      msg.includes("network request failed") ||
+      msg.includes("load failed")
     ) {
+      const isNetworkIssue =
+        msg.includes("failed to fetch") ||
+        msg.includes("networkerror") ||
+        msg.includes("network request failed") ||
+        msg.includes("load failed");
+
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = this.retryAttempt === 0 ? 2000 : 5000; // Giảm thời gian chờ để chuyển model nhanh hơn
+      let waitMs = isNetworkIssue ? 1500 : (this.retryAttempt === 0 ? 2000 : 5000); // Mạng lỗi thì thử lại nhanh hơn
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Thêm buffer 2s an toàn
@@ -765,13 +775,16 @@ export class GeminiService {
 
       // Nếu Google bảo chờ quá lâu (> 8s), hoặc đã thử lại 1 lần bận liên tiếp
       // thì đổi model luôn cho nhanh
-      if (waitMs > 8000 || this.retryAttempt >= 1) {
+      if (waitMs > 8000 || this.retryAttempt >= 1 || isNetworkIssue) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
 
         // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
         if (nextIdx === 0 && currentIdx !== -1) {
+          if (isNetworkIssue) {
+            throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn (Failed to fetch). Thầy/Cô kiểm tra Internet/VPN/Tường lửa hoặc thử lại sau ít phút.");
+          }
           throw new Error("Tất cả các model AI của Google đều đang bận hoặc đã hết lượt sử dụng. Hệ thống sẽ thử chuyển sang nhà cung cấp dự phòng (nếu có).");
         }
 

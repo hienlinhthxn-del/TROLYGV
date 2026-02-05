@@ -956,16 +956,28 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       const errorMessage = error.message || "Lỗi không xác định";
       const isPayloadError = /payload|size|large/i.test(errorMessage);
+      const isNetworkError = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(errorMessage);
 
-      // Kịch bản 1: Lỗi do dung lượng quá lớn
-      if (isPayloadError) {
+      // Kịch bản 1: Lỗi do mất kết nối / chặn mạng tới Google AI
+      if (isNetworkError) {
+        alert(`⚠️ Không kết nối được tới Google AI (Failed to fetch).
+
+Chi tiết: ${errorMessage}
+
+✅ Cách xử lý nhanh:
+- Kiểm tra Internet, VPN, proxy hoặc tường lửa mạng trường học
+- Tắt extension chặn quảng cáo/chặn script nếu có
+- Thử tải lại trang và tạo lại quiz sau 1-2 phút`);
+      }
+      // Kịch bản 2: Lỗi do dung lượng quá lớn
+      else if (isPayloadError) {
         if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy/Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file (thử với 1-2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay?`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]);
         }
       }
-      // Kịch bản 2: Lỗi chung khi tải file PDF (không phải do dung lượng)
+      // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
         if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không?`)) {
           setActiveTab('pdf_tools');
@@ -973,7 +985,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
         }
       } else {
-        // Kịch bản 3: Lỗi chung khác
+        // Kịch bản 4: Lỗi chung khác
         alert(`Lỗi bóc tách đề: ${errorMessage}`);
       }
     } finally {
