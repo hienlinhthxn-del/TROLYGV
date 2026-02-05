@@ -996,13 +996,8 @@ Chi tiết: ${errorMessage}
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
 
-    // Kiểm tra ảnh lớn
-    const hasLargeImages = result.some((q: any) => q.image && (q.image.length > 500 || q.image.startsWith('data:image')));
-    if (hasLargeImages) {
-      if (!window.confirm("⚠️ Quiz này có chứa hình ảnh lớn. Link chia sẻ sẽ KHÔNG bao gồm hình ảnh để đảm bảo hoạt động. Bạn có muốn tiếp tục?")) return;
-    }
-
-    try {
+    // Helper function to create quiz data and encode it
+    const createShareableCode = async (includeImages: boolean): Promise<string> => {
       const quizData = {
         s: subject,
         g: grade,
@@ -1012,12 +1007,11 @@ Chi tiết: ${errorMessage}
           q.options,
           q.answer,
           q.explanation,
-          hasLargeImages ? '' : (q.image || '') // Bỏ ảnh nếu quá lớn
+          includeImages ? (q.image || '') : '' // Include or strip image
         ]))
       };
 
       const json = JSON.stringify(quizData);
-      let finalCode = '';
 
       // @ts-ignore
       if (window.CompressionStream) {
@@ -1028,17 +1022,38 @@ Chi tiết: ${errorMessage}
         const blob = await response.blob();
         const buffer = await blob.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        return 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       } else {
+        // Fallback for older browsers
         const utf8Bytes = new TextEncoder().encode(json);
         let binary = '';
         utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
-        finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+    };
+
+    try {
+      // 1. Try to generate with images first
+      let finalCode = await createShareableCode(true);
+      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+
+      // 2. Check URL length (2000 is a safe limit for old browsers)
+      if (url.length > 2000) {
+        const confirmContinue = window.confirm(`⚠️ Link chia sẻ quá dài do có hình ảnh, có thể không hoạt động trên một số trình duyệt.\n\n✅ Bạn có muốn tạo một link mới KHÔNG CÓ HÌNH ẢNH để đảm bảo hoạt động tốt nhất không?\n\n(Chọn "Cancel" nếu bạn vẫn muốn thử dùng link dài có ảnh).`);
+
+        if (confirmContinue) {
+          // 3. If user agrees, generate link without images
+          finalCode = await createShareableCode(false);
+          url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+          await navigator.clipboard.writeText(url);
+          alert("✅ Đã sao chép Link Quiz (KHÔNG CÓ HÌNH ẢNH)!\n\nLink này sẽ hoạt động ổn định trên mọi thiết bị.");
+          return;
+        }
       }
 
-      const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      // 4. If URL is short enough, or user wants to proceed with long URL
       await navigator.clipboard.writeText(url);
-      alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
+      alert("✅ Đã sao chép Link Quiz!\n\n" + (url.length > 2000 ? "⚠️ Lưu ý: Link khá dài, hãy kiểm tra trước khi gửi cho nhiều học sinh." : "Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé."));
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
