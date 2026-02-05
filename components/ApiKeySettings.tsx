@@ -7,6 +7,8 @@ interface ApiKeySettingsProps {
 
 const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     const [apiKey, setApiKey] = useState('');
+    const [openaiKey, setOpenaiKey] = useState('');
+    const [anthropicKey, setAnthropicKey] = useState('');
     const [status, setStatus] = useState<'checking' | 'valid' | 'invalid' | 'empty'>('checking');
     const [showKey, setShowKey] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
@@ -20,6 +22,8 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     const checkCurrentKey = () => {
         setStatus('checking');
         const savedKey = localStorage.getItem('manually_entered_api_key');
+        const savedOpen = localStorage.getItem('openai_api_key');
+        const savedAnth = localStorage.getItem('anthropic_api_key');
         const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
 
         if (savedKey && savedKey.startsWith('AIza') && savedKey.length > 30) {
@@ -32,6 +36,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             setApiKey('');
             setStatus('empty');
         }
+
+        setOpenaiKey(savedOpen || '');
+        setAnthropicKey(savedAnth || '');
     };
 
     const handleTestKey = async () => {
@@ -70,24 +77,31 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     };
 
     const handleSaveKey = () => {
-        if (!apiKey.trim()) {
-            alert('Vui lòng nhập API Key!');
-            return;
+        // Save any provided keys (Gemini / OpenAI / Anthropic)
+        if (apiKey.trim()) {
+            if (!apiKey.startsWith('AIza') || apiKey.length < 30) {
+                if (!confirm('API Key Gemini có vẻ không đúng định dạng. Vẫn lưu?')) {
+                    return;
+                }
+            }
+            localStorage.setItem('manually_entered_api_key', apiKey.trim());
+            setStatus('valid');
         }
 
-        if (!apiKey.startsWith('AIza') || apiKey.length < 30) {
-            alert('⚠️ API Key không đúng định dạng! Key phải bắt đầu bằng "AIza" và dài hơn 30 ký tự.');
-            return;
+        if (openaiKey.trim()) {
+            localStorage.setItem('openai_api_key', openaiKey.trim());
+        }
+        if (anthropicKey.trim()) {
+            localStorage.setItem('anthropic_api_key', anthropicKey.trim());
         }
 
-        localStorage.setItem('manually_entered_api_key', apiKey.trim());
         alert('✅ Đã lưu API Key! Vui lòng tải lại trang (F5) để áp dụng.');
-        setStatus('valid');
     };
 
     const handleClearKey = () => {
         if (window.confirm('Xóa API Key đã lưu?')) {
             localStorage.removeItem('manually_entered_api_key');
+            // keep fallback keys intact unless user clears them explicitly
             setApiKey('');
             setStatus('empty');
             alert('Đã xóa API Key. Hệ thống sẽ sử dụng key mặc định (nếu có).');
@@ -153,9 +167,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                     {/* Input */}
                     <div className="space-y-2">
                         <label className="text-xs font-black text-slate-600 uppercase tracking-widest">
-                            Google Gemini API Key
-                        </label>
-                        <div className="relative">
+                                Google Gemini API Key
+                            </label>
+                            <div className="relative">
                             <input
                                 type={showKey ? 'text' : 'password'}
                                 value={apiKey}
@@ -171,6 +185,13 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                                 <i className={`fas ${showKey ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                             </button>
                         </div>
+                    {/* OpenAI / Anthropic fallback keys */}
+                    <div className="space-y-2 mt-3">
+                        <label className="text-xs font-black text-slate-600 uppercase tracking-widest">OpenAI API Key (fallback)</label>
+                        <input type={showKey ? 'text' : 'password'} value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
+                        <label className="text-xs font-black text-slate-600 uppercase tracking-widest mt-2">Anthropic API Key (fallback)</label>
+                        <input type={showKey ? 'text' : 'password'} value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
+                    </div>
                     </div>
 
                     {/* Help */}
@@ -199,21 +220,39 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                         </button>
                         <button
                             onClick={handleSaveKey}
-                            disabled={!apiKey.trim()}
+                            disabled={!apiKey.trim() && !openaiKey.trim() && !anthropicKey.trim()}
                             className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-200"
                         >
                             <i className="fas fa-save mr-2"></i>Lưu API Key
                         </button>
                     </div>
 
-                    {status === 'valid' && localStorage.getItem('manually_entered_api_key') && (
-                        <button
-                            onClick={handleClearKey}
-                            className="w-full py-2 text-rose-500 text-xs font-bold hover:bg-rose-50 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-trash-alt mr-2"></i>Xóa API Key đã lưu
-                        </button>
-                    )}
+                    <div className="flex flex-col space-y-2">
+                        {status === 'valid' && localStorage.getItem('manually_entered_api_key') && (
+                            <button
+                                onClick={handleClearKey}
+                                className="w-full py-2 text-rose-500 text-xs font-bold hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                                <i className="fas fa-trash-alt mr-2"></i>Xóa API Key Gemini đã lưu
+                            </button>
+                        )}
+                        {(localStorage.getItem('openai_api_key') || localStorage.getItem('anthropic_api_key')) && (
+                            <button
+                                onClick={() => {
+                                    if (confirm('Xóa các API Key fallback (OpenAI/Anthropic)?')) {
+                                        localStorage.removeItem('openai_api_key');
+                                        localStorage.removeItem('anthropic_api_key');
+                                        setOpenaiKey('');
+                                        setAnthropicKey('');
+                                        alert('Đã xóa key fallback.');
+                                    }
+                                }}
+                                className="w-full py-2 text-rose-500 text-xs font-bold hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                                <i className="fas fa-trash-alt mr-2"></i>Xóa key fallback OpenAI/Anthropic
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
