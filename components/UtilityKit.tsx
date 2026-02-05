@@ -854,7 +854,20 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
-      const json = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+      const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
+      let json;
+      try {
+        json = await runGenerateQuiz();
+      } catch (firstError: any) {
+        const firstMessage = String(firstError?.message || '');
+        const isTransientNetwork = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(firstMessage);
+
+        if (!isTransientNetwork) throw firstError;
+
+        // Thử lại 1 lần cho lỗi mạng ngắn hạn để giảm tỷ lệ thất bại giả
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        json = await runGenerateQuiz();
+      }
 
       let rawQuestions = [];
       if (json && json.questions && Array.isArray(json.questions)) {
@@ -996,22 +1009,87 @@ Chi tiết: ${errorMessage}
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
 
-    // Helper function to create quiz data and encode it
-    const createShareableCode = async (includeImages: boolean): Promise<string> => {
+    const compressDataImage = async (dataUrl: string): Promise<string> => {
+      return new Promise((resolve) => {
+        try {
+          const img = new Image();
+          img.onload = () => {
+            const maxWidth = 720;
+            const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(dataUrl);
+              return;
+            }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.62));
+          };
+          img.onerror = () => resolve(dataUrl);
+          img.src = dataUrl;
+        } catch {
+          resolve(dataUrl);
+        }
+      });
+    };
+
+    const normalizeSharedImage = async (value: unknown): Promise<string> => {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (!trimmed.startsWith('data:image')) {
+        return trimmed.length > 14000 ? '' : trimmed;
+      }
+
+      const compressed = await compressDataImage(trimmed);
+      return compressed.length > 14000 ? '' : compressed;
+    };
+
+    try {
+      let droppedImageCount = 0;
+      let compressedImageCount = 0;
+
+      const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
+        const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
+        const finalQuestionImage = await normalizeSharedImage(originalQuestionImage);
+
+        if (originalQuestionImage && !finalQuestionImage) droppedImageCount += 1;
+        if (originalQuestionImage && finalQuestionImage && originalQuestionImage !== finalQuestionImage) compressedImageCount += 1;
+
+        const rawOptions = Array.isArray(q?.options) ? q.options : [];
+        const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
+          if (typeof opt === 'string' || typeof opt === 'number') return opt;
+          const optionImageRaw = typeof opt?.image === 'string' ? opt.image.trim() : '';
+          const optionImageFinal = await normalizeSharedImage(optionImageRaw);
+          if (optionImageRaw && !optionImageFinal) droppedImageCount += 1;
+          if (optionImageRaw && optionImageFinal && optionImageRaw !== optionImageFinal) compressedImageCount += 1;
+
+          return {
+            ...opt,
+            image: optionImageFinal
+          };
+        }));
+
+        return ([
+          1,
+          q?.question || '',
+          normalizedOptions,
+          q?.answer || '',
+          q?.explanation || '',
+          finalQuestionImage
+        ]);
+      }));
+
       const quizData = {
         s: subject,
         g: grade,
-        q: result.map((q: any) => ([
-          1, // MCQ type
-          q.question,
-          q.options,
-          q.answer,
-          q.explanation,
-          includeImages ? (q.image || '') : '' // Include or strip image
-        ]))
+        q: normalizedQuestions
       };
 
       const json = JSON.stringify(quizData);
+      let finalCode = '';
 
       // @ts-ignore
       if (window.CompressionStream) {
@@ -1022,38 +1100,25 @@ Chi tiết: ${errorMessage}
         const blob = await response.blob();
         const buffer = await blob.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        return 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       } else {
-        // Fallback for older browsers
         const utf8Bytes = new TextEncoder().encode(json);
         let binary = '';
         utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
-        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      }
-    };
-
-    try {
-      // 1. Try to generate with images first
-      let finalCode = await createShareableCode(true);
-      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
-
-      // 2. Check URL length (2000 is a safe limit for old browsers)
-      if (url.length > 2000) {
-        const confirmContinue = window.confirm(`⚠️ Link chia sẻ quá dài do có hình ảnh, có thể không hoạt động trên một số trình duyệt.\n\n✅ Bạn có muốn tạo một link mới KHÔNG CÓ HÌNH ẢNH để đảm bảo hoạt động tốt nhất không?\n\n(Chọn "Cancel" nếu bạn vẫn muốn thử dùng link dài có ảnh).`);
-
-        if (confirmContinue) {
-          // 3. If user agrees, generate link without images
-          finalCode = await createShareableCode(false);
-          url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
-          await navigator.clipboard.writeText(url);
-          alert("✅ Đã sao chép Link Quiz (KHÔNG CÓ HÌNH ẢNH)!\n\nLink này sẽ hoạt động ổn định trên mọi thiết bị.");
-          return;
-        }
+        finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       }
 
-      // 4. If URL is short enough, or user wants to proceed with long URL
+      const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
       await navigator.clipboard.writeText(url);
-      alert("✅ Đã sao chép Link Quiz!\n\n" + (url.length > 2000 ? "⚠️ Lưu ý: Link khá dài, hãy kiểm tra trước khi gửi cho nhiều học sinh." : "Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé."));
+
+      const note = (compressedImageCount > 0 || droppedImageCount > 0)
+        ? `
+
+(Lưu ý: đã nén ${compressedImageCount} ảnh, lược bỏ ${droppedImageCount} ảnh quá lớn để link hoạt động ổn định.)`
+        : '';
+      alert(`✅ Đã sao chép Link Quiz!
+
+Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
