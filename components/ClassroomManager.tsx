@@ -1563,7 +1563,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
     } catch (error) {
       console.error("AI Quiz Generation Error:", error);
-      alert(`Lỗi khi tạo quiz từ file: ${error instanceof Error ? error.message : "Lỗi không xác định"}`);
+      const msg = error instanceof Error ? error.message : "Lỗi không xác định";
+      if (msg.includes("hết lượt") || msg.includes("quota") || msg.includes("bận")) {
+        alert(`⚠️ Hệ thống AI đang bận.\n\n${msg}\n\n👉 Thầy/Cô hãy thử lại sau vài phút hoặc nhập API Key riêng trong phần Cài đặt.`);
+      } else {
+        alert(`Lỗi khi tạo quiz từ file: ${msg}`);
+      }
     } finally {
       setIsGeneratingQuiz(false);
     }

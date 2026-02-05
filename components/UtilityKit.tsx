@@ -1049,7 +1049,11 @@ Chi tiết: ${errorMessage}
         }
       } else {
         // Kịch bản 4: Lỗi chung khác
-        alert(`Lỗi bóc tách đề: ${errorMessage}`);
+        if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận")) {
+           alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${errorMessage}\n\n👉 GIẢI PHÁP: Thầy/Cô vui lòng vào mục "Cài đặt" (biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân (miễn phí từ Google) để sử dụng ổn định hơn.`);
+        } else {
+           alert(`Lỗi bóc tách đề: ${errorMessage}`);
+        }
       }
     } finally {
       setIsProcessing(false);

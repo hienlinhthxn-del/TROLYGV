@@ -9,7 +9,7 @@ export interface FilePart {
 }
 
 // Sử dụng các model Gemini mới nhất (2026)
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
+const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -782,7 +782,7 @@ export class GeminiService {
 
       // Nếu Google bảo chờ quá lâu (> 8s), hoặc đã thử lại 1 lần bận liên tiếp
       // thì đổi model luôn cho nhanh
-      if (waitMs > 8000 || this.retryAttempt >= 1 || isNetworkIssue) {
+      if (waitMs > 10000 || this.retryAttempt >= 2 || isNetworkIssue) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
