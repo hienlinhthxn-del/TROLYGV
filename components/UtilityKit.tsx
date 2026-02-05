@@ -931,6 +931,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
 
       if (rawQuestions.length > 0) {
+        // KIỂM TRA AN TOÀN: Nếu AI trả về một mảng các chuỗi (chỉ có đáp án) thay vì các đối tượng câu hỏi.
+        if (typeof rawQuestions[0] === 'string' || typeof rawQuestions[0] === 'number') {
+          throw new Error("AI đã trả về một danh sách đáp án thay vì bộ câu hỏi đầy đủ. Vui lòng thử lại.");
+        }
+
         const formattedQuestions = rawQuestions.map((q: any, i: number) => {
           // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
           const resolveOptions = (candidate: unknown) => {
@@ -956,11 +961,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           if (normalizedOptions.length === 0 && q.answer) {
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
-          const pageIndex = Number(q.page || q.pageIndex || q.pageNumber);
+          const pageIndex = Number(q.page_index ?? q.page ?? q.pageNumber); // Ưu tiên page_index (0-based)
           // Logic gán ảnh thông minh:
           // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó.
           // 2. Nếu không, và chỉ có 1 trang ảnh duy nhất được tải lên, dùng ảnh đó.
-          const pageImage = (Number.isFinite(pageIndex) && pageIndex > 0 && pageImageUrls[pageIndex - 1])
+          const pageImage = (Number.isFinite(pageIndex) && pageIndex >= 0 && pageImageUrls[pageIndex])
             ? pageImageUrls[pageIndex - 1]
             : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
 

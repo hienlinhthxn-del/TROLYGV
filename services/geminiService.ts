@@ -212,26 +212,28 @@ export class GeminiService {
     this.setStatus("Đang soạn nội dung...");
 
     const fullPrompt = `${this.currentInstruction}
-    
-    NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ tài liệu (Ảnh/PDF). Tài liệu này thường chứa khoảng 20 đến 30 câu hỏi.
-    HÃY KIÊN NHẪN ĐỌC HẾT TÀI LIỆU VÀ TRÍCH XUẤT KHÔNG BỎ SÓT CÂU NÀO.
-    NẾU TÀI LIỆU MỜ HOẶC KHÓ ĐỌC, HÃY CỐ GẮNG SUY LUẬN ĐỂ TÌM RA NỘI DUNG CÂU HỎI HỢP LÝ NHẤT.
 
-    YÊU CẦU XỬ LÝ DẠNG BÀI VIOLYMPIC / TRẠNG NGUYÊN TIẾNG VIỆT (BẮT BUỘC):
-    1. Nếu câu hỏi có hình minh họa (hình học, con vật, đồ vật, quy luật dãy hình...):
-       - Hãy phân tích nội dung hình ảnh thật kỹ.
-       - **QUAN TRỌNG:** Nếu là file ảnh/PDF scan, hãy OCR chính xác nội dung văn bản và công thức.
-       - **BẮT BUỘC:** Nếu câu hỏi gốc có hình ảnh, trường "image" trong JSON KHÔNG ĐƯỢC ĐỂ TRỐNG. Hãy điền mô tả chi tiết [HÌNH ẢNH: ...] hoặc mã SVG.
-       - **ƯU TIÊN HÀNG ĐẦU:** Mô tả hình ảnh bằng văn bản một cách chi tiết và rõ ràng trong trường "image". Ví dụ: "image": "[HÌNH ẢNH: Một hình vuông bên trong có một hình tròn màu xanh]".
-       - **CHỈ KHI THẬT SỰ CẦN THIẾT:** Nếu hình học quá đơn giản (ví dụ: một tam giác), bạn có thể dùng mã SVG. SVG phải trên một dòng và không chứa ký tự đặc biệt có thể làm hỏng JSON.
-       - Với dạng bài QUY LUẬT: Hãy mô tả rõ dãy hình. Ví dụ: "Hoàn thành quy luật: [Con quạ] [Con quạ] [Đại bàng] [Con quạ] [Con quạ] [?]"
-       - Với dạng bài ĐIỀN SỐ/CHỮ VÀO HÌNH: Hãy chuyển thành câu hỏi văn bản. Ví dụ: "Số thích hợp điền vào hình tròn cuối cùng là bao nhiêu? (Quy luật: Số sau gấp đôi số trước)".
-       - Với dạng bài ĐIỀN TỪ (Trạng Nguyên Tiếng Việt): Hãy mô tả rõ ngữ cảnh. Ví dụ: "Điền từ thích hợp vào chỗ trống: 'Học ... đôi với hành'".
-    2. Nếu ĐÁP ÁN là hình ảnh: 
-       - Bắt buộc điền mô tả hoặc mã SVG vào trường "image" của đối tượng option.
-       - Trường "text" của option có thể để là "Hình A", "Hình B" nếu đã có ảnh.
-    3. SỐ LƯỢNG: Phải trích xuất đủ 20-30 câu nếu tài liệu có đủ. Không được tự ý tóm tắt hay cắt bớt.
-    4. GIẢI THÍCH (explanation): Cần ngắn gọn, chỉ ra quy luật logic của bài toán/câu đố.
+    **NHIỆM VỤ CỐT LÕI:** Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ câu hỏi.
+    **BỐI CẢNH:** Tài liệu thường là đề thi Violympic, Trạng Nguyên Tiếng Việt, chứa 20-50 câu hỏi. Hãy kiên nhẫn xử lý hết, không bỏ sót. Nếu tài liệu mờ, hãy cố gắng suy luận nội dung.
+
+    **QUY TẮC XỬ LÝ (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):**
+
+    **1. VỀ CẤU TRÚC & SỐ LƯỢNG:**
+       - **KHÔNG BAO GIỜ** được trả về một mảng chỉ chứa đáp án (ví dụ: \`["A", "B", "C"]\`).
+       - **LUÔN LUÔN** trả về cấu trúc JSON đầy đủ như trong mẫu, bao gồm \`title\`, \`subject\`, và mảng \`questions\`.
+       - **PHẢI** trích xuất tất cả các câu hỏi có trong tài liệu. Nếu tài liệu có 30 câu, bạn phải trả về 30 câu.
+
+    **2. VỀ HÌNH ẢNH (QUAN TRỌNG NHẤT):**
+       - Với **MỌI CÂU HỎI**, bạn **PHẢI** xác định nó nằm ở trang nào và trả về trường \`"page_index": N\` (N là số trang, bắt đầu từ 0).
+       - Nếu câu hỏi hoặc đáp án có hình ảnh, trường \`"image"\` **KHÔNG ĐƯỢC ĐỂ TRỐNG**.
+       - **ƯU TIÊN 1 (Mô tả):** Mô tả hình ảnh chi tiết bằng văn bản, ví dụ: \`"image": "[HÌNH ẢNH: Một chiếc cân đĩa, bên trái có 2 quả táo, bên phải có 1 quả cam.]"\`.
+       - **ƯU TIÊN 2 (SVG):** Nếu là hình học rất đơn giản, có thể dùng mã SVG (trên một dòng, không chứa ký tự làm hỏng JSON).
+
+    **3. VỀ NỘI DUNG:**
+       - **Câu hỏi quy luật:** Mô tả rõ dãy hình. Ví dụ: \`"content": "Hoàn thành quy luật: [Hình con quạ] [Hình con quạ] [Hình đại bàng] [?]"\`.
+       - **Câu hỏi điền từ:** Mô tả rõ ngữ cảnh. Ví dụ: \`"content": "Điền từ thích hợp vào chỗ trống: 'Học ... đôi với hành'"\`
+       - **Đáp án:** Trường \`"answer"\` phải chứa **ĐẦY ĐỦ NỘI DUNG** của đáp án đúng, không chỉ là "A" hay "B".
+       - **Giải thích (\`explanation\`):** Ngắn gọn, chỉ ra quy luật hoặc logic.
 
     QUY TẮC CƠ BẢN ĐỂ TRÁNH LỖI JSON:
     1. QUAN TRỌNG NHẤT: Chỉ trả về JSON. KHÔNG có lời dẫn (Ví dụ: "Đây là kết quả..."). Bắt buộc dùng dấu ngoặc kép (") cho tên trường và giá trị chuỗi.
@@ -256,7 +258,7 @@ export class GeminiService {
           ], 
           "answer": "A", 
           "explanation": "Giải thích ngắn gọn", 
-          "image": "SVG hoặc mô tả",
+          "image": "[HÌNH ẢNH: Mô tả chi tiết...]",
           "page_index": 0 
         } 
       ] 
