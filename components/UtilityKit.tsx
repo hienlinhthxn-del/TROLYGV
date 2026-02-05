@@ -757,7 +757,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         return bytes;
       };
 
-      const convertPdfToImages = async (base64: string): Promise<any[]> => {
+      const convertPdfToImages = async (base64: string): Promise<{ inlineData: any, dataUrl: string }[]> => {
         try {
           // @ts-ignore
           const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
@@ -766,19 +766,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
           const pdf = await loadingTask.promise;
-          const images: any[] = [];
+          const images: { inlineData: any, dataUrl: string }[] = [];
 
-          // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
-          const maxPages = Math.min(pdf.numPages, 5);
-          // Tự động điều chỉnh chất lượng/kích thước ảnh để giảm dung lượng payload
-          let scale = 2.0;
-          let quality = 0.9;
-
-          // Tối ưu hóa: Nếu file nhiều trang, giảm chất lượng để tránh lỗi payload
-          if (maxPages >= 3) {
-            scale = 1.5;
-            quality = 0.8;
-          }
+          // Tăng giới hạn lên 30 trang để xử lý được nhiều câu hỏi hơn
+          const maxPages = Math.min(pdf.numPages, 30);
+          
+          // Tự động điều chỉnh chất lượng để tránh quá tải payload
+          let scale = 1.5;
+          let quality = 0.8;
+          if (pdf.numPages > 5) { scale = 1.2; quality = 0.7; }
+          if (pdf.numPages > 15) { scale = 1.0; quality = 0.6; }
 
           for (let i = 1; i <= maxPages; i++) {
             const page = await pdf.getPage(i);
@@ -799,28 +796,36 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               inlineData: {
                 data: imgData.split(',')[1],
                 mimeType: 'image/jpeg'
-              }
+              },
+              dataUrl: imgData
             });
           }
           return images;
         } catch (e) {
           console.error("PDF Convert Error:", e);
           alert("Không thể chuyển đổi PDF tự động. Hệ thống sẽ thử gửi file gốc...");
-          return null as any; // Fallback to original
+          return [];
         }
       };
 
       const finalFileParts: any[] = [];
+      const pageImageUrls: string[] = [];
+
       for (const part of fileParts) {
         if (part.inlineData.mimeType === 'application/pdf') {
           const images = await convertPdfToImages(part.inlineData.data);
           if (images && images.length > 0) {
-            finalFileParts.push(...images);
+            images.forEach(img => {
+              finalFileParts.push({ inlineData: img.inlineData });
+              pageImageUrls.push(img.dataUrl);
+            });
           } else {
             finalFileParts.push(part); // Fallback nếu lỗi convert
           }
         } else {
           finalFileParts.push(part);
+          // Với ảnh đơn lẻ, tạo dataUrl để dùng nếu cần
+          pageImageUrls.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
         }
       }
       // -------------------------------------------------------------
@@ -831,7 +836,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       YÊU CẦU XỬ LÝ:
       1. Trích xuất tất cả câu hỏi tìm thấy. Đừng bỏ sót câu nào.
-      2. Với câu hỏi có hình ảnh: BẮT BUỘC mô tả chi tiết hình ảnh vào trường "image" (ví dụ: "[HÌNH ẢNH: Hình tam giác ABC...]").
+      2. Với câu hỏi có hình ảnh: 
+         - Nếu câu hỏi nằm trên trang nào, hãy trả về thuộc tính "page_index" (số thứ tự trang, bắt đầu từ 0).
+         - Mô tả chi tiết hình ảnh vào trường "image" (ví dụ: "[HÌNH ẢNH: Hình tam giác ABC...]").
       3. Nếu tài liệu mờ, hãy cố gắng luận ra nội dung hợp lý nhất.
       4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
@@ -861,11 +868,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             })
             : []; // QuizPlayer luôn cần một mảng
 
+          // Logic gán ảnh thông minh:
+          // Nếu AI trả về page_index, dùng ảnh trang đó.
+          // Nếu không, và chỉ có 1 trang ảnh, dùng ảnh đó.
+          let image = q.image || '';
+          const pageIndex = typeof q.page_index === 'number' ? q.page_index : (typeof q.page === 'number' ? q.page - 1 : -1);
+          
+          if (pageIndex >= 0 && pageIndex < pageImageUrls.length) {
+             image = pageImageUrls[pageIndex];
+          } else if (pageImageUrls.length === 1 && (!image || image.includes('[HÌNH ẢNH'))) {
+             image = pageImageUrls[0];
+          }
+
           return {
             id: q.id || `quiz-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
             question: q.content || q.question || '', // QuizPlayer dùng 'question'
-            image: q.image || '',
+            image: image,
             options: normalizedOptions,
             answer: q.answer || '',
             explanation: q.explanation || '',
