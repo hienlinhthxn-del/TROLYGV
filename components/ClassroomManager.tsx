@@ -1587,9 +1587,16 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     if (quizFileInputRef.current) quizFileInputRef.current.value = '';
   };
 
-  const renderQuestion = (q: ExamQuestion, index: number) => (
-    // This will be a simple render function for the generated quiz.
-  );
+  const renderQuestion = (q: ExamQuestion, index: number) => {
+    return (
+      <div key={q.id || index} className="p-2 border-b border-slate-100">
+        <div className="font-semibold">Câu {index + 1}: {q.content}</div>
+        {q.image && (
+          <div className="mt-2">{renderImage(q.image)}</div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
