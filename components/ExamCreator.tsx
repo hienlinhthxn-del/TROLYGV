@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExamQuestion, CognitiveLevel, Attachment } from '../types';
 import { geminiService, FilePart } from '../services/geminiService';
+import { convertPdfToImages, ocrImages } from '../services/pdfService';
 
 interface ExamCreatorProps {
   onExportToWorkspace: (content: string) => void;
@@ -129,6 +130,67 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       newMatrix[s]['Vận dụng'].mcq = count - (newMatrix[s]['Nhận biết'].mcq + newMatrix[s]['Thông hiểu'].mcq);
     });
     setStrandMatrix(newMatrix);
+  };
+
+  const handleExportJSON = () => {
+    if (questions.length === 0) return;
+    try {
+      const payload = {
+        header: examHeader,
+        subject: config.subject,
+        grade: config.grade,
+        readingPassage,
+        questions
+      };
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(examHeader || 'exam').replace(/[^a-z0-9\-_ ]/gi, '_')}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e: any) {
+      alert('Lỗi khi xuất JSON: ' + (e.message || e));
+    }
+  };
+
+  const handleExportDOCX = () => {
+    if (questions.length === 0) return;
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>${examHeader || 'Đề thi'}</title>
+          <style>body{font-family:Arial,Helvetica,sans-serif;color:#222} .question{margin:16px 0}</style>
+        </head>
+        <body>
+          <h1>${examHeader || ''}</h1>
+          <p><strong>Môn:</strong> ${config.subject} &nbsp; <strong>Lớp:</strong> ${config.grade}</p>
+          ${readingPassage ? `<h3>Đoạn đọc:</h3><div>${readingPassage}</div>` : ''}
+          ${questions.map((q, i) => `
+            <div class="question">
+              <div><strong>Câu ${i + 1}:</strong> ${q.content}</div>
+              ${q.image ? `<div><img src="${q.image}" style="max-width:520px; height:auto;"/></div>` : ''}
+              ${q.options && q.options.length ? `<div><em>Đáp án:</em><ul>${q.options.map(o=>`<li>${typeof o==='string'?o:o.text}</li>`).join('')}</ul></div>` : ''}
+            </div>
+          `).join('')}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(examHeader || 'exam').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e: any) {
+      alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+    }
   };
 
   const stats = useMemo(() => {
@@ -261,6 +323,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           mimeType: file.type
         };
         setPendingImportFiles(prev => [...prev, newFile]);
+        // Tự động bắt đầu bóc tách sau khi file được thêm (không hỏi người dùng)
+        setTimeout(() => {
+          if (!isImporting) {
+            try {
+              handleImportOldExam();
+            } catch (err) {
+              console.warn('Auto-import failed to start:', err);
+            }
+          }
+        }, 600);
       };
       reader.readAsDataURL(file);
     });
@@ -303,103 +375,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       }`;
 
     try {
-      // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
-      const base64ToUint8Array = (data: string) => {
-        const binary = atob(data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        return bytes;
-      };
-
-      const trimCanvasWhitespace = (sourceCanvas: HTMLCanvasElement) => {
-        const ctx = sourceCanvas.getContext('2d');
-        if (!ctx) return sourceCanvas;
-        const { width, height } = sourceCanvas;
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const { data } = imageData;
-        let minX = width;
-        let minY = height;
-        let maxX = 0;
-        let maxY = 0;
-
-        for (let y = 0; y < height; y += 1) {
-          for (let x = 0; x < width; x += 1) {
-            const idx = (y * width + x) * 4;
-            const r = data[idx];
-            const g = data[idx + 1];
-            const b = data[idx + 2];
-            const a = data[idx + 3];
-            // Tìm pixel không phải màu trắng (có nội dung)
-            if (a > 10 && (r < 245 || g < 245 || b < 245)) {
-              if (x < minX) minX = x;
-              if (y < minY) minY = y;
-              if (x > maxX) maxX = x;
-              if (y > maxY) maxY = y;
-            }
-          }
-        }
-
-        if (minX >= maxX || minY >= maxY) return sourceCanvas;
-
-        const croppedWidth = maxX - minX + 1;
-        const croppedHeight = maxY - minY + 1;
-        const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = croppedWidth;
-        croppedCanvas.height = croppedHeight;
-        const croppedCtx = croppedCanvas.getContext('2d');
-        if (!croppedCtx) return sourceCanvas;
-        croppedCtx.drawImage(sourceCanvas, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
-        return croppedCanvas;
-      };
-
-      const convertPdfToImages = async (base64: string): Promise<any[]> => {
-        try {
-          // @ts-ignore
-          const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-          // @ts-ignore
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-
-          const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
-          const pdf = await loadingTask.promise;
-          const images: any[] = [];
-          // Tăng giới hạn trang để xử lý được nhiều hơn
-          const maxPages = Math.min(pdf.numPages, 30);
-          let scale = 2.0;
-          let quality = 0.9;
-
-          // Tự động điều chỉnh chất lượng dựa trên số trang để tránh tràn bộ nhớ
-          if (pdf.numPages > 2) { scale = 1.5; quality = 0.8; }
-          if (pdf.numPages > 10) { scale = 1.2; quality = 0.7; }
-          if (pdf.numPages > 20) { scale = 1.0; quality = 0.6; }
-
-          for (let i = 1; i <= maxPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context!, viewport: viewport }).promise;
-
-            // Cắt bỏ khoảng trắng thừa xung quanh trang
-            const trimmedCanvas = trimCanvasWhitespace(canvas);
-            const imgData = trimmedCanvas.toDataURL('image/jpeg', quality);
-            const base64Jpeg = imgData.split(',')[1];
-
-            images.push({
-              inlineData: { data: base64Jpeg, mimeType: 'image/jpeg' },
-              dataUrl: `data:image/jpeg;base64,${base64Jpeg}` // Lưu lại để hiển thị trên UI
-            });
-          }
-          return images;
-        } catch (e) {
-          console.error("PDF Convert Error:", e);
-          return []; // Fallback nếu lỗi
-        }
-      };
-
       const finalFileParts: FilePart[] = [];
       const pageImageUrls: string[] = [];
 
@@ -416,11 +391,25 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           }
         } else if (f.data && f.mimeType) {
           finalFileParts.push({ inlineData: { data: f.data, mimeType: f.mimeType } });
+          if (f.mimeType.startsWith('image/') && f.data.startsWith('data:')) {
+            pageImageUrls.push(`data:${f.mimeType};base64,${f.data}`);
+          }
         }
       }
 
       // Cập nhật prompt để yêu cầu AI trả về page_index
-      const enhancedPrompt = prompt + "\nQUAN TRỌNG: Nếu câu hỏi nằm trên một trang cụ thể, hãy trả về thuộc tính 'page_index' (số thứ tự trang trong file, bắt đầu từ 0).";
+      // Chạy OCR trên các trang ảnh (nếu có) để giúp AI đọc chính xác hơn
+      let ocrNotes = '';
+      try {
+        if (pageImageUrls.length > 0) {
+          const ocrTexts = await ocrImages(pageImageUrls, 'vie+eng');
+          ocrNotes = ocrTexts.map((t, i) => t ? `OCR_PAGE_${i}: ${t.replace(/\n/g, ' ')}\n` : '').join('\n');
+        }
+      } catch (err) {
+        console.warn('OCR step failed, continuing without OCR notes', err);
+      }
+
+      const enhancedPrompt = prompt + "\n" + (ocrNotes ? `THÔNG TIN OCR:\n${ocrNotes}\n` : '') + "QUAN TRỌNG: Nếu câu hỏi nằm trên một trang cụ thể, hãy trả về thuộc tính 'page_index' (số thứ tự trang trong file, bắt đầu từ 0).";
 
       const extractQuestions = (result: any) => {
         if (result && Array.isArray(result.questions)) return result.questions;
@@ -1054,7 +1043,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 <i className="fas fa-trash-alt mr-2"></i>Xóa
               </button>
             )}
-            <button onClick={exportText} disabled={questions.length === 0} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700 disabled:opacity-30 transition-all">Xuất bản thảo</button>
+            <div className="flex items-center space-x-2">
+              <button onClick={handleExportJSON} disabled={questions.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-green-700 disabled:opacity-30 transition-all">Xuất JSON</button>
+              <button onClick={handleExportDOCX} disabled={questions.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-blue-700 disabled:opacity-30 transition-all">Xuất DOCX</button>
+              <button onClick={exportText} disabled={questions.length === 0} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700 disabled:opacity-30 transition-all">Xuất bản thảo</button>
+            </div>
           </div>
         </div>
 
