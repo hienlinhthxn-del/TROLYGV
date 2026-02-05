@@ -1587,15 +1587,16 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     if (quizFileInputRef.current) quizFileInputRef.current.value = '';
   };
 
-  const renderQuestion = (q: ExamQuestion, index: number) => {
-    return (
-      <div key={q.id || index} className="p-2 border-b border-slate-100">
-        <div className="font-semibold">Câu {index + 1}: {q.content}</div>
-        {q.image && (
-          <div className="mt-2">{renderImage(q.image)}</div>
-        )}
-      </div>
-    );
+  const renderImage = (content: string) => {
+    if (!content) return null;
+    const trimmed = content.trim();
+    if (trimmed.startsWith('<svg')) {
+      return <div className="flex justify-center my-2" dangerouslySetInnerHTML={{ __html: trimmed }} />;
+    }
+    if (trimmed.startsWith('http') || trimmed.startsWith('data:image')) {
+      return <img src={trimmed} alt="Minh họa" className="max-h-40 max-w-full object-contain mx-auto my-2 rounded-lg" />;
+    }
+    return <div className="my-2 p-2 bg-slate-50 rounded-md text-sm italic text-slate-500 text-center">{trimmed}</div>;
   };
 
   return (
@@ -1763,12 +1764,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                 {generatedQuiz.questions.map((q, i) => (
                   <div key={q.id || i} className="p-4 border border-slate-200 rounded-xl bg-white">
                     <p className="font-bold">Câu {i + 1}: {q.content}</p>
-                    {q.image && <div className="my-2 p-2 bg-slate-50 rounded-md text-sm italic text-slate-500">{q.image}</div>}
+                    {q.image && renderImage(q.image)}
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {q.options?.map((opt: any, optIdx: number) => (
                         <div key={optIdx} className={`p-2 rounded-md text-xs ${String(opt.text) === String(q.answer) ? 'bg-emerald-100 text-emerald-800 font-bold' : 'bg-slate-50'}`}>
                           {opt.text}
-                          {opt.image && <span className="text-slate-400 ml-2 italic text-[10px]">[có ảnh]</span>}
+                          {opt.image && renderImage(opt.image)}
                         </div>
                       ))}
                     </div>

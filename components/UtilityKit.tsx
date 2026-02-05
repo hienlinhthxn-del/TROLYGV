@@ -391,6 +391,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
   const [showCropper, setShowCropper] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);

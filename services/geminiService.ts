@@ -171,7 +171,14 @@ export class GeminiService {
       }
     } catch (error: any) {
       if (error.message?.includes("429")) {
-        throw new Error("Lượt dùng miễn phí hiện tại đã hết. Thầy Cô vui lòng đợi 1 phút rồi thử lại nhé!");
+        // Nếu gặp lỗi 429 ở luồng streaming, thử ngay nhà cung cấp dự phòng (OpenAI / Anthropic)
+        try {
+          const fallbackText = await this.fallbackToOtherProviders(prompt, false);
+          yield { text: fallbackText, grounding: null };
+          return;
+        } catch (e) {
+          throw new Error("Lượt dùng miễn phí hiện tại đã hết. Thầy Cô vui lòng đợi 1 phút rồi thử lại nhé!");
+        }
       }
       if (error.message?.includes("safety") || error.message?.includes("blocked")) {
         throw new Error("Nội dung câu hỏi hoặc câu trả lời bị hệ thống an toàn chặn. Thầy/Cô vui lòng diễn đạt lại câu hỏi nhé!");

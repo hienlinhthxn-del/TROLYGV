@@ -13,6 +13,7 @@
     "docx": "9.1.0",
     "html2pdf.js": "^0.14.0",
     "mammoth": "^1.11.0",
+    "pdf-parse": "^1.1.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0",
