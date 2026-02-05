@@ -256,7 +256,8 @@ export class GeminiService {
           ], 
           "answer": "A", 
           "explanation": "Giải thích ngắn gọn", 
-          "image": "SVG hoặc mô tả" 
+          "image": "SVG hoặc mô tả",
+          "page_index": 0 
         } 
       ] 
     }`;

@@ -196,6 +196,14 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
         </div>
       );
     }
+    // Fallback cho mô tả ảnh nếu không có ảnh thật
+    if (trimmedSrc.startsWith('[HÌNH ẢNH') || trimmedSrc.startsWith('[IMAGE')) {
+      return (
+        <div className="my-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl text-center text-amber-800 text-sm font-medium italic">
+          <i className="fas fa-image mr-2"></i>{trimmedSrc.replace(/[\[\]]/g, '')}
+        </div>
+      );
+    }
     return (
       <div className="my-6 p-6 bg-indigo-50 border border-indigo-100 rounded-[32px] flex items-start space-x-3">
         <i className="fas fa-circle-info text-indigo-400 mt-1"></i>

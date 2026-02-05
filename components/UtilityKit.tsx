@@ -826,7 +826,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const pageImages: string[] = [];
 
           // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
-          const maxPages = Math.min(pdf.numPages, 5);
+          const maxPages = Math.min(pdf.numPages, 20);
 
           // Tự động điều chỉnh chất lượng để tránh quá tải payload
           let scale = 2.0;
@@ -891,14 +891,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm.
+      const prompt = `Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm (thường có từ 30-50 câu, hãy lấy hết KHÔNG BỎ SÓT câu nào).
       
       ${additionalPrompt ? `YÊU CẦU CỤ THỂ: "${additionalPrompt}"` : ''}
 
       YÊU CẦU XỬ LÝ:
-      1. Trích xuất tất cả câu hỏi tìm thấy. Đừng bỏ sót câu nào.
-      2. Với câu hỏi/đáp án có hình ảnh: BẮT BUỘC điền trường "image" (và options[].image).
-         - Nếu có ảnh trong tài liệu, hãy đặt "image" là mô tả [HÌNH ẢNH: ...] và thêm "page" là số trang (1-based) nơi ảnh xuất hiện.
+      1. Trích xuất tất cả câu hỏi tìm thấy. Nếu tài liệu dài, hãy kiên nhẫn xử lý hết.
+      2. QUAN TRỌNG VỀ HÌNH ẢNH:
+         - Với MỌI câu hỏi, hãy xác định nó nằm ở trang số mấy và trả về trường "page" (số nguyên, bắt đầu từ 1).
+         - Nếu câu hỏi có hình ảnh: Điền trường "image" là mô tả chi tiết [HÌNH ẢNH: ...] để hệ thống biết và hiển thị ảnh gốc của trang đó.
       3. Nếu tài liệu mờ, hãy cố gắng luận ra nội dung hợp lý nhất.
       4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
 
