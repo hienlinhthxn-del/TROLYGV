@@ -790,6 +790,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         return;
       }
 
+      // Ensure we have at least one API key available (Gemini or fallback)
+      const hasGeminiKey = !!(localStorage.getItem('manually_entered_api_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any).VITE_GEMINI_API_KEY);
+      const hasOpenAIKey = !!localStorage.getItem('openai_api_key');
+      const hasAnthropicKey = !!localStorage.getItem('anthropic_api_key');
+      if (!hasGeminiKey && !hasOpenAIKey && !hasAnthropicKey) {
+        setIsProcessing(false);
+        alert('Chưa cấu hình API Key cho Google Gemini hoặc key fallback (OpenAI/Anthropic).\nVui lòng mở Cài đặt API Key (biểu tượng chìa khóa góc trên) và dán key, hoặc dán key vào LocalStorage.');
+        // Emit global event so App can open the modal
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch {}
+        return;
+      }
+
       // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
       const base64ToUint8Array = (data: string) => {
         const binary = atob(data);

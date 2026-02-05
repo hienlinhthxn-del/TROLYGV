@@ -358,6 +358,13 @@ const App: React.FC = () => {
     if (savedCloud) setCloudDocs(JSON.parse(savedCloud));
   }, [currentPersona]);
 
+  // Listen for global request to open API Key settings (from child components)
+  useEffect(() => {
+    const handler = () => setShowApiKeySettings(true);
+    window.addEventListener('openApiSettings', handler as EventListener);
+    return () => window.removeEventListener('openApiSettings', handler as EventListener);
+  }, []);
+
   const updateClassroom = (updated: Classroom) => {
     setClassroom(updated);
     localStorage.setItem('edu_classroom_data', JSON.stringify(updated));
