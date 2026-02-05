@@ -798,7 +798,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       };
 
       // 2. Encode Base64 AN TOÀN với xử lý ký tự đặc biệt
-      const encodeData = (data: any) => {
+      const encodeData = async (data: any) => {
         try {
           // Stringify với replacer để xử lý ký tự đặc biệt
           const json = JSON.stringify(data, (key, value) => {
@@ -813,18 +813,17 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           // Kiểm tra JSON hợp lệ
           JSON.parse(json); // Validate trước khi encode
 
-          // Encode UTF-8 an toàn sang Base64
-          const utf8Bytes = new TextEncoder().encode(json);
-          let binary = '';
-          utf8Bytes.forEach(byte => {
-            binary += String.fromCharCode(byte);
+          // Sử dụng Blob + FileReader để encode Base64 nhanh và không bị lỗi stack overflow
+          const blob = new Blob([json], { type: 'application/json' });
+          return new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve(base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
           });
-
-          // Base64 encode và chuyển sang URL-safe format
-          return btoa(binary)
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
         } catch (error) {
           console.error("Encoding error:", error);
           throw new Error("Không thể mã hóa dữ liệu. Vui lòng kiểm tra nội dung câu hỏi.");
@@ -863,20 +862,20 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       let currentData = prepareData(viewMode === 'link' && hasLargeImages);
 
       // Thử nén trước, nếu không hỗ trợ thì dùng cách cũ
-      let finalCode = await compressData(currentData) || encodeData(currentData);
+      let finalCode = await compressData(currentData) || await encodeData(currentData);
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
       // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
       if (viewMode === 'link' && url.length > 2000 && !hasLargeImages) {
         console.warn(`Link quá dài (${url.length} ký tự), đang thử nén dữ liệu...`);
         currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
-        finalCode = await compressData(currentData) || encodeData(currentData);
+        finalCode = await compressData(currentData) || await encodeData(currentData);
         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
       }
 
       if (viewMode === 'code') {
         // Chế độ copy mã đề: luôn dùng bản đầy đủ
-        const fullBase64 = await compressData(prepareData(false)) || encodeData(prepareData(false));
+        const fullBase64 = await compressData(prepareData(false)) || await encodeData(prepareData(false));
         await navigator.clipboard.writeText(fullBase64);
         alert(`📋 Đã sao chép MÃ ĐỀ THI (Bao gồm cả hình ảnh).\n\n👉 Hướng dẫn: Gửi mã này cho học sinh qua Zalo/Mess. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
         return;

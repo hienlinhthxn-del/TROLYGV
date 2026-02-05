@@ -23,7 +23,7 @@ interface SavedLessonPlan {
 }
 
 // Component Quiz Player nội bộ
-const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onShare }) => {
+const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () => void }> = ({ data, onShare, onCopyCode }) => {
   const toSafeText = (value: unknown): string => {
     if (typeof value === 'string') return value;
     if (typeof value === 'number') return String(value);
@@ -149,6 +149,11 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void }> = ({ data, onS
           {onShare && (
             <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center">
               <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
+            </button>
+          )}
+          {onCopyCode && (
+            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
+              <i className="fas fa-code mr-1"></i>Mã
             </button>
           )}
           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
@@ -1092,6 +1097,17 @@ Chi tiết: ${errorMessage}
       const json = JSON.stringify(quizData);
       let finalCode = '';
 
+      const blobToBase64 = (blob: Blob): Promise<string> => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).split(',')[1];
+            resolve(base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+          };
+          reader.readAsDataURL(blob);
+        });
+      };
+
       // @ts-ignore
       if (window.CompressionStream) {
         const stream = new Blob([json]).stream();
@@ -1099,14 +1115,10 @@ Chi tiết: ${errorMessage}
         const compressed = stream.pipeThrough(new CompressionStream('gzip'));
         const response = new Response(compressed);
         const blob = await response.blob();
-        const buffer = await blob.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        finalCode = 'v2_' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        finalCode = 'v2_' + await blobToBase64(blob);
       } else {
-        const utf8Bytes = new TextEncoder().encode(json);
-        let binary = '';
-        utf8Bytes.forEach(byte => binary += String.fromCharCode(byte));
-        finalCode = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const blob = new Blob([json], { type: 'application/json' });
+        finalCode = await blobToBase64(blob);
       }
 
       const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
@@ -1123,6 +1135,65 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
+    }
+  };
+
+  const handleCopyQuizCode = async () => {
+    if (!result || !Array.isArray(result)) return;
+
+    const compressDataImage = async (dataUrl: string): Promise<string> => {
+      return new Promise((resolve) => {
+        try {
+          const img = new Image();
+          img.onload = () => {
+            const maxWidth = 720;
+            const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(dataUrl); return; }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.62));
+          };
+          img.onerror = () => resolve(dataUrl);
+          img.src = dataUrl;
+        } catch { resolve(dataUrl); }
+      });
+    };
+
+    const normalizeSharedImage = async (value: unknown): Promise<string> => {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed || !trimmed.startsWith('data:image')) return trimmed;
+      return await compressDataImage(trimmed);
+    };
+
+    try {
+      const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
+        const img = await normalizeSharedImage(q.image);
+        const opts = await Promise.all((q.options || []).map(async (o: any) => ({ ...o, image: await normalizeSharedImage(o.image) })));
+        return [1, q.question || '', opts, q.answer || '', q.explanation || '', img];
+      }));
+
+      const quizData = { s: subject, g: grade, q: normalizedQuestions };
+      const json = JSON.stringify(quizData);
+      let finalCode = '';
+
+      const blobToBase64 = (blob: Blob): Promise<string> => new Promise(r => { const reader = new FileReader(); reader.onloadend = () => r((reader.result as string).split(',')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')); reader.readAsDataURL(blob); });
+
+      // @ts-ignore
+      if (window.CompressionStream) {
+        const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+        finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
+      } else {
+        finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+      }
+
+      await navigator.clipboard.writeText(finalCode);
+      alert("✅ Đã sao chép MÃ ĐỀ THI!");
+    } catch (e) {
+      alert("Lỗi khi tạo mã đề.");
     }
   };
 
@@ -2094,7 +2165,7 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
                   ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
-                    <QuizPlayer data={result} onShare={handleShareQuiz} />
+                    <QuizPlayer data={result} onShare={handleShareQuiz} onCopyCode={handleCopyQuizCode} />
                   ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">
