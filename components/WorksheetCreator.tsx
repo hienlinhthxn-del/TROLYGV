@@ -228,6 +228,66 @@ const WorksheetCreator: React.FC = () => {
         setTimeout(() => printWindow.print(), 1000);
     };
 
+        const handleExportJSON = () => {
+                if (!worksheet) return;
+                saveToHistory(worksheet);
+                try {
+                        const jsonStr = JSON.stringify(worksheet, null, 2);
+                        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${worksheet.title || 'quiz'}.json`;
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                } catch (e: any) {
+                        alert('Lỗi khi xuất JSON: ' + (e.message || e));
+                }
+        };
+
+        const handleExportDOCX = async () => {
+                if (!worksheet) return;
+                saveToHistory(worksheet);
+                try {
+                        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>${worksheet.title}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; color: #333; }
+                    .header { text-align: center; }
+                    .question { margin: 18px 0; }
+                    .question-image img { max-width: 400px; height: auto; }
+                </style>
+            </head>
+            <body>
+                <div class="header"><h1>${worksheet.title}</h1><p>Môn: ${worksheet.subject}</p></div>
+                ${worksheet.questions.map((q, index) => `
+                    <div class="question">
+                        <div><strong>Câu ${index + 1}:</strong> ${q.question}</div>
+                        ${q.imageUrl ? `<div class="question-image"><img src="${q.imageUrl}" /></div>` : ''}
+                        ${q.options && q.options.length > 0 ? `<div><em>Đáp án:</em><ul>${q.options.map(o=>`<li>${o}</li>`).join('')}</ul></div>` : ''}
+                    </div>
+                `).join('')}
+            </body>
+            </html>
+        `;
+
+                        // Create a blob and save as .docx (Word will open HTML content inside)
+                        const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${worksheet.title || 'quiz'}.docx`;
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                } catch (e: any) {
+                        alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+                }
+        };
+
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: '100%', overflowY: 'auto', borderRadius: '20px' }} className="custom-scrollbar">
             <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
@@ -338,6 +398,8 @@ const WorksheetCreator: React.FC = () => {
                             />
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button onClick={() => saveToHistory(worksheet)} style={{ padding: '8px 15px', background: '#FF9800', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>💾 Lưu Phiếu</button>
+                                <button onClick={handleExportJSON} style={{ padding: '8px 15px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📄 Xuất JSON</button>
+                                <button onClick={handleExportDOCX} style={{ padding: '8px 15px', background: '#3F51B5', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📝 Xuất DOCX</button>
                                 <button onClick={() => setWorksheet(null)} style={{ padding: '8px 15px', background: '#f0f0f0', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Quay lại</button>
                             </div>
                         </div>

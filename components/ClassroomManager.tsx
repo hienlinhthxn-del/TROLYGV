@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Classroom, Student, Grade, DailyLogEntry, Attachment, PeriodicEvaluation } from '../types';
+import { Classroom, Student, Grade, DailyLogEntry, Attachment, PeriodicEvaluation, ExamQuestion } from '../types';
 import { geminiService, FilePart } from '../services/geminiService';
 
 interface ClassroomManagerProps {
@@ -95,6 +95,11 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [generatedNotifications, setGeneratedNotifications] = useState<string | null>(null);
 
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
+  // Thêm state và ref cho tính năng tạo quiz
+  const [generatedQuiz, setGeneratedQuiz] = useState<{ title: string; subject: string; questions: ExamQuestion[] } | null>(null);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [quizFile, setQuizFile] = useState<Attachment | null>(null);
+  const quizFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
 
   const [openSubjectSelect, setOpenSubjectSelect] = useState(false);
@@ -122,7 +127,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   // Reset active tab when switching sections
   useEffect(() => {
-    setActiveTab(section === 'daily' ? 'students' : 'reports');
+    setActiveTab(section === 'daily' ? 'students' : 'quiz-creator');
   }, [section]);
 
   // Reset detail view when switching tabs
@@ -1536,9 +1541,60 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     onUpdate({ ...classroom, attendance: newAttendance });
   };
 
+  const handleGenerateQuizFromFile = async () => {
+    if (!quizFile || isGeneratingQuiz) return;
+    setIsGeneratingQuiz(true);
+    setGeneratedQuiz(null);
+
+    try {
+      const prompt = `Trích xuất câu hỏi từ file đính kèm theo định dạng đề thi Violympic, Trạng Nguyên Tiếng Việt.`;
+      const filePart: FilePart = {
+        inlineData: { data: quizFile.data!, mimeType: quizFile.mimeType! }
+      };
+
+      // Gọi hàm service đã được cải tiến để xử lý file và hình ảnh
+      const result = await geminiService.generateExamQuestionsStructured(prompt, [filePart]);
+
+      if (result && result.questions) {
+        setGeneratedQuiz(result);
+      } else {
+        throw new Error("AI không trả về dữ liệu quiz hợp lệ.");
+      }
+
+    } catch (error) {
+      console.error("AI Quiz Generation Error:", error);
+      alert(`Lỗi khi tạo quiz từ file: ${error instanceof Error ? error.message : "Lỗi không xác định"}`);
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleQuizFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Data = (reader.result as string).split(',')[1];
+      setQuizFile({
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        name: file.name,
+        data: base64Data,
+        mimeType: file.type
+      });
+    };
+    reader.readAsDataURL(file);
+    if (quizFileInputRef.current) quizFileInputRef.current.value = '';
+  };
+
+  const renderQuestion = (q: ExamQuestion, index: number) => (
+    // This will be a simple render function for the generated quiz.
+  );
+
   return (
     <div className="flex flex-col h-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
       <input type="file" ref={gradeFileInputRef} onChange={handleGradeFileUpload} accept=".csv,.txt" className="hidden" />
+      <input type="file" ref={quizFileInputRef} onChange={handleQuizFileSelect} accept="application/pdf,image/*" className="hidden" />
       <input type="file" ref={studentFileInputRef} onChange={handleStudentListUpload} accept=".csv,.txt" className="hidden" />
 
       {/* Header */}
@@ -1628,7 +1684,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${section === 'periodic' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
         >
           <i className="fas fa-award"></i>
-          Đánh giá Định kỳ (TT27)
+          Đánh giá & Soạn đề
         </button>
       </div>
 
@@ -1654,8 +1710,69 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
         </div>
       )}
 
+      {section === 'periodic' && (
+        <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
+          {[
+            { id: 'quiz-creator', label: 'Tạo Quiz từ File', icon: 'fa-file-import' },
+            { id: 'reports', label: 'Báo cáo Phổ điểm', icon: 'fa-chart-pie' },
+            { id: 'subjects', label: 'ĐG Môn học (TT27)', icon: 'fa-book-open-reader' },
+            { id: 'competencies', label: 'ĐG Năng lực, Phẩm chất', icon: 'fa-star' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setReportViewMode(tab.id as any)}
+              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${reportViewMode === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <i className={`fas ${tab.icon} mr-2`}></i>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-        {section === 'periodic' && (
+        {section === 'periodic' && reportViewMode === 'quiz-creator' && (
+          <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+            <h3 className="text-xl font-black text-slate-800">Tạo Quiz từ File (Violympic, Trạng Nguyên...)</h3>
+            <p className="text-sm text-slate-500">Tải lên tệp PDF hoặc ảnh đề thi, AI sẽ tự động bóc tách câu hỏi, đáp án và cả hình ảnh minh họa.</p>
+            <div className="p-6 bg-indigo-50/50 rounded-2xl border-2 border-dashed border-indigo-200 flex flex-col items-center text-center">
+              <input type="file" ref={quizFileInputRef} onChange={handleQuizFileSelect} accept="application/pdf,image/*" className="hidden" />
+              {quizFile ? (
+                <div className="flex items-center space-x-3 text-sm font-bold text-indigo-800">
+                  <i className="fas fa-file-check text-emerald-500"></i>
+                  <span>{quizFile.name}</span>
+                  <button onClick={() => setQuizFile(null)} className="text-rose-500 hover:text-rose-700"><i className="fas fa-times-circle"></i></button>
+                </div>
+              ) : (
+                <button onClick={() => quizFileInputRef.current?.click()} className="text-indigo-600 font-bold"><i className="fas fa-upload mr-2"></i>Chọn tệp PDF hoặc Ảnh...</button>
+              )}
+            </div>
+            <button onClick={handleGenerateQuizFromFile} disabled={!quizFile || isGeneratingQuiz} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+              {isGeneratingQuiz ? <><i className="fas fa-spinner fa-spin mr-2"></i>Đang phân tích đề...</> : <><i className="fas fa-wand-magic-sparkles mr-2"></i>Bắt đầu tạo Quiz</>}
+            </button>
+            {generatedQuiz && (
+              <div className="mt-8 space-y-4">
+                <h4 className="text-lg font-black">{generatedQuiz.title || 'Kết quả Quiz'}</h4>
+                {generatedQuiz.questions.map((q, i) => (
+                  <div key={q.id || i} className="p-4 border border-slate-200 rounded-xl bg-white">
+                    <p className="font-bold">Câu {i + 1}: {q.content}</p>
+                    {q.image && <div className="my-2 p-2 bg-slate-50 rounded-md text-sm italic text-slate-500">{q.image}</div>}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      {q.options?.map((opt: any, optIdx: number) => (
+                        <div key={optIdx} className={`p-2 rounded-md text-xs ${String(opt.text) === String(q.answer) ? 'bg-emerald-100 text-emerald-800 font-bold' : 'bg-slate-50'}`}>
+                          {opt.text}
+                          {opt.image && <span className="text-slate-400 ml-2 italic text-[10px]">[có ảnh]</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'periodic' && reportViewMode !== 'quiz-creator' && (
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-100">
@@ -1790,21 +1907,6 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="flex space-x-2 border-b border-slate-100 pb-1">
-                <button
-                  onClick={() => setReportViewMode('subjects')}
-                  className={`px-4 py-2 text-[11px] font-bold uppercase tracking-widest transition-all rounded-t-xl ${reportViewMode === 'subjects' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  Tổng hợp Môn học
-                </button>
-                <button
-                  onClick={() => setReportViewMode('competencies')}
-                  className={`px-4 py-2 text-[11px] font-bold uppercase tracking-widest transition-all rounded-t-xl ${reportViewMode === 'competencies' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  Năng lực - Phẩm chất
-                </button>
               </div>
 
               <div className="overflow-x-auto">
