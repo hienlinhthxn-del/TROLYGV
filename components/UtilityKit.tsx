@@ -587,9 +587,40 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       let fullContent = '';
       const stream = geminiService.sendMessageStream(prompt, getFileParts());
-      for await (const chunk of stream) {
-        fullContent += chunk.text;
-        setResult(fullContent);
+
+      // Timeout / inactivity protections: if AI doesn't start streaming within
+      // START_TIMEOUT_MS or becomes inactive for INACTIVITY_TIMEOUT_MS, abort.
+      const START_TIMEOUT_MS = 20000; // 20s to receive first chunk
+      const INACTIVITY_TIMEOUT_MS = 45000; // 45s inactivity allowed between chunks
+
+      let timedOut = false;
+      let started = false;
+      let inactivityTimer: any = null;
+
+      const startWatchdog = setTimeout(() => { timedOut = true; }, START_TIMEOUT_MS);
+      const resetInactivity = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => { timedOut = true; }, INACTIVITY_TIMEOUT_MS);
+      };
+
+      try {
+        for await (const chunk of stream) {
+          if (timedOut) throw new Error('AI stream timeout: no response from model.');
+
+          if (!started) {
+            started = true;
+            clearTimeout(startWatchdog);
+            resetInactivity();
+          } else {
+            resetInactivity();
+          }
+
+          fullContent += (chunk && chunk.text) ? chunk.text : '';
+          setResult(fullContent);
+        }
+      } finally {
+        clearTimeout(startWatchdog);
+        if (inactivityTimer) clearTimeout(inactivityTimer);
       }
     } catch (error: any) {
       console.error("Lesson Plan Error:", error);
