@@ -834,6 +834,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           }
         } else {
           finalFileParts.push(part);
+          // For single images, also add their data URL to be used for display
+          if (part.inlineData.mimeType.startsWith('image/')) {
+            pageImageUrls.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+          }
         }
       }
       // -------------------------------------------------------------
@@ -890,7 +894,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
           const pageIndex = Number(q.page || q.pageIndex || q.pageNumber);
-          const pageImage = Number.isFinite(pageIndex) && pageIndex > 0 ? pageImageUrls[pageIndex - 1] : '';
+          // Logic gán ảnh thông minh:
+          // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó.
+          // 2. Nếu không, và chỉ có 1 trang ảnh duy nhất được tải lên, dùng ảnh đó.
+          const pageImage = (Number.isFinite(pageIndex) && pageIndex > 0 && pageImageUrls[pageIndex - 1])
+            ? pageImageUrls[pageIndex - 1]
+            : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
 
           const normalizeImage = (value: string, fallback: string) => {
             if (!value) return '';
