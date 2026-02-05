@@ -894,11 +894,17 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
           const pageIndex = Number(q.page || q.pageIndex || q.pageNumber);
-          const pageImage = Number.isFinite(pageIndex) && pageIndex > 0 ? pageImageUrls[pageIndex - 1] : '';
+          // Logic gán ảnh thông minh:
+          // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó.
+          // 2. Nếu không, và chỉ có 1 trang ảnh duy nhất được tải lên, dùng ảnh đó.
+          const pageImage = (Number.isFinite(pageIndex) && pageIndex > 0 && pageImageUrls[pageIndex - 1])
+            ? pageImageUrls[pageIndex - 1]
+            : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
 
           const normalizeImage = (value: string, fallback: string) => {
-            if (!value) return '';
+            if (!value) return fallback || '';
             const trimmed = value.trim();
+            if (!trimmed) return fallback || '';
             if (trimmed.startsWith('<svg')) return trimmed;
             if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
             return fallback || trimmed;
