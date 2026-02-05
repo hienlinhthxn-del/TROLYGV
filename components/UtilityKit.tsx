@@ -894,17 +894,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
           const pageIndex = Number(q.page || q.pageIndex || q.pageNumber);
-          // Logic gán ảnh thông minh:
-          // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó.
-          // 2. Nếu không, và chỉ có 1 trang ảnh duy nhất được tải lên, dùng ảnh đó.
-          const pageImage = (Number.isFinite(pageIndex) && pageIndex > 0 && pageImageUrls[pageIndex - 1])
-            ? pageImageUrls[pageIndex - 1]
-            : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
+          const pageImage = Number.isFinite(pageIndex) && pageIndex > 0 ? pageImageUrls[pageIndex - 1] : '';
 
           const normalizeImage = (value: string, fallback: string) => {
-            if (!value) return fallback || '';
+            if (!value) return '';
             const trimmed = value.trim();
-            if (!trimmed) return fallback || '';
             if (trimmed.startsWith('<svg')) return trimmed;
             if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
             return fallback || trimmed;
@@ -957,16 +951,28 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       const errorMessage = error.message || "Lỗi không xác định";
       const isPayloadError = /payload|size|large/i.test(errorMessage);
+      const isNetworkError = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(errorMessage);
 
-      // Kịch bản 1: Lỗi do dung lượng quá lớn
-      if (isPayloadError) {
+      // Kịch bản 1: Lỗi do mất kết nối / chặn mạng tới Google AI
+      if (isNetworkError) {
+        alert(`⚠️ Không kết nối được tới Google AI (Failed to fetch).
+
+Chi tiết: ${errorMessage}
+
+✅ Cách xử lý nhanh:
+- Kiểm tra Internet, VPN, proxy hoặc tường lửa mạng trường học
+- Tắt extension chặn quảng cáo/chặn script nếu có
+- Thử tải lại trang và tạo lại quiz sau 1-2 phút`);
+      }
+      // Kịch bản 2: Lỗi do dung lượng quá lớn
+      else if (isPayloadError) {
         if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy/Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file (thử với 1-2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay?`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]);
         }
       }
-      // Kịch bản 2: Lỗi chung khi tải file PDF (không phải do dung lượng)
+      // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
         if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không?`)) {
           setActiveTab('pdf_tools');
@@ -974,7 +980,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
         }
       } else {
-        // Kịch bản 3: Lỗi chung khác
+        // Kịch bản 4: Lỗi chung khác
         alert(`Lỗi bóc tách đề: ${errorMessage}`);
       }
     } finally {
@@ -985,24 +991,83 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
 
-    // Kiểm tra ảnh lớn
-    const hasLargeImages = result.some((q: any) => q.image && (q.image.length > 500 || q.image.startsWith('data:image')));
-    if (hasLargeImages) {
-      if (!window.confirm("⚠️ Quiz này có chứa hình ảnh lớn. Link chia sẻ sẽ KHÔNG bao gồm hình ảnh để đảm bảo hoạt động. Bạn có muốn tiếp tục?")) return;
-    }
+    const compressDataImage = async (dataUrl: string): Promise<string> => {
+      return new Promise((resolve) => {
+        try {
+          const img = new Image();
+          img.onload = () => {
+            const maxWidth = 720;
+            const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(dataUrl);
+              return;
+            }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.62));
+          };
+          img.onerror = () => resolve(dataUrl);
+          img.src = dataUrl;
+        } catch {
+          resolve(dataUrl);
+        }
+      });
+    };
+
+    const normalizeSharedImage = async (value: unknown): Promise<string> => {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (!trimmed.startsWith('data:image')) {
+        return trimmed.length > 14000 ? '' : trimmed;
+      }
+
+      const compressed = await compressDataImage(trimmed);
+      return compressed.length > 14000 ? '' : compressed;
+    };
 
     try {
+      let droppedImageCount = 0;
+      let compressedImageCount = 0;
+
+      const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
+        const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
+        const finalQuestionImage = await normalizeSharedImage(originalQuestionImage);
+
+        if (originalQuestionImage && !finalQuestionImage) droppedImageCount += 1;
+        if (originalQuestionImage && finalQuestionImage && originalQuestionImage !== finalQuestionImage) compressedImageCount += 1;
+
+        const rawOptions = Array.isArray(q?.options) ? q.options : [];
+        const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
+          if (typeof opt === 'string' || typeof opt === 'number') return opt;
+          const optionImageRaw = typeof opt?.image === 'string' ? opt.image.trim() : '';
+          const optionImageFinal = await normalizeSharedImage(optionImageRaw);
+          if (optionImageRaw && !optionImageFinal) droppedImageCount += 1;
+          if (optionImageRaw && optionImageFinal && optionImageRaw !== optionImageFinal) compressedImageCount += 1;
+
+          return {
+            ...opt,
+            image: optionImageFinal
+          };
+        }));
+
+        return ([
+          1,
+          q?.question || '',
+          normalizedOptions,
+          q?.answer || '',
+          q?.explanation || '',
+          finalQuestionImage
+        ]);
+      }));
+
       const quizData = {
         s: subject,
         g: grade,
-        q: result.map((q: any) => ([
-          1, // MCQ type
-          q.question,
-          q.options,
-          q.answer,
-          q.explanation,
-          hasLargeImages ? '' : (q.image || '') // Bỏ ảnh nếu quá lớn
-        ]))
+        q: normalizedQuestions
       };
 
       const json = JSON.stringify(quizData);
@@ -1027,7 +1092,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
       await navigator.clipboard.writeText(url);
-      alert("✅ Đã sao chép Link Quiz!\n\nThầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.");
+
+      const note = (compressedImageCount > 0 || droppedImageCount > 0)
+        ? `
+
+(Lưu ý: đã nén ${compressedImageCount} ảnh, lược bỏ ${droppedImageCount} ảnh quá lớn để link hoạt động ổn định.)`
+        : '';
+      alert(`✅ Đã sao chép Link Quiz!
+
+Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
