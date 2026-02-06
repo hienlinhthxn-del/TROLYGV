@@ -130,7 +130,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
   let displayImage = toSafeText(currentQuestion.image);
 
   if (!displayImage && displayQuestion) {
-    const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):(.*?)\]/i);
+    const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):(.*?)\]/i);
     if (imgMatch) {
       displayImage = imgMatch[0]; // Lấy cả cụm [HÌNH ẢNH: ...]
       displayQuestion = displayQuestion.replace(imgMatch[0], '').trim();
@@ -172,9 +172,9 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
               </div>
             ) : (
               // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
-              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm">
+              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm animate-pulse">
                 <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
-                {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH):/i, '').trim()}
+                {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):/i, '').trim()}
               </div>
             )
           )
@@ -992,6 +992,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             if (!value) return fallback || '';
             const trimmed = value.trim();
             if (!trimmed) return fallback || '';
+            // Nếu là lệnh cắt ảnh, ưu tiên dùng ảnh trang (fallback) để hiển thị
+            if (/\[(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE).*?\]/i.test(trimmed)) {
+                return fallback || trimmed;
+            }
             if (trimmed.startsWith('<svg')) return trimmed;
             if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
             return fallback || trimmed;
@@ -1014,7 +1018,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             q.cau_hoi,
             q['câu hỏi']
           );
-          const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):.*?\]/i) : null;
+          const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):.*?\]/i) : null;
           const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
           const questionImage = normalizeImage(q.image || imageMarker, pageImage);
           const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;

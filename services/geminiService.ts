@@ -323,7 +323,7 @@ export class GeminiService {
           ], 
           "answer": "A", 
           "explanation": "Giải thích ngắn gọn", 
-          "image": "[CẮT ẢNH TỪ ĐỀ: Trang 0 - Mô tả...]",
+          "image": "[CẮT ẢNH TỪ ĐỀ: Trang 0 - Hình tam giác ABC]",
           "page_index": 0 
         } 
       ] 
