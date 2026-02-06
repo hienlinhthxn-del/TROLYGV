@@ -511,6 +511,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           image = pageImageUrls[pageImageIndex++];
         }
 
+        // XÁC THỰC CÂU HỎI HỢP LỆ:
+        // - Phải có nội dung text (không chỉ khoảng trắng)
+        // - HOẶC có ảnh hợp lệ từ page_index
+        // - KHÔNG chấp nhận câu chỉ có mô tả [HÌNH ẢNH: ...] mà không có nội dung thực
+        const hasValidTextContent = normalizedContent.text && normalizedContent.text.trim().length > 3 && !normalizedContent.text.match(/^\[?HÌNH\s*ẢNH\]?\s*:/i);
+        const hasValidImage = image && (image.startsWith('data:image') || image.startsWith('<svg'));
+        const hasPageIndexWithImage = typeof q.page_index === 'number' && pageImageUrls[q.page_index];
+
+        // Nếu không có nội dung hợp lệ và không có ảnh hợp lệ từ page_index, bỏ qua câu này
+        if (!hasValidTextContent && !hasValidImage && !hasPageIndexWithImage) {
+          return null; // Mark for filtering
+        }
+
         return {
           id: 'imp-' + Date.now().toString() + i,
           type: q.type || 'Trắc nghiệm',
@@ -521,7 +534,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           answer: q.answer || '',
           explanation: q.explanation || '',
         };
-      }).filter(q => q.content.trim() !== '' || q.image.trim() !== ''); // Lọc lần cuối các câu hỏi rỗng
+      }).filter((q): q is ExamQuestion => q !== null && (q.content.trim() !== '' || q.image.trim() !== '')); // Lọc lần cuối các câu hỏi rỗng
 
       if (formatted.length === 0) {
         throw new Error("Không tìm thấy câu hỏi hợp lệ nào sau khi xử lý.");
@@ -742,34 +755,39 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const handleShareLink = async (viewMode: 'link' | 'code' = 'link') => {
     if (questions.length === 0) return;
 
-    // Kiểm tra xem có ảnh lớn không (Base64 hoặc SVG dài)
-    const hasLargeImages = questions.some(q => q.image && (q.image.length > 500 || q.image.startsWith('data:image')));
+    // Kiem tra xem co anh Base64 hoac SVG
+    const hasBase64Images = questions.some(q => q.image && q.image.startsWith('data:image'));
+    const hasSvgImages = questions.some(q => q.image && q.image.startsWith('<'));
+    const hasAnyImages = hasBase64Images || hasSvgImages;
 
-    if (viewMode === 'link' && hasLargeImages) {
-      const confirmMsg = `⚠️ CẢNH BÁO: Đề thi có chứa HÌNH ẢNH.\n\nDo giới hạn kỹ thuật của trình duyệt, "Link chia sẻ" KHÔNG THỂ chứa hình ảnh trực tiếp (Link sẽ quá dài và bị lỗi).\n\n✅ GIẢI PHÁP:\n1. Hãy chọn "Copy Mã Đề" (Nút bên cạnh) -> Gửi mã đó cho học sinh.\n2. Hoặc chấp nhận chia sẻ Link nhưng HÌNH ẢNH SẼ BỊ LƯỢC BỎ.\n\nBạn có muốn tiếp tục tạo Link (không ảnh) không?`;
+    if (viewMode === 'link' && hasAnyImages) {
+      const confirmMsg = "Canh bao: De thi co chua HINH ANH.\n\nLink se co gang nen de giu anh, nhung neu van qua dai, anh se bi bo.\n\nDe dam bao giu anh, hay dung 'Copy Ma De'.\n\nTiep tuc tao Link?";
       if (!window.confirm(confirmMsg)) return;
     }
 
     try {
-      // 1. Tối ưu hóa dữ liệu (Minify)
-      const prepareData = (isCompact: boolean) => {
+      // 1. Toi uu hoa du lieu - LUON GIU ANH
+      const prepareData = (stripImages: boolean = false) => {
         return {
           s: config.subject,
           g: config.grade,
           aid: createdAssignmentId,
           q: questions.map(q => {
-            // [type, content, options, answer, explanation, image]
             let explanation = q.explanation || '';
             let image = q.image || '';
 
-            if (isCompact) {
-              // Rút gọn mạnh nếu link quá dài
-              explanation = explanation.length > 50 ? explanation.substring(0, 47) + '...' : explanation;
-              image = (image.length > 200 || image.startsWith('<svg') || image.startsWith('data:image')) ? '' : image;
+            // Chi bo anh neu buoc phai
+            if (stripImages) {
+              image = '';
             }
 
-            const item: any[] = [
-              q.type === 'Trắc nghiệm' ? 1 : 0,
+            // Rut gon explanation
+            if (explanation.length > 100) {
+              explanation = explanation.substring(0, 97) + '...';
+            }
+
+            const item = [
+              q.type === 'Trac nghiem' ? 1 : 0,
               q.content,
               q.options || [],
               q.answer,
@@ -777,8 +795,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               image
             ];
 
-            // Loại bỏ các phần tử rỗng ở cuối để giảm kích thước
-            while (item.length > 0 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
+            while (item.length > 1 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
               item.pop();
             }
             return item;
@@ -846,37 +863,38 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         }
       };
 
-      // Nếu chọn Link và có ảnh lớn -> Bắt buộc dùng compact mode (bỏ ảnh) để link hoạt động
-      // Nếu chọn Code -> Luôn dùng full mode
-      let currentData = prepareData(viewMode === 'link' && hasLargeImages);
-
-      // Thử nén trước, nếu không hỗ trợ thì dùng cách cũ
+      // Thu nén truoc, neu không ho tro thi dung cách cu
+      // Luon thu giu anh, chi bo neu link qua dai
+      let stripImages = false;
+      let currentData = prepareData(false);
       let finalCode = await compressData(currentData) || await encodeData(currentData);
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-      // 3. Nếu link vẫn quá dài (> 1800 ký tự), thực hiện rút gọn nội dung
-      if (viewMode === 'link' && url.length > 2000 && !hasLargeImages) {
-        console.warn(`Link quá dài (${url.length} ký tự), đang thử nén dữ liệu...`);
-        currentData = prepareData(true); // Sử dụng chế độ rút gọn tối đa
+      // Neu link van qua dai (>8000), thi bo anh
+      if (viewMode === 'link' && url.length > 8000) {
+        console.warn(`Link qua dai (${url.length} ky tu), dang thu bo anh...`);
+        stripImages = true;
+        currentData = prepareData(true);
         finalCode = await compressData(currentData) || await encodeData(currentData);
         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
       }
 
-      if (viewMode === 'code') {
-        // Chế độ copy mã đề: luôn dùng bản đầy đủ
-        const fullBase64 = await compressData(prepareData(false)) || await encodeData(prepareData(false));
-        await navigator.clipboard.writeText(fullBase64);
-        alert(`📋 Đã sao chép MÃ ĐỀ THI (Bao gồm cả hình ảnh).\n\n👉 Hướng dẫn: Gửi mã này cho học sinh qua Zalo/Mess. Học sinh vào ứng dụng, chọn "Nhập Đề Cũ" -> "Dán Mã Đề" để làm bài.`);
+      // Neu van con qua dai, bao loi
+      if (viewMode === 'link' && url.length > 8000) {
+        alert("De thi qua dai (ke ca khi da bo anh). Vui long su dung tinh nang 'Copy Ma De'.");
         return;
       }
 
-      if (url.length > 8000) {
-        alert("❌ Đề thi quá dài để tạo Link (ngay cả khi đã rút gọn). Vui lòng dùng tính năng 'Copy Mã Đề'.");
+      if (viewMode === 'code') {
+        // Che do copy ma de: luon dung ban day du
+        const fullBase64 = await compressData(prepareData(false)) || await encodeData(prepareData(false));
+        await navigator.clipboard.writeText(fullBase64);
+        alert(`Da sao chep MA DE THI (Bao gom ca hinh anh).\n\nHuong dan: Gui ma nay cho hoc sinh qua Zalo/Mess. Hoc sinh vao ung dung, chon "Nhap De Cu" -> "Dan Ma De" de lam bai.`);
         return;
       }
 
       await navigator.clipboard.writeText(url);
-      alert(`🚀 Link đã được sao chép!\n\n${hasLargeImages ? '⚠️ Lưu ý: Link này KHÔNG chứa hình ảnh (do giới hạn độ dài).' : ''}\n\nGửi ngay cho học sinh để bắt đầu luyện tập.`);
+      alert(`Link da duoc sao chep!\n\n${stripImages ? 'Canh bao: Link nay KHONG chua hinh anh (da bi bo de dam bao link hoat dong).' : ''}\n\nGui ngay cho hoc sinh de bat dau luyen tap.`);
 
     } catch (e: any) {
       console.error("Link generation error:", e);

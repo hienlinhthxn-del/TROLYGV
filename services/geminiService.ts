@@ -284,7 +284,27 @@ export class GeminiService {
         }
       }, { apiVersion: 'v1beta' });
 
-      const result = await jsonModel.generateContent(parts);
+      // Retry logic for API calls
+      const makeRequestWithRetry = async <T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> => {
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            return await fn();
+          } catch (error: any) {
+            lastError = error;
+            const isRetryable = error.message?.includes('429') || error.message?.includes('503') || 
+              error.message?.includes('502') || error.message?.includes('timeout') || 
+              error.message?.includes('network') || error.message?.includes('ECONNRESET');
+            if (!isRetryable || attempt === maxRetries - 1) throw error;
+            const delay = 1000 * Math.pow(2, attempt);
+            console.warn(`Request ${attempt + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+        throw lastError;
+      };
+
+      const result = await makeRequestWithRetry(() => jsonModel.generateContent(parts));
       const text = result.response.text();
       let json = this.parseJSONSafely(text);
 
