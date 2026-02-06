@@ -961,13 +961,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           if (normalizedOptions.length === 0 && q.answer) {
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
-          const pageIndex = Number(q.page_index ?? q.page ?? q.pageNumber); // Ưu tiên page_index (0-based)
-          // Logic gán ảnh thông minh:
-          // 1. Nếu AI trả về page_index, dùng chính xác ảnh trang đó.
-          // 2. Nếu không, và chỉ có 1 trang ảnh duy nhất được tải lên, dùng ảnh đó.
-          const pageImage = (Number.isFinite(pageIndex) && pageIndex >= 0 && pageImageUrls[pageIndex])
-            ? pageImageUrls[pageIndex - 1]
-            : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
+          // Xử lý chỉ số trang trả về từ AI: có thể là 0-based hoặc 1-based hoặc chuỗi
+          const pageIndexRaw = q.page_index ?? q.page ?? q.pageNumber;
+          let pageImage = '';
+          if (pageIndexRaw !== undefined && pageIndexRaw !== null) {
+            const parsed = Number(pageIndexRaw);
+            if (!Number.isNaN(parsed)) {
+              // Nếu AI trả về 1-based (thường là số nguyên >=1), chuyển về index-1
+              if (parsed >= 1 && parsed <= pageImageUrls.length) {
+                pageImage = pageImageUrls[parsed - 1];
+              // Nếu AI trả về 0-based
+              } else if (parsed >= 0 && parsed < pageImageUrls.length) {
+                pageImage = pageImageUrls[parsed];
+              }
+            }
+          }
+          // Nếu không có chỉ số trang rõ ràng nhưng chỉ upload 1 trang ảnh, dùng trang đó
+          if (!pageImage && pageImageUrls.length === 1) pageImage = pageImageUrls[0];
 
           const normalizeImage = (value: string, fallback: string) => {
             if (!value) return fallback || '';
@@ -995,7 +1005,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             q.cau_hoi,
             q['câu hỏi']
           );
-          const imageMarkerMatch = questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):.*?\]/i);
+          const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH):.*?\]/i) : null;
           const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
           const questionImage = normalizeImage(q.image || imageMarker, pageImage);
           const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;
