@@ -897,11 +897,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       YÊU CẦU XỬ LÝ:
       1. Trích xuất tất cả câu hỏi tìm thấy. Nếu tài liệu dài, hãy kiên nhẫn xử lý hết.
-      2. QUAN TRỌNG VỀ HÌNH ẢNH:
-         - Với MỌI câu hỏi, hãy xác định nó nằm ở trang số mấy và trả về trường "page" (số nguyên, bắt đầu từ 1).
-         - Nếu câu hỏi có hình ảnh: Điền trường "image" là mô tả chi tiết [HÌNH ẢNH: ...] để hệ thống biết và hiển thị ảnh gốc của trang đó.
-      3. Nếu tài liệu mờ, hãy cố gắng luận ra nội dung hợp lý nhất.
-      4. Trả về kết quả đúng định dạng JSON (mảng "questions").`;
+      2. QUAN TRỌNG VỀ HÌNH ẢNH VÀ SỐ TRANG:
+         - Với MỌI câu hỏi, XÁC ĐỊNH CHÍNH XÁC số trang (bắt đầu từ 0) và trả về trường "page_index".
+         - Nếu câu hỏi có hình ảnh minh họa, thêm mô tả vào trường "image" dạng "[HÌNH ẢNH: mô tả chi tiết]".
+         - Hệ thống sẽ tự động hiển thị ảnh gốc của trang đó kèm theo.
+      3. Nếu đáp án A, B, C, D có hình ảnh riêng, mô tả trong trường "image" của option tương ứng.
+      4. Nếu tài liệu mờ, hãy cố gắng suy luận ra nội dung hợp lý nhất.
+      5. Trả về kết quả đúng định dạng JSON (mảng "questions").
+
+      QUY TẮC QUAN TRỌNG:
+      - page_index = 0 = Trang đầu tiên
+      - page_index = 1 = Trang thứ hai
+      - Đảm bảo page_index khớp với vị trí câu hỏi trong tài liệu gốc.`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
@@ -961,23 +968,25 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           if (normalizedOptions.length === 0 && q.answer) {
             normalizedOptions = [{ text: String(q.answer), image: '' }];
           }
-          // Xử lý chỉ số trang trả về từ AI: có thể là 0-based hoặc 1-based hoặc chuỗi
+          // Xử lý chỉ số trang trả về từ AI: page_index bắt đầu từ 0
           const pageIndexRaw = q.page_index ?? q.page ?? q.pageNumber;
           let pageImage = '';
           if (pageIndexRaw !== undefined && pageIndexRaw !== null) {
             const parsed = Number(pageIndexRaw);
             if (!Number.isNaN(parsed)) {
-              // Nếu AI trả về 1-based (thường là số nguyên >=1), chuyển về index-1
-              if (parsed >= 1 && parsed <= pageImageUrls.length) {
-                pageImage = pageImageUrls[parsed - 1];
-              // Nếu AI trả về 0-based
-              } else if (parsed >= 0 && parsed < pageImageUrls.length) {
+              // page_index từ AI luôn bắt đầu từ 0 (trang đầu tiên)
+              if (parsed >= 0 && parsed < pageImageUrls.length) {
                 pageImage = pageImageUrls[parsed];
               }
             }
           }
-          // Nếu không có chỉ số trang rõ ràng nhưng chỉ upload 1 trang ảnh, dùng trang đó
-          if (!pageImage && pageImageUrls.length === 1) pageImage = pageImageUrls[0];
+          // Fallback: Nếu không có chỉ số trang rõ ràng, dùng logic phân bổ đều
+          if (!pageImage && pageImageUrls.length > 0) {
+            const totalQuestions = rawQuestions.length;
+            const questionsPerPage = Math.ceil(totalQuestions / pageImageUrls.length);
+            const calculatedPage = Math.min(Math.floor(i / questionsPerPage), pageImageUrls.length - 1);
+            pageImage = pageImageUrls[calculatedPage] || pageImageUrls[0];
+          }
 
           const normalizeImage = (value: string, fallback: string) => {
             if (!value) return fallback || '';
