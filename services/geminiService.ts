@@ -156,13 +156,35 @@ export class GeminiService {
 
     const parts = [...(fileParts || []), { text: prompt }];
     try {
-      const result = await this.chat.sendMessageStream(parts);
+      // Retry logic for streaming
+      let result: any;
+      let streamAttempt = 0;
+      const maxStreamAttempts = 5;
+      
+      while (streamAttempt < maxStreamAttempts) {
+        try {
+          result = await this.chat.sendMessageStream(parts);
+          break;
+        } catch (streamError: any) {
+          const isRetryable = streamError.message?.includes('429') || 
+            streamError.message?.includes('503') || 
+            streamError.message?.includes('502') ||
+            streamError.message?.includes('timeout');
+          
+          if (!isRetryable || streamAttempt === maxStreamAttempts - 1) {
+            throw streamError;
+          }
+          streamAttempt++;
+          await this.delayWithBackoff(streamAttempt, 3000);
+        }
+      }
+      
       for await (const chunk of result.stream) {
         let text = '';
         try {
           text = chunk.text();
         } catch (e) {
-          // Bỏ qua lỗi nếu chunk bị chặn do safety settings để tránh crash luồng
+          // Skip errors if chunk is blocked by safety settings
         }
         yield {
           text: text,
@@ -170,8 +192,8 @@ export class GeminiService {
         };
       }
     } catch (error: any) {
-      if (error.message?.includes("429")) {
-        // Nếu gặp lỗi 429 ở luồng streaming, thử ngay nhà cung cấp dự phòng (OpenAI / Anthropic)
+      if (error.message?.includes("429") || error.message?.includes("503")) {
+        // Rate limit or service unavailable - try fallback providers
         try {
           const fallbackText = await this.fallbackToOtherProviders(prompt, false);
           yield { text: fallbackText, grounding: null };
@@ -187,14 +209,56 @@ export class GeminiService {
     }
   }
 
+  // --- HỖ TRỢ RATE LIMITING ---
+
+  // Exponential backoff with jitter for rate limiting
+  private async delayWithBackoff(attempt: number, baseDelay: number = 2000): Promise<void> {
+    const jitter = Math.random() * 1000; // Add random jitter to avoid thundering herd
+    const delay = baseDelay * Math.pow(2, attempt) + jitter;
+    console.warn(`Rate limit backoff: waiting ${Math.round(delay)}ms before retry...`);
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  // Generic retry logic for API calls
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 5,
+    baseDelay: number = 2000
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        // Check if error is retryable (rate limiting, server errors, network issues)
+        const isRetryable = error.message?.includes('429') || 
+          error.message?.includes('503') || 
+          error.message?.includes('502') || 
+          error.message?.includes('500') ||
+          error.message?.includes('timeout') || 
+          error.message?.includes('network') ||
+          error.message?.includes('ECONNRESET') ||
+          error.message?.includes('ETIMEDOUT') ||
+          error.message?.includes('ENOTFOUND');
+        
+        if (!isRetryable || attempt === maxRetries - 1) {
+          throw error;
+        }
+        
+        await this.delayWithBackoff(attempt, baseDelay);
+      }
+    }
+    throw lastError;
+  }
+
   // --- TẠO NỘI DUNG VĂN BẢN ---
 
   public async generateText(prompt: string, fileParts?: FilePart[]): Promise<string> {
     await this.ensureInitialized();
     try {
       const parts = [...(fileParts || []), { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }];
-      const result = await this.model.generateContent(parts);
-      return result.response.text();
+      return await this.retryWithBackoff(() => this.model.generateContent(parts));
     } catch (error: any) {
       try {
         return await this.handleError(error, () => this.generateText(prompt, fileParts));
@@ -213,24 +277,25 @@ export class GeminiService {
 
     const fullPrompt = `${this.currentInstruction}
 
-    **NHIỆM VỤ CỐT LÕI:** Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ câu hỏi.
-    **BỐI CẢNH:** Tài liệu thường là đề thi Violympic, Trạng Nguyên Tiếng Việt, chứa 20-50 câu hỏi. Hãy kiên nhẫn xử lý hết, không bỏ sót. Nếu tài liệu mờ, hãy cố gắng suy luận nội dung.
+    **NHIỆM VỤ CỐT LÕI:** Số hóa đề thi từ file PDF/Ảnh đính kèm (Dạng đề Trạng Nguyên Tiếng Việt, Toán Violympic, Khảo sát chất lượng...).
+    **MỤC TIÊU:** Trích xuất TOÀN BỘ câu hỏi (thường là 30 câu hoặc nhiều hơn). Hãy kiên nhẫn xử lý từng trang, TUYỆT ĐỐI KHÔNG BỎ SÓT câu hỏi nào.
 
     **QUY TẮC XỬ LÝ (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):**
 
     **1. VỀ CẤU TRÚC & SỐ LƯỢNG:**
        - **KHÔNG BAO GIỜ** được trả về một mảng chỉ chứa đáp án (ví dụ: \`["A", "B", "C"]\`).
        - **LUÔN LUÔN** trả về cấu trúc JSON đầy đủ như trong mẫu, bao gồm \`title\`, \`subject\`, và mảng \`questions\`.
-       - **PHẢI** trích xuất tất cả các câu hỏi có trong tài liệu. Nếu tài liệu có 30 câu, bạn phải trả về 30 câu.
+       - **SỐ LƯỢNG:** Phải đếm kỹ và lấy đủ số lượng câu hỏi trong đề (ví dụ đề có 30 câu thì JSON phải có đủ 30 phần tử).
 
-    **2. VỀ HÌNH ẢNH (QUAN TRỌNG NHẤT):**
+    **2. VỀ HÌNH ẢNH VÀ CẮT ẢNH TỪ ĐỀ (QUAN TRỌNG NHẤT):**
        - Với **MỌI CÂU HỎI**, bạn **PHẢI** xác định nó nằm ở trang nào và trả về trường \`"page_index": N\` (N là số trang, bắt đầu từ 0).
-       - Nếu câu hỏi hoặc đáp án có hình ảnh, trường \`"image"\` **KHÔNG ĐƯỢC ĐỂ TRỐNG**.
-       - **ƯU TIÊN 1 (Mô tả):** Mô tả hình ảnh chi tiết bằng văn bản, ví dụ: \`"image": "[HÌNH ẢNH: Một chiếc cân đĩa, bên trái có 2 quả táo, bên phải có 1 quả cam.]"\`.
-       - **ƯU TIÊN 2 (SVG):** Nếu là hình học rất đơn giản, có thể dùng mã SVG (trên một dòng, không chứa ký tự làm hỏng JSON).
+       - **XỬ LÝ HÌNH ẢNH:** Nếu câu hỏi hoặc đáp án chứa hình ảnh (hình học, đồ thị, hình minh họa), bạn KHÔNG ĐƯỢC BỎ QUA.
+       - **LỆNH CẮT ẢNH:** Thay vì chỉ mô tả, hãy ra lệnh cho hệ thống cắt ảnh từ file gốc.
+       - Cú pháp điền vào trường \`image\`: \`"[CẮT ẢNH TỪ ĐỀ: Trang {số_trang} - {mô_tả_ngắn_gọn}]"\`.
+       - Ví dụ: \`"image": "[CẮT ẢNH TỪ ĐỀ: Trang 2 - Hình tam giác ABC]"\`.
 
     **3. VỀ NỘI DUNG:**
-       - **Câu hỏi quy luật:** Mô tả rõ dãy hình. Ví dụ: \`"content": "Hoàn thành quy luật: [Hình con quạ] [Hình con quạ] [Hình đại bàng] [?]"\`.
+       - **Câu hỏi quy luật/Hình ảnh:** Nếu có thể mô tả bằng lời thì mô tả, nếu phức tạp hãy dùng lệnh [CẮT ẢNH TỪ ĐỀ...] như trên.
        - **Câu hỏi điền từ:** Mô tả rõ ngữ cảnh. Ví dụ: \`"content": "Điền từ thích hợp vào chỗ trống: 'Học ... đôi với hành'"\`
        - **Đáp án:** Trường \`"answer"\` phải chứa **ĐẦY ĐỦ NỘI DUNG** của đáp án đúng, không chỉ là "A" hay "B".
        - **Giải thích (\`explanation\`):** Ngắn gọn, chỉ ra quy luật hoặc logic.
@@ -258,7 +323,7 @@ export class GeminiService {
           ], 
           "answer": "A", 
           "explanation": "Giải thích ngắn gọn", 
-          "image": "[HÌNH ẢNH: Mô tả chi tiết...]",
+          "image": "[CẮT ẢNH TỪ ĐỀ: Trang 0 - Mô tả...]",
           "page_index": 0 
         } 
       ] 
@@ -284,27 +349,8 @@ export class GeminiService {
         }
       }, { apiVersion: 'v1beta' });
 
-      // Retry logic for API calls
-      const makeRequestWithRetry = async <T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> => {
-        let lastError: Error | null = null;
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-          try {
-            return await fn();
-          } catch (error: any) {
-            lastError = error;
-            const isRetryable = error.message?.includes('429') || error.message?.includes('503') || 
-              error.message?.includes('502') || error.message?.includes('timeout') || 
-              error.message?.includes('network') || error.message?.includes('ECONNRESET');
-            if (!isRetryable || attempt === maxRetries - 1) throw error;
-            const delay = 1000 * Math.pow(2, attempt);
-            console.warn(`Request ${attempt + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
-            await new Promise(r => setTimeout(r, delay));
-          }
-        }
-        throw lastError;
-      };
-
-      const result = await makeRequestWithRetry(() => jsonModel.generateContent(parts));
+      // Use retry logic for API calls
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
       const text = result.response.text();
       let json = this.parseJSONSafely(text);
 
@@ -381,7 +427,7 @@ export class GeminiService {
         }
       }, { apiVersion: 'v1beta' });
 
-      const result = await jsonModel.generateContent(prompt);
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
       const text = result.response.text();
       return this.parseJSONSafely(text);
     } catch (error: any) {
@@ -436,7 +482,7 @@ export class GeminiService {
         }
       }, { apiVersion: 'v1beta' });
 
-      const result = await jsonModel.generateContent(prompt);
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
       const text = result.response.text();
       return this.parseJSONSafely(text);
     } catch (error: any) {
