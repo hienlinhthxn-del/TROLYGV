@@ -181,6 +181,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
               <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm animate-pulse">
                 <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
                 {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):/i, '').trim()}
+                <div className="text-[10px] mt-2 text-amber-600/70">(Không tìm thấy ảnh gốc của trang này)</div>
               </div>
             )
           )
@@ -909,32 +910,34 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Bạn là chuyên gia số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...). Nhiệm vụ của bạn là trích xuất TOÀN BỘ câu hỏi từ file đính kèm (thường có 30 câu hoặc hơn).
+      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi từ file PDF/Ảnh (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic, Violympic...).
+      
+      NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi có trong file (thường là 30 câu hoặc nhiều hơn). KHÔNG ĐƯỢC BỎ SÓT.
 
-      ${additionalPrompt ? `YÊU CẦU CỤ THỂ TỪ GIÁO VIÊN: "${additionalPrompt}"` : ''}
+      ${additionalPrompt ? `LƯU Ý CỦA GIÁO VIÊN: "${additionalPrompt}"` : ''}
 
-      YÊU CẦU XỬ LÝ CHI TIẾT:
-      1. **SỐ LƯỢNG:** Phải lấy hết tất cả câu hỏi, KHÔNG ĐƯỢC BỎ SÓT câu nào.
-      2. **HÌNH ẢNH (QUAN TRỌNG NHẤT):**
-         - Rất nhiều câu hỏi hoặc đáp án trong đề này là HÌNH ẢNH.
-         - Với bất kỳ câu hỏi hoặc đáp án nào có chứa hình ảnh, bạn PHẢI trả về nội dung text là "[CẮT ẢNH TỪ ĐỀ]" vào trường "image" tương ứng.
-         - KHÔNG ĐƯỢC tự ý mô tả hình ảnh bằng lời nếu đó là hình cần nhìn để làm bài (ví dụ: hình học, biểu đồ, tranh vẽ...). Hãy dùng lệnh "[CẮT ẢNH TỪ ĐỀ]".
-      3. **ĐỊNH DẠNG:** Giữ nguyên nội dung văn bản gốc.
-      4. **VỊ TRÍ TRANG:** Xác định chính xác câu hỏi nằm ở trang nào (bắt đầu từ 0) và trả về trong trường "page_index".
+      QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC):
+      1. Nếu câu hỏi hoặc đáp án là HÌNH ẢNH (biểu đồ, hình vẽ, phép tính dạng hình...), bạn KHÔNG ĐƯỢC mô tả bằng lời.
+      2. Thay vào đó, hãy điền chính xác cụm từ: "[CẮT ẢNH TỪ ĐỀ]" vào trường "image" của câu hỏi hoặc đáp án đó.
+      3. Hệ thống sẽ tự động cắt ảnh từ trang đề thi để hiển thị cho học sinh.
+      
+      QUY TẮC VỀ TRANG (PAGE INDEX):
+      - Bạn phải xác định câu hỏi đang nằm ở trang số mấy của file (bắt đầu từ 0).
+      - Trả về trường "page_index" cho MỖI câu hỏi. Ví dụ: trang đầu tiên là 0, trang thứ hai là 1...
 
-      CẤU TRÚC JSON TRẢ VỀ:
+      CẤU TRÚC JSON MONG MUỐN:
       {
         "questions": [
           {
-            "page_index": 0, // Số thứ tự trang chứa câu hỏi (0, 1, 2...)
-            "question": "Nội dung câu hỏi...",
-            "image": "[CẮT ẢNH TỪ ĐỀ]", // Nếu câu hỏi có hình
+            "page_index": 0,
+            "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
+            "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
             "options": [
-              { "text": "Đáp án A", "image": "" },
-              { "text": "", "image": "[CẮT ẢNH TỪ ĐỀ]" } // Nếu đáp án là hình
+              { "text": "Nội dung đáp án A", "image": "" },
+              { "text": "Đáp án B là hình ảnh", "image": "[CẮT ẢNH TỪ ĐỀ]" }
             ],
-            "answer": "Đáp án đúng",
-            "explanation": "Giải thích (nếu có)"
+            "answer": "Đáp án đúng (VD: A, hoặc nội dung đúng)",
+            "explanation": "Giải thích ngắn gọn (nếu có)"
           }
         ]
       }`;
@@ -1021,8 +1024,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             if (!value) return fallback || '';
             const trimmed = value.trim();
             if (!trimmed) return fallback || '';
-            // Nếu là lệnh cắt ảnh, ưu tiên dùng ảnh trang (fallback) để hiển thị
-            if (/\[(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE).*?\]/i.test(trimmed)) {
+            
+            // Detect various forms of "Cut Image" instruction from AI
+            const isCutCommand = /\[?(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE|HÌNH ẢNH|IMAGE)\]?/i.test(trimmed);
+            
+            if (isCutCommand) {
                 return fallback || trimmed;
             }
             if (trimmed.startsWith('<svg')) return trimmed;
