@@ -1341,7 +1341,7 @@ Chi tiết: ${errorMessage}
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 320; // Giảm kích thước mạnh hơn (480 -> 320) để tối ưu Link
+            const maxWidth = 240; // Giảm kích thước tối đa (Thumbnail) để đảm bảo Link hoạt động
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1352,7 +1352,7 @@ Chi tiết: ${errorMessage}
               return;
             }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.4)); // Nén chất lượng xuống 40%
+            resolve(canvas.toDataURL('image/jpeg', 0.3)); // Nén chất lượng xuống 30%
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
@@ -1368,11 +1368,11 @@ Chi tiết: ${errorMessage}
       const trimmed = value.trim();
       if (!trimmed) return '';
       if (!trimmed.startsWith('data:image')) {
-        return trimmed.length > 1000 ? '' : trimmed; // URL quá dài cũng bỏ
+        return trimmed.length > 500 ? '' : trimmed; // URL quá dài cũng bỏ
       }
 
       const compressed = await compressDataImage(trimmed);
-      return compressed.length > 30000 ? '' : compressed; // Giới hạn chặt 30KB
+      return compressed.length > 12000 ? '' : compressed; // Giới hạn chặt 12KB/ảnh
     };
 
     try {
@@ -1438,8 +1438,8 @@ Chi tiết: ${errorMessage}
 
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-      // 2. Nếu Link quá dài (> 6000 ký tự), tự động bỏ ảnh và tạo lại
-      if (url.length > 6000) {
+      // 2. Nếu Link quá dài (> 4000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
+      if (url.length > 4000) {
          payloadData = await generatePayload(true); // Force strip images
          quizData = { s: subject, g: grade, q: payloadData.q };
          json = JSON.stringify(quizData);
@@ -1454,12 +1454,12 @@ Chi tiết: ${errorMessage}
          url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
          
          if (url.length > 8000) {
-             alert("❌ Nội dung đề thi quá dài (ngay cả khi đã bỏ ảnh). Vui lòng dùng tính năng 'Copy Mã Đề'.");
+             alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
              return;
          }
          
          await navigator.clipboard.writeText(url);
-         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để chia sẻ được.\n\n✅ Đã sao chép Link (bản không ảnh)!\n\nNếu muốn giữ ảnh, Thầy/Cô vui lòng dùng tính năng "Copy Mã Đề" bên cạnh.`);
+         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link (bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy/Cô hãy dùng nút "Copy Mã Đề" (biểu tượng mã code) bên cạnh nút Chia sẻ.`);
          return;
       }
 
