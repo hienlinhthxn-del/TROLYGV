@@ -168,7 +168,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
             // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
             /^(http|https|data:image)/i.test(displayImage.trim()) ? (
               <div className="flex justify-center mb-6">
-                <img src={displayImage} alt="Minh họa" className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain" />
+                <img src={displayImage} alt="Minh họa" className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain" />
               </div>
             ) : (
               // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
@@ -222,7 +222,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
                     {optImg.trim().startsWith('<svg') ? (
                       <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
                     ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
-                      <img src={optImg} alt="Option placeholder" className="h-20 object-contain rounded-lg" onError={(e) => {
+                      <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg" onError={(e) => {
                         // Fallback nếu không phải URL/base64
                         e.currentTarget.style.display = 'none';
                       }} />
@@ -891,24 +891,35 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Phân tích tài liệu đính kèm (Ảnh/PDF) và trích xuất TOÀN BỘ các câu hỏi trắc nghiệm (thường có từ 30-50 câu, hãy lấy hết KHÔNG BỎ SÓT câu nào).
-      
-      ${additionalPrompt ? `YÊU CẦU CỤ THỂ: "${additionalPrompt}"` : ''}
+      const prompt = `Bạn là chuyên gia số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...). Nhiệm vụ của bạn là trích xuất TOÀN BỘ câu hỏi từ file đính kèm (thường có 30 câu hoặc hơn).
 
-      YÊU CẦU XỬ LÝ:
-      1. Trích xuất tất cả câu hỏi tìm thấy. Nếu tài liệu dài, hãy kiên nhẫn xử lý hết.
-      2. QUAN TRỌNG VỀ HÌNH ẢNH VÀ SỐ TRANG:
-         - Với MỌI câu hỏi, XÁC ĐỊNH CHÍNH XÁC số trang (bắt đầu từ 0) và trả về trường "page_index".
-         - Nếu câu hỏi có hình ảnh minh họa, thêm mô tả vào trường "image" dạng "[HÌNH ẢNH: mô tả chi tiết]".
-         - Hệ thống sẽ tự động hiển thị ảnh gốc của trang đó kèm theo.
-      3. Nếu đáp án A, B, C, D có hình ảnh riêng, mô tả trong trường "image" của option tương ứng.
-      4. Nếu tài liệu mờ, hãy cố gắng suy luận ra nội dung hợp lý nhất.
-      5. Trả về kết quả đúng định dạng JSON (mảng "questions").
+      ${additionalPrompt ? `YÊU CẦU CỤ THỂ TỪ GIÁO VIÊN: "${additionalPrompt}"` : ''}
 
-      QUY TẮC QUAN TRỌNG:
-      - page_index = 0 = Trang đầu tiên
-      - page_index = 1 = Trang thứ hai
-      - Đảm bảo page_index khớp với vị trí câu hỏi trong tài liệu gốc.`;
+      YÊU CẦU XỬ LÝ CHI TIẾT:
+      1. **SỐ LƯỢNG:** Phải lấy hết tất cả câu hỏi, KHÔNG ĐƯỢC BỎ SÓT câu nào.
+      2. **HÌNH ẢNH (QUAN TRỌNG NHẤT):**
+         - Rất nhiều câu hỏi hoặc đáp án trong đề này là HÌNH ẢNH.
+         - Với bất kỳ câu hỏi hoặc đáp án nào có chứa hình ảnh, bạn PHẢI trả về nội dung text là "[CẮT ẢNH TỪ ĐỀ]" vào trường "image" tương ứng.
+         - KHÔNG ĐƯỢC tự ý mô tả hình ảnh bằng lời nếu đó là hình cần nhìn để làm bài (ví dụ: hình học, biểu đồ, tranh vẽ...). Hãy dùng lệnh "[CẮT ẢNH TỪ ĐỀ]".
+      3. **ĐỊNH DẠNG:** Giữ nguyên nội dung văn bản gốc.
+      4. **VỊ TRÍ TRANG:** Xác định chính xác câu hỏi nằm ở trang nào (bắt đầu từ 0) và trả về trong trường "page_index".
+
+      CẤU TRÚC JSON TRẢ VỀ:
+      {
+        "questions": [
+          {
+            "page_index": 0, // Số thứ tự trang chứa câu hỏi (0, 1, 2...)
+            "question": "Nội dung câu hỏi...",
+            "image": "[CẮT ẢNH TỪ ĐỀ]", // Nếu câu hỏi có hình
+            "options": [
+              { "text": "Đáp án A", "image": "" },
+              { "text": "", "image": "[CẮT ẢNH TỪ ĐỀ]" } // Nếu đáp án là hình
+            ],
+            "answer": "Đáp án đúng",
+            "explanation": "Giải thích (nếu có)"
+          }
+        ]
+      }`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
