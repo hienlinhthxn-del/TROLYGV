@@ -1339,7 +1339,7 @@ Chi tiết: ${errorMessage}
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 480; // Giảm kích thước để tối ưu dung lượng link
+            const maxWidth = 320; // Giảm kích thước mạnh hơn (480 -> 320) để tối ưu Link
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1350,7 +1350,7 @@ Chi tiết: ${errorMessage}
               return;
             }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.5)); // Nén chất lượng 50%
+            resolve(canvas.toDataURL('image/jpeg', 0.4)); // Nén chất lượng xuống 40%
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
@@ -1360,60 +1360,54 @@ Chi tiết: ${errorMessage}
       });
     };
 
-    const normalizeSharedImage = async (value: unknown): Promise<string> => {
+    const normalizeSharedImage = async (value: unknown, forceStrip: boolean): Promise<string> => {
+      if (forceStrip) return ''; // Nếu chế độ bắt buộc bỏ ảnh
       if (typeof value !== 'string') return '';
       const trimmed = value.trim();
       if (!trimmed) return '';
       if (!trimmed.startsWith('data:image')) {
-        return trimmed.length > 2000 ? '' : trimmed;
+        return trimmed.length > 1000 ? '' : trimmed; // URL quá dài cũng bỏ
       }
 
       const compressed = await compressDataImage(trimmed);
-      return compressed.length > 45000 ? '' : compressed; // Tăng giới hạn lên ~33KB
+      return compressed.length > 30000 ? '' : compressed; // Giới hạn chặt 30KB
     };
 
     try {
-      let droppedImageCount = 0;
-      let compressedImageCount = 0;
+      const generatePayload = async (stripImages: boolean) => {
+        let droppedCount = 0;
+        const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
+          const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
+          const finalQuestionImage = await normalizeSharedImage(originalQuestionImage, stripImages);
 
-      const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
-        const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
-        const finalQuestionImage = await normalizeSharedImage(originalQuestionImage);
+          if (originalQuestionImage && !finalQuestionImage) droppedCount++;
 
-        if (originalQuestionImage && !finalQuestionImage) droppedImageCount += 1;
-        if (originalQuestionImage && finalQuestionImage && originalQuestionImage !== finalQuestionImage) compressedImageCount += 1;
+          const rawOptions = Array.isArray(q?.options) ? q.options : [];
+          const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
+            if (typeof opt === 'string' || typeof opt === 'number') return opt;
+            const optionImageRaw = typeof opt?.image === 'string' ? opt.image.trim() : '';
+            const optionImageFinal = await normalizeSharedImage(optionImageRaw, stripImages);
+            if (optionImageRaw && !optionImageFinal) droppedCount++;
+            return { ...opt, image: optionImageFinal };
+          }));
 
-        const rawOptions = Array.isArray(q?.options) ? q.options : [];
-        const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
-          if (typeof opt === 'string' || typeof opt === 'number') return opt;
-          const optionImageRaw = typeof opt?.image === 'string' ? opt.image.trim() : '';
-          const optionImageFinal = await normalizeSharedImage(optionImageRaw);
-          if (optionImageRaw && !optionImageFinal) droppedImageCount += 1;
-          if (optionImageRaw && optionImageFinal && optionImageRaw !== optionImageFinal) compressedImageCount += 1;
-
-          return {
-            ...opt,
-            image: optionImageFinal
-          };
+          return ([
+            1,
+            q?.question || '',
+            normalizedOptions,
+            q?.answer || '',
+            q?.explanation || '',
+            finalQuestionImage
+          ]);
         }));
-
-        return ([
-          1,
-          q?.question || '',
-          normalizedOptions,
-          q?.answer || '',
-          q?.explanation || '',
-          finalQuestionImage
-        ]);
-      }));
-
-      const quizData = {
-        s: subject,
-        g: grade,
-        q: normalizedQuestions
+        return { q: normalizedQuestions, dropped: droppedCount };
       };
 
-      const json = JSON.stringify(quizData);
+      // 1. Thử tạo payload có ảnh (đã nén)
+      let payloadData = await generatePayload(false);
+      let quizData = { s: subject, g: grade, q: payloadData.q };
+      let json = JSON.stringify(quizData);
+      
       let finalCode = '';
 
       const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -1440,17 +1434,36 @@ Chi tiết: ${errorMessage}
         finalCode = await blobToBase64(blob);
       }
 
-      const url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+
+      // 2. Nếu Link quá dài (> 6000 ký tự), tự động bỏ ảnh và tạo lại
+      if (url.length > 6000) {
+         payloadData = await generatePayload(true); // Force strip images
+         quizData = { s: subject, g: grade, q: payloadData.q };
+         json = JSON.stringify(quizData);
+         
+         // @ts-ignore
+         if (window.CompressionStream) {
+            const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+            finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
+         } else {
+            finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+         }
+         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+         
+         if (url.length > 8000) {
+             alert("❌ Nội dung đề thi quá dài (ngay cả khi đã bỏ ảnh). Vui lòng dùng tính năng 'Copy Mã Đề'.");
+             return;
+         }
+         
+         await navigator.clipboard.writeText(url);
+         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để chia sẻ được.\n\n✅ Đã sao chép Link (bản không ảnh)!\n\nNếu muốn giữ ảnh, Thầy/Cô vui lòng dùng tính năng "Copy Mã Đề" bên cạnh.`);
+         return;
+      }
+
       await navigator.clipboard.writeText(url);
-
-      const note = (compressedImageCount > 0 || droppedImageCount > 0)
-        ? `
-
-(Lưu ý: đã nén ${compressedImageCount} ảnh, lược bỏ ${droppedImageCount} ảnh quá lớn để link hoạt động ổn định.)`
-        : '';
-      alert(`✅ Đã sao chép Link Quiz!
-
-Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`);
+      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${payloadData.dropped} ảnh quá lớn để tối ưu Link)` : '';
+      alert(`✅ Đã sao chép Link Quiz!${note}\n\nGửi ngay cho học sinh để luyện tập.`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
