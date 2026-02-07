@@ -22,260 +22,15 @@ interface SavedLessonPlan {
   timestamp: string;
 }
 
-// Component Quiz Player nội bộ
-const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () => void }> = ({ data, onShare, onCopyCode }) => {
-  const toSafeText = (value: unknown): string => {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return String(value);
-    return '';
-  };
+// Component Cắt ảnh đơn giản (Được đưa lên trước để QuizPlayer sử dụng)
+interface ImageCropperProps {
+  onClose: () => void;
+  initialSrc?: string | null;
+  onCropComplete?: (croppedData: string) => void;
+}
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [score, setScore] = useState(0);
-  const [showScore, setShowScore] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [timeLeft, setTimeLeft] = useState(15);
-  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTimeLeft(15);
-  }, [currentIndex]);
-
-  const checkCorrectness = (q: any, opt: any, idx: number) => {
-    if (!q || !opt) return false;
-
-    const ansVal = typeof q.answer === 'string' ? q.answer : (q.answer.text || '');
-    const ansStr = String(ansVal).trim();
-
-    const optVal = typeof opt === 'string' ? opt : (opt.text || '');
-    const optStr = String(optVal).trim();
-
-    if (ansStr.toLowerCase() === optStr.toLowerCase()) return true;
-
-    if (idx >= 0) {
-      const letter = String.fromCharCode(65 + idx);
-      const letterLower = letter.toLowerCase();
-      const ansLower = ansStr.toLowerCase();
-      if (ansLower === letterLower) return true;
-      if (ansLower.startsWith(`${letterLower}.`) || ansLower.startsWith(`${letterLower} `) || ansLower.startsWith(`${letterLower})`)) return true;
-    }
-    return false;
-  };
-
-  const handleAnswerClick = (option: any, index: number) => {
-    if (selectedOption) return;
-
-    const correct = checkCorrectness(data[currentIndex], option, index);
-    setSelectedOption(option);
-    setIsCorrect(correct);
-
-    if (correct) {
-      setScore(prev => prev + 1);
-    }
-
-    setTimeout(() => {
-      const nextQuestion = currentIndex + 1;
-      if (nextQuestion < data.length) {
-        setCurrentIndex(nextQuestion);
-        setSelectedOption(null);
-        setIsCorrect(null);
-      } else {
-        setShowScore(true);
-      }
-    }, 2000);
-  };
-
-  useEffect(() => {
-    if (showScore || selectedOption) return;
-
-    if (timeLeft === 0) {
-      handleAnswerClick('TIMEOUT', -1);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft, showScore, selectedOption]);
-
-  const restartQuiz = () => {
-    setCurrentIndex(0);
-    setScore(0);
-    setShowScore(false);
-    setSelectedOption(null);
-    setIsCorrect(null);
-    setTimeLeft(15);
-  };
-
-  if (showScore) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in zoom-in duration-300">
-        <div className="text-6xl mb-4">🏆</div>
-        <h3 className="text-2xl font-black text-slate-800 mb-2">Hoàn thành xuất sắc!</h3>
-        <p className="text-lg text-slate-600 mb-6">Thầy/Cô đã trả lời đúng <span className="text-indigo-600 font-bold text-2xl">{score}</span> / {data.length} câu.</p>
-        <button onClick={restartQuiz} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all">
-          🔄 Chơi lại
-        </button>
-      </div>
-    );
-  }
-
-  const currentQuestion = data[currentIndex] || { question: '', image: '', options: [] };
-  const questionOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : [];
-
-  // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung
-  let displayQuestion = toSafeText(currentQuestion.question);
-  let displayImage = toSafeText(currentQuestion.image);
-
-  if (!displayImage && displayQuestion) {
-    const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):(.*?)\]/i);
-    if (imgMatch) {
-      displayImage = imgMatch[0]; // Lấy cả cụm [HÌNH ẢNH: ...]
-      displayQuestion = displayQuestion.replace(imgMatch[0], '').trim();
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full p-4">
-      <div className="flex justify-between items-center mb-6">
-        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Câu hỏi {currentIndex + 1}/{data.length}</span>
-        <div className={`flex items-center space-x-1 px-3 py-1 rounded-full border ${timeLeft <= 5 ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-          <i className="fas fa-clock text-xs"></i>
-          <span className="text-xs font-black w-5 text-center">{timeLeft}s</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          {onShare && (
-            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center">
-              <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
-            </button>
-          )}
-          {onCopyCode && (
-            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
-              <i className="fas fa-code mr-1"></i>Mã
-            </button>
-          )}
-          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col justify-center">
-        {displayImage && (
-          displayImage.trim().startsWith('<svg') ? (
-            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
-          ) : (
-            // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
-            /^(http|https|data:image)/i.test(displayImage.trim()) ? (
-              <div className="flex justify-center mb-6">
-                <img 
-                  src={displayImage} 
-                  alt="Minh họa" 
-                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity" 
-                  onClick={() => setZoomedImage(displayImage)}
-                />
-              </div>
-            ) : (
-              // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
-              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm animate-pulse">
-                <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
-                {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):/i, '').trim()}
-                <div className="text-[10px] mt-2 text-amber-600/70">(Không tìm thấy ảnh gốc của trang này)</div>
-              </div>
-            )
-          )
-        )}
-        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
-
-        <div className="grid grid-cols-1 gap-3">
-          {questionOptions.map((option: any, index: number) => {
-            const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
-            const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
-            const isSelected = selectedOption === option;
-            const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
-
-            let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
-            if (isSelected) {
-              btnClass += isCorrectAnswer
-                ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                : "bg-rose-100 border-rose-500 text-rose-800";
-            } else if (selectedOption && isCorrectAnswer) {
-              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
-            } else {
-              btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
-            }
-
-            return (
-              <button
-                key={index}
-                onClick={() => handleAnswerClick(option, index)}
-                disabled={!!selectedOption}
-                className={btnClass}
-              >
-                <div className="flex items-center">
-                  <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
-                  <div className="flex-1">
-                    {optText.trim().startsWith('<svg') ? (
-                      <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
-                    ) : (
-                      <span className="text-[15px] font-bold">{optText}</span>
-                    )}
-                  </div>
-                </div>
-
-                {optImg && (
-                  <div className="mt-3">
-                    {optImg.trim().startsWith('<svg') ? (
-                      <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
-                    ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
-                      <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
-                        e.stopPropagation();
-                        setZoomedImage(optImg);
-                      }} onError={(e) => {
-                        // Fallback nếu không phải URL/base64
-                        e.currentTarget.style.display = 'none';
-                      }} />
-                    ) : null}
-                    {/* Hiển thị mô tả nếu không phải SVG hay Image */}
-                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg.trim()) && (
-                      <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
-                    )}
-                  </div>
-                )}
-
-                {isSelected && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {selectedOption && currentQuestion.explanation && (
-        <div className="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg animate-in fade-in slide-in-from-bottom-2">
-          <i className="fas fa-info-circle mr-2"></i>{currentQuestion.explanation}
-        </div>
-      )}
-
-      {zoomedImage && (
-        <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setZoomedImage(null)}>
-          <button className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors" onClick={() => setZoomedImage(null)}>
-            <i className="fas fa-times text-3xl"></i>
-          </button>
-          <img src={zoomedImage} alt="Zoomed" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300" />
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Component Cắt ảnh đơn giản
-const ImageCropper: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [src, setSrc] = useState<string | null>(null);
+const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCropComplete }) => {
+  const [src, setSrc] = useState<string | null>(initialSrc || null);
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -283,6 +38,10 @@ const ImageCropper: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialSrc) setSrc(initialSrc);
+  }, [initialSrc]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -361,15 +120,371 @@ const ImageCropper: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div className="space-y-4">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Kết quả</p>
                 <div className="bg-slate-100 rounded-xl p-2 border border-slate-200"><img src={croppedImage} className="w-full h-auto rounded-lg" /></div>
-                <button onClick={() => { const link = document.createElement('a'); link.download = `cropped_${Date.now()}.png`; link.href = croppedImage; link.click(); }} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all"><i className="fas fa-download mr-2"></i>Tải về</button>
+                {onCropComplete ? (
+                  <button onClick={() => { onCropComplete(croppedImage); onClose(); }} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all">
+                    <i className="fas fa-check mr-2"></i>Sử dụng ảnh này
+                  </button>
+                ) : (
+                  <button onClick={() => { const link = document.createElement('a'); link.download = `cropped_${Date.now()}.png`; link.href = croppedImage; link.click(); }} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all"><i className="fas fa-download mr-2"></i>Tải về</button>
+                )}
                 <button onClick={() => { setCroppedImage(null); setSelection(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cắt lại</button>
               </div>
             ) : (
-              <div className="space-y-4"><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hướng dẫn</p><p className="text-xs text-slate-600">Kéo chuột trên ảnh để chọn vùng cần cắt.</p><button onClick={cropImage} disabled={!selection || selection.w < 5} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-all"><i className="fas fa-crop-simple mr-2"></i>Cắt ảnh</button>{src && <button onClick={() => { setSrc(null); setSelection(null); }} className="w-full py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-rose-50 transition-all">Chọn ảnh khác</button>}</div>
+              <div className="space-y-4"><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hướng dẫn</p><p className="text-xs text-slate-600">Kéo chuột trên ảnh để chọn vùng cần cắt.</p><button onClick={cropImage} disabled={!selection || selection.w < 5} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-all"><i className="fas fa-crop-simple mr-2"></i>Cắt ảnh</button>{src && !initialSrc && <button onClick={() => { setSrc(null); setSelection(null); }} className="w-full py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-rose-50 transition-all">Chọn ảnh khác</button>}</div>
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Component Quiz Player nội bộ
+const QuizPlayer: React.FC<{ 
+  data: any[]; 
+  onShare?: () => void; 
+  onCopyCode?: () => void;
+  onCrop?: (src: string, type: 'question' | 'option', qIdx: number, optIdx?: number) => void;
+  onUpdateQuestion?: (index: number, updatedQuestion: any) => void;
+}> = ({ data, onShare, onCopyCode, onCrop, onUpdateQuestion }) => {
+  const toSafeText = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    return '';
+  };
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [showScore, setShowScore] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [timeLeft, setTimeLeft] = useState(15);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<any>(null);
+
+  useEffect(() => {
+    setTimeLeft(15);
+    setIsEditing(false); // Reset edit mode when changing question
+  }, [currentIndex]);
+
+  const checkCorrectness = (q: any, opt: any, idx: number) => {
+    if (!q || !opt) return false;
+
+    const ansVal = typeof q.answer === 'string' ? q.answer : (q.answer.text || '');
+    const ansStr = String(ansVal).trim();
+
+    const optVal = typeof opt === 'string' ? opt : (opt.text || '');
+    const optStr = String(optVal).trim();
+
+    if (ansStr.toLowerCase() === optStr.toLowerCase()) return true;
+
+    if (idx >= 0) {
+      const letter = String.fromCharCode(65 + idx);
+      const letterLower = letter.toLowerCase();
+      const ansLower = ansStr.toLowerCase();
+      if (ansLower === letterLower) return true;
+      if (ansLower.startsWith(`${letterLower}.`) || ansLower.startsWith(`${letterLower} `) || ansLower.startsWith(`${letterLower})`)) return true;
+    }
+    return false;
+  };
+
+  const handleAnswerClick = (option: any, index: number) => {
+    if (selectedOption) return;
+
+    const correct = checkCorrectness(data[currentIndex], option, index);
+    setSelectedOption(option);
+    setIsCorrect(correct);
+
+    if (correct) {
+      setScore(prev => prev + 1);
+    }
+
+    setTimeout(() => {
+      const nextQuestion = currentIndex + 1;
+      if (nextQuestion < data.length) {
+        setCurrentIndex(nextQuestion);
+        setSelectedOption(null);
+        setIsCorrect(null);
+      } else {
+        setShowScore(true);
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
+    if (showScore || selectedOption) return;
+
+    if (timeLeft === 0) {
+      handleAnswerClick('TIMEOUT', -1);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, showScore, selectedOption]);
+
+  const restartQuiz = () => {
+    setCurrentIndex(0);
+    setScore(0);
+    setShowScore(false);
+    setSelectedOption(null);
+    setIsCorrect(null);
+    setTimeLeft(15);
+  };
+
+  const startEdit = () => {
+    setEditData(JSON.parse(JSON.stringify(data[currentIndex])));
+    setIsEditing(true);
+  };
+
+  const saveEdit = () => {
+    if (onUpdateQuestion && editData) {
+       onUpdateQuestion(currentIndex, editData);
+    }
+    setIsEditing(false);
+  };
+
+  if (showScore) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in zoom-in duration-300">
+        <div className="text-6xl mb-4">🏆</div>
+        <h3 className="text-2xl font-black text-slate-800 mb-2">Hoàn thành xuất sắc!</h3>
+        <p className="text-lg text-slate-600 mb-6">Thầy/Cô đã trả lời đúng <span className="text-indigo-600 font-bold text-2xl">{score}</span> / {data.length} câu.</p>
+        <button onClick={restartQuiz} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all">
+          🔄 Chơi lại
+        </button>
+      </div>
+    );
+  }
+
+  if (isEditing && editData) {
+    return (
+      <div className="flex flex-col h-full p-6 bg-white rounded-3xl animate-in fade-in">
+         <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Chỉnh sửa câu hỏi {currentIndex + 1}</h3>
+            <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-rose-500"><i className="fas fa-times text-xl"></i></button>
+         </div>
+         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 pr-2">
+            <div>
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung câu hỏi</label>
+               <textarea 
+                 value={editData.question} 
+                 onChange={e => setEditData({...editData, question: e.target.value})}
+                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                 rows={3}
+               />
+            </div>
+            <div className="space-y-3">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn</label>
+               {editData.options.map((opt: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2">
+                     <span className="w-6 text-center font-black text-slate-400 text-xs">{String.fromCharCode(65+idx)}</span>
+                     <input 
+                        value={typeof opt === 'string' ? opt : opt.text}
+                        onChange={e => {
+                           const newOpts = [...editData.options];
+                           if (typeof newOpts[idx] === 'string') newOpts[idx] = e.target.value;
+                           else newOpts[idx] = {...newOpts[idx], text: e.target.value};
+                           setEditData({...editData, options: newOpts});
+                        }}
+                        className="flex-1 p-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                     />
+                  </div>
+               ))}
+            </div>
+            <div>
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đáp án đúng</label>
+               <input 
+                 value={editData.answer} 
+                 onChange={e => setEditData({...editData, answer: e.target.value})}
+                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
+                 placeholder="Nhập đáp án đúng (VD: A hoặc nội dung)"
+               />
+            </div>
+         </div>
+         <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+            <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all">Hủy bỏ</button>
+            <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-lg transition-all">Lưu thay đổi</button>
+         </div>
+      </div>
+    );
+  }
+
+  const currentQuestion = data[currentIndex] || { question: '', image: '', options: [] };
+  const questionOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : [];
+
+  // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung
+  let displayQuestion = toSafeText(currentQuestion.question);
+  let displayImage = toSafeText(currentQuestion.image);
+
+  if (!displayImage && displayQuestion) {
+    const imgMatch = displayQuestion.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):(.*?)\]/i);
+    if (imgMatch) {
+      displayImage = imgMatch[0]; // Lấy cả cụm [HÌNH ẢNH: ...]
+      displayQuestion = displayQuestion.replace(imgMatch[0], '').trim();
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full p-4">
+      <div className="flex justify-between items-center mb-6">
+        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Câu hỏi {currentIndex + 1}/{data.length}</span>
+        <div className={`flex items-center space-x-1 px-3 py-1 rounded-full border ${timeLeft <= 5 ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+          <i className="fas fa-clock text-xs"></i>
+          <span className="text-xs font-black w-5 text-center">{timeLeft}s</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          {onUpdateQuestion && (
+            <button onClick={startEdit} className="text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 px-3 py-1 rounded-full transition-colors border border-slate-200 flex items-center" title="Chỉnh sửa câu hỏi này">
+              <i className="fas fa-pen mr-1"></i>Sửa
+            </button>
+          )}
+          {onShare && (
+            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center">
+              <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
+            </button>
+          )}
+          {onCopyCode && (
+            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
+              <i className="fas fa-code mr-1"></i>Mã
+            </button>
+          )}
+          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center">
+        {displayImage && (
+          displayImage.trim().startsWith('<svg') ? (
+            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
+          ) : (
+            // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
+            /^(http|https|data:image)/i.test(displayImage.trim()) ? (
+              <div className="flex justify-center mb-6 relative group">
+                <img 
+                  src={displayImage} 
+                  alt="Minh họa" 
+                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity" 
+                  onClick={() => setZoomedImage(displayImage)}
+                />
+                {onCrop && currentQuestion.originalPageImage && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'question', currentIndex); }}
+                        className="absolute top-2 right-2 bg-white/90 text-indigo-600 p-2 rounded-full shadow-md hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
+                        title="Cắt lại ảnh từ đề gốc"
+                    >
+                        <i className="fas fa-crop-simple"></i>
+                    </button>
+                )}
+              </div>
+            ) : (
+              // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
+              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm animate-pulse">
+                <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
+                {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):/i, '').trim()}
+                <div className="text-[10px] mt-2 text-amber-600/70">(Không tìm thấy ảnh gốc của trang này)</div>
+              </div>
+            )
+          )
+        )}
+        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
+
+        <div className="grid grid-cols-1 gap-3">
+          {questionOptions.map((option: any, index: number) => {
+            const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
+            const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
+            const isSelected = selectedOption === option;
+            const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
+
+            let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
+            if (isSelected) {
+              btnClass += isCorrectAnswer
+                ? "bg-emerald-100 border-emerald-500 text-emerald-800"
+                : "bg-rose-100 border-rose-500 text-rose-800";
+            } else if (selectedOption && isCorrectAnswer) {
+              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
+            } else {
+              btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
+            }
+
+            return (
+              <button
+                key={index}
+                onClick={() => handleAnswerClick(option, index)}
+                disabled={!!selectedOption}
+                className={btnClass}
+              >
+                <div className="flex items-center">
+                  <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
+                  <div className="flex-1">
+                    {optText.trim().startsWith('<svg') ? (
+                      <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
+                    ) : (
+                      <span className="text-[15px] font-bold">{optText}</span>
+                    )}
+                  </div>
+                </div>
+
+                {optImg && (
+                  <div className="mt-3">
+                    {optImg.trim().startsWith('<svg') ? (
+                      <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
+                    ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
+                      <div className="relative inline-block group">
+                        <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
+                          e.stopPropagation();
+                          setZoomedImage(optImg);
+                        }} onError={(e) => {
+                          // Fallback nếu không phải URL/base64
+                          e.currentTarget.style.display = 'none';
+                        }} />
+                        {onCrop && currentQuestion.originalPageImage && (
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'option', currentIndex, index); }}
+                              className="absolute top-1 right-1 bg-white/90 text-indigo-600 p-1.5 rounded-full shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
+                              title="Cắt lại ảnh"
+                          >
+                              <i className="fas fa-crop-simple text-xs"></i>
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                    {/* Hiển thị mô tả nếu không phải SVG hay Image */}
+                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg.trim()) && (
+                      <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
+                    )}
+                  </div>
+                )}
+
+                {isSelected && (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedOption && currentQuestion.explanation && (
+        <div className="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg animate-in fade-in slide-in-from-bottom-2">
+          <i className="fas fa-info-circle mr-2"></i>{currentQuestion.explanation}
+        </div>
+      )}
+
+      {zoomedImage && (
+        <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setZoomedImage(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors" onClick={() => setZoomedImage(null)}>
+            <i className="fas fa-times text-3xl"></i>
+          </button>
+          <img src={zoomedImage} alt="Zoomed" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300" />
+        </div>
+      )}
     </div>
   );
 };
@@ -411,6 +526,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [splitRange, setSplitRange] = useState({ start: 1, end: 1 });
   const [showCropper, setShowCropper] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [croppingContext, setCroppingContext] = useState<{ src: string, type: 'question' | 'option', qIdx: number, optIdx?: number } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -784,6 +900,35 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     }
   };
 
+  const handleCropRequest = (src: string, type: 'question' | 'option', qIdx: number, optIdx?: number) => {
+    setCroppingContext({ src, type, qIdx, optIdx });
+    setShowCropper(true);
+  };
+
+  const handleCropComplete = (newImage: string) => {
+    if (!croppingContext || !result) return;
+    const { type, qIdx, optIdx } = croppingContext;
+    
+    const updatedResult = [...result];
+    if (type === 'question') {
+      updatedResult[qIdx].image = newImage;
+    } else if (type === 'option' && typeof optIdx === 'number') {
+      if (updatedResult[qIdx].options && updatedResult[qIdx].options[optIdx]) {
+        updatedResult[qIdx].options[optIdx].image = newImage;
+      }
+    }
+    
+    setResult(updatedResult);
+    setCroppingContext(null);
+  };
+
+  const handleUpdateQuestion = (index: number, updatedQuestion: any) => {
+    if (!result) return;
+    const newResult = [...result];
+    newResult[index] = updatedQuestion;
+    setResult(newResult);
+  };
+
   const generateQuizFromUpload = async () => {
     setIsProcessing(true);
     setResult(null);
@@ -1124,7 +1269,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
              }
              return { text: opt.text, image: optImage };
           }));
-
+          
           return {
             id: q.id || `quiz-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
@@ -1133,6 +1278,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             options: processedOptions,
             answer: q.answer || '',
             explanation: q.explanation || '',
+            originalPageImage: pageImage // Lưu ảnh gốc để hỗ trợ cắt lại
           };
         }));
         setResult(formattedQuestions);
@@ -1767,7 +1913,7 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
 
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
-      {showCropper && <ImageCropper onClose={() => setShowCropper(false)} />}
+      {showCropper && <ImageCropper onClose={() => { setShowCropper(false); setCroppingContext(null); }} initialSrc={croppingContext?.src} onCropComplete={croppingContext ? handleCropComplete : undefined} />}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
@@ -2338,7 +2484,7 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
                   ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
-                    <QuizPlayer data={result} onShare={handleShareQuiz} onCopyCode={handleCopyQuizCode} />
+                    <QuizPlayer data={result} onShare={handleShareQuiz} onCopyCode={handleCopyQuizCode} onCrop={handleCropRequest} onUpdateQuestion={handleUpdateQuestion} />
                   ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">
