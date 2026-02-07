@@ -36,6 +36,7 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [timeLeft, setTimeLeft] = useState(15);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   useEffect(() => {
     setTimeLeft(15);
@@ -168,7 +169,12 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
             // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
             /^(http|https|data:image)/i.test(displayImage.trim()) ? (
               <div className="flex justify-center mb-6">
-                <img src={displayImage} alt="Minh họa" className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain" />
+                <img 
+                  src={displayImage} 
+                  alt="Minh họa" 
+                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity" 
+                  onClick={() => setZoomedImage(displayImage)}
+                />
               </div>
             ) : (
               // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
@@ -222,7 +228,10 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
                     {optImg.trim().startsWith('<svg') ? (
                       <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
                     ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
-                      <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg" onError={(e) => {
+                      <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomedImage(optImg);
+                      }} onError={(e) => {
                         // Fallback nếu không phải URL/base64
                         e.currentTarget.style.display = 'none';
                       }} />
@@ -248,6 +257,15 @@ const QuizPlayer: React.FC<{ data: any[]; onShare?: () => void; onCopyCode?: () 
       {selectedOption && currentQuestion.explanation && (
         <div className="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg animate-in fade-in slide-in-from-bottom-2">
           <i className="fas fa-info-circle mr-2"></i>{currentQuestion.explanation}
+        </div>
+      )}
+
+      {zoomedImage && (
+        <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setZoomedImage(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors" onClick={() => setZoomedImage(null)}>
+            <i className="fas fa-times text-3xl"></i>
+          </button>
+          <img src={zoomedImage} alt="Zoomed" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300" />
         </div>
       )}
     </div>
