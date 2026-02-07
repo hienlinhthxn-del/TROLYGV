@@ -910,32 +910,36 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi từ file PDF/Ảnh (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
+      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
       
       NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi có trong file (thường là 30 câu hoặc nhiều hơn). KHÔNG ĐƯỢC BỎ SÓT.
 
       ${additionalPrompt ? `LƯU Ý CỦA GIÁO VIÊN: "${additionalPrompt}"` : ''}
 
-      QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC):
-      1. Nếu câu hỏi hoặc đáp án là HÌNH ẢNH (biểu đồ, hình vẽ, phép tính dạng hình...), bạn KHÔNG ĐƯỢC mô tả bằng lời.
-      2. Thay vào đó, hãy điền chính xác cụm từ: "[CẮT ẢNH TỪ ĐỀ]" vào trường "image" của câu hỏi hoặc đáp án đó.
-      3. QUAN TRỌNG: Để hệ thống cắt ảnh chính xác, bạn HÃY CỐ GẮNG xác định tọa độ khung bao quanh (bounding box) của câu hỏi đó trên trang.
-      
-      QUY TẮC VỀ TRANG (PAGE INDEX) VÀ TỌA ĐỘ (BBOX):
-      - "page_index": Số thứ tự trang chứa câu hỏi (bắt đầu từ 0).
-      - "bbox": Mảng 4 số [ymin, xmin, ymax, xmax] theo thang đo 1000 (0-1000) bao quanh vùng hình ảnh/câu hỏi cần cắt.
+      QUY TẮC XỬ LÝ (TUÂN THỦ NGHIÊM NGẶT):
+      1. **VĂN BẢN:** Giữ nguyên nội dung văn bản gốc của câu hỏi và đáp án. KHÔNG tự ý tóm tắt hay thay đổi nếu không cần thiết.
+      2. **HÌNH ẢNH (QUAN TRỌNG):**
+         - Chỉ khi câu hỏi hoặc đáp án CÓ CHỨA HÌNH ẢNH (biểu đồ, hình vẽ, phép tính dạng hình...), bạn mới thực hiện cắt ảnh.
+         - Nếu câu hỏi có hình: Trả về "bbox" (tọa độ) của vùng hình ảnh đó.
+         - Nếu đáp án là hình ảnh: Trả về "bbox" cho từng đáp án trong mảng "options".
+         - Nếu không có hình: Tuyệt đối không trả về bbox hay lệnh cắt ảnh.
+      3. **ĐỊNH DẠNG:**
+         - Trả về đúng cấu trúc JSON.
+         - Xác định chính xác "page_index" (bắt đầu từ 0).
+         - "bbox": Mảng 4 số [ymin, xmin, ymax, xmax] theo thang đo 1000 (0-1000).
 
       CẤU TRÚC JSON MONG MUỐN:
       {
         "questions": [
           {
             "page_index": 0,
-            "bbox": [100, 50, 300, 950], // Tọa độ vùng câu hỏi (nếu có)
+            "bbox": [100, 50, 300, 950], // Chỉ có nếu câu hỏi có hình
             "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
             "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
+            "type": "Trắc nghiệm", // Hoặc "Tự luận"
             "options": [
               { "text": "Nội dung đáp án A", "image": "" },
-              { "text": "Đáp án B là hình ảnh", "image": "[CẮT ẢNH TỪ ĐỀ]" }
+              { "text": "", "bbox": [100, 50, 300, 950], "image": "[CẮT ẢNH TỪ ĐỀ]" } // Nếu đáp án là hình
             ],
             "answer": "Đáp án đúng (VD: A, hoặc nội dung đúng)",
             "explanation": "Giải thích ngắn gọn (nếu có)"
@@ -1032,7 +1036,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             if (typeof opt === 'string' || typeof opt === 'number') {
               return { text: String(opt), image: '' };
             }
-            return { text: opt.text || opt.label || '', image: opt.image || '' };
+            return { text: opt.text || opt.label || '', image: opt.image || '', bbox: opt.bbox };
           });
           if (normalizedOptions.length === 0 && q.answer) {
             normalizedOptions = [{ text: String(q.answer), image: '' }];
@@ -1108,15 +1112,25 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
              }
           }
 
+          // Xử lý cắt ảnh cho options (NEW)
+          const processedOptions = await Promise.all(normalizedOptions.map(async (opt: any) => {
+             let optImage = normalizeImage(opt.image || '', pageImage);
+             if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
+                 try {
+                     optImage = await cropImageFromBbox(pageImage, opt.bbox);
+                 } catch (e) {
+                     console.warn("Failed to crop option image", e);
+                 }
+             }
+             return { text: opt.text, image: optImage };
+          }));
+
           return {
             id: q.id || `quiz-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
             question: cleanedQuestionText, // QuizPlayer dùng 'question'
             image: finalImage,
-            options: normalizedOptions.map((opt: any) => ({
-              ...opt,
-              image: normalizeImage(opt.image || '', pageImage)
-            })),
+            options: processedOptions,
             answer: q.answer || '',
             explanation: q.explanation || '',
           };
