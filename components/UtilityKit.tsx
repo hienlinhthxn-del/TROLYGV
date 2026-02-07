@@ -989,17 +989,17 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const imageParts: any[] = [];
           const pageImages: string[] = [];
 
-          // Giới hạn xử lý 5 trang đầu để tránh quá tải payload (Gemini giới hạn request)
-          const maxPages = Math.min(pdf.numPages, 20);
+          // TỐI ƯU HÓA: Giới hạn số trang và chất lượng để tránh lỗi "Payload Too Large" hoặc Crash trình duyệt
+          const maxPages = Math.min(pdf.numPages, 15);
 
           // Tự động điều chỉnh chất lượng để tránh quá tải payload
-          let scale = 2.0;
-          let quality = 0.9;
+          let scale = 1.5; // Mặc định giảm scale xuống 1.5 (đủ nét cho AI đọc)
+          let quality = 0.8;
 
           // Tối ưu hóa: Nếu file nhiều trang, giảm chất lượng để tránh lỗi payload
-          if (maxPages >= 3) {
-            scale = 1.5;
-            quality = 0.8;
+          if (maxPages > 5) {
+            scale = 1.2;
+            quality = 0.6;
           }
 
           for (let i = 1; i <= maxPages; i++) {
@@ -1078,7 +1078,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         "questions": [
           {
             "page_index": 0,
-            "bbox": [100, 50, 300, 950], // Chỉ có nếu câu hỏi có hình
+            "bbox": [100, 50, 300, 950], // [ymin, xmin, ymax, xmax] (0-1000)
             "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
             "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
             "type": "Trắc nghiệm", // Hoặc "Tự luận"
@@ -1131,6 +1131,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             const img = new Image();
             img.onload = () => {
               if (!bbox || bbox.length !== 4) { resolve(base64Image); return; }
+              if (img.width === 0 || img.height === 0) { resolve(base64Image); return; }
+
               const [ymin, xmin, ymax, xmax] = bbox;
               const width = img.width;
               const height = img.height;
@@ -1193,7 +1195,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             const parsed = Number(pageIndexRaw);
             if (!Number.isNaN(parsed)) {
               // page_index từ AI luôn bắt đầu từ 0 (trang đầu tiên)
-              if (parsed >= 0 && parsed < pageImageUrls.length) {
+              if (parsed >= 0 && parsed < pageImageUrls.length && pageImageUrls[parsed]) {
                 pageImage = pageImageUrls[parsed];
               }
             }
@@ -1202,7 +1204,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           if (!pageImage && pageImageUrls.length > 0) {
             const totalQuestions = rawQuestions.length;
             const questionsPerPage = Math.ceil(totalQuestions / pageImageUrls.length);
-            const calculatedPage = Math.min(Math.floor(i / questionsPerPage), pageImageUrls.length - 1);
+            const calculatedPage = Math.min(Math.floor(i / (questionsPerPage || 1)), pageImageUrls.length - 1);
             pageImage = pageImageUrls[calculatedPage] || pageImageUrls[0];
           }
 
