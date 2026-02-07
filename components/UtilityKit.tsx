@@ -910,7 +910,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi từ file PDF/Ảnh (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic, Violympic...).
+      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi từ file PDF/Ảnh (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
       
       NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi có trong file (thường là 30 câu hoặc nhiều hơn). KHÔNG ĐƯỢC BỎ SÓT.
 
@@ -919,17 +919,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       QUY TẮC XỬ LÝ HÌNH ẢNH (BẮT BUỘC):
       1. Nếu câu hỏi hoặc đáp án là HÌNH ẢNH (biểu đồ, hình vẽ, phép tính dạng hình...), bạn KHÔNG ĐƯỢC mô tả bằng lời.
       2. Thay vào đó, hãy điền chính xác cụm từ: "[CẮT ẢNH TỪ ĐỀ]" vào trường "image" của câu hỏi hoặc đáp án đó.
-      3. Hệ thống sẽ tự động cắt ảnh từ trang đề thi để hiển thị cho học sinh.
+      3. QUAN TRỌNG: Để hệ thống cắt ảnh chính xác, bạn HÃY CỐ GẮNG xác định tọa độ khung bao quanh (bounding box) của câu hỏi đó trên trang.
       
-      QUY TẮC VỀ TRANG (PAGE INDEX):
-      - Bạn phải xác định câu hỏi đang nằm ở trang số mấy của file (bắt đầu từ 0).
-      - Trả về trường "page_index" cho MỖI câu hỏi. Ví dụ: trang đầu tiên là 0, trang thứ hai là 1...
+      QUY TẮC VỀ TRANG (PAGE INDEX) VÀ TỌA ĐỘ (BBOX):
+      - "page_index": Số thứ tự trang chứa câu hỏi (bắt đầu từ 0).
+      - "bbox": Mảng 4 số [ymin, xmin, ymax, xmax] theo thang đo 1000 (0-1000) bao quanh vùng hình ảnh/câu hỏi cần cắt.
 
       CẤU TRÚC JSON MONG MUỐN:
       {
         "questions": [
           {
             "page_index": 0,
+            "bbox": [100, 50, 300, 950], // Tọa độ vùng câu hỏi (nếu có)
             "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
             "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
             "options": [
@@ -975,7 +976,43 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           throw new Error("AI đã trả về một danh sách đáp án thay vì bộ câu hỏi đầy đủ. Vui lòng thử lại.");
         }
 
-        const formattedQuestions = rawQuestions.map((q: any, i: number) => {
+        // Helper để cắt ảnh từ bbox
+        const cropImageFromBbox = (base64Image: string, bbox: number[]): Promise<string> => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              if (!bbox || bbox.length !== 4) { resolve(base64Image); return; }
+              const [ymin, xmin, ymax, xmax] = bbox;
+              const width = img.width;
+              const height = img.height;
+              
+              const y = (ymin / 1000) * height;
+              const x = (xmin / 1000) * width;
+              const h = ((ymax - ymin) / 1000) * height;
+              const w = ((xmax - xmin) / 1000) * width;
+
+              if (w <= 0 || h <= 0) { resolve(base64Image); return; }
+
+              const canvas = document.createElement('canvas');
+              const padding = 10;
+              canvas.width = w + padding * 2;
+              canvas.height = h + padding * 2;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(img, x, y, w, h, padding, padding, w, h);
+                  resolve(canvas.toDataURL('image/jpeg'));
+              } else {
+                  resolve(base64Image);
+              }
+            };
+            img.onerror = () => resolve(base64Image);
+            img.src = base64Image;
+          });
+        };
+
+        const formattedQuestions = await Promise.all(rawQuestions.map(async (q: any, i: number) => {
           // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
           const resolveOptions = (candidate: unknown) => {
             if (Array.isArray(candidate)) return candidate;
@@ -1061,11 +1098,21 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             || questionText
             || (questionImage ? 'Xem hình và chọn đáp án đúng.' : 'Câu hỏi chưa rõ nội dung, vui lòng xem lại đề.');
 
+          // Xử lý cắt ảnh nếu có bbox
+          let finalImage = questionImage;
+          if (q.bbox && Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
+             try {
+                 finalImage = await cropImageFromBbox(pageImage, q.bbox);
+             } catch (e) {
+                 console.warn("Failed to crop image", e);
+             }
+          }
+
           return {
             id: q.id || `quiz-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
             question: cleanedQuestionText, // QuizPlayer dùng 'question'
-            image: questionImage,
+            image: finalImage,
             options: normalizedOptions.map((opt: any) => ({
               ...opt,
               image: normalizeImage(opt.image || '', pageImage)
@@ -1073,7 +1120,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             answer: q.answer || '',
             explanation: q.explanation || '',
           };
-        });
+        }));
         setResult(formattedQuestions);
       } else {
         throw new Error("AI không trích xuất được câu hỏi nào hoặc định dạng trả về không đúng.");
@@ -1132,7 +1179,7 @@ Chi tiết: ${errorMessage}
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 720;
+            const maxWidth = 480; // Giảm kích thước để tối ưu dung lượng link
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1143,7 +1190,7 @@ Chi tiết: ${errorMessage}
               return;
             }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.62));
+            resolve(canvas.toDataURL('image/jpeg', 0.5)); // Nén chất lượng 50%
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
@@ -1158,11 +1205,11 @@ Chi tiết: ${errorMessage}
       const trimmed = value.trim();
       if (!trimmed) return '';
       if (!trimmed.startsWith('data:image')) {
-        return trimmed.length > 14000 ? '' : trimmed;
+        return trimmed.length > 2000 ? '' : trimmed;
       }
 
       const compressed = await compressDataImage(trimmed);
-      return compressed.length > 14000 ? '' : compressed;
+      return compressed.length > 45000 ? '' : compressed; // Tăng giới hạn lên ~33KB
     };
 
     try {
@@ -1258,7 +1305,7 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 720;
+            const maxWidth = 480;
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1266,7 +1313,7 @@ Thầy/Cô hãy gửi link này cho học sinh để luyện tập nhé.${note}`
             const ctx = canvas.getContext('2d');
             if (!ctx) { resolve(dataUrl); return; }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.62));
+            resolve(canvas.toDataURL('image/jpeg', 0.5));
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
