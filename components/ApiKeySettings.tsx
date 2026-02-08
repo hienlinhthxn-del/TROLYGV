@@ -52,10 +52,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             // Danh sách các model để thử (ưu tiên model mới nhất và ổn định)
             const modelsToTry = [
                 'gemini-1.5-flash',
-                'gemini-1.5-flash-latest',
+                'gemini-1.5-flash-8b',
                 'gemini-1.5-pro',
-                'gemini-1.0-pro',
-                'gemini-pro'
+                'gemini-1.0-pro'
             ];
 
             let success = false;

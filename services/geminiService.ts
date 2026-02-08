@@ -8,8 +8,15 @@ export interface FilePart {
   }
 }
 
-// Sử dụng các model Gemini ổn định nhất
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro'];
+// Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
+const MODELS = [
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
+  'gemini-1.0-pro',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro-latest'
+];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
@@ -818,6 +825,9 @@ export class GeminiService {
         this.setupModel(MODELS[nextIdx], 'v1beta');
         this.retryAttempt = 0; // Reset retry attempt when changing model
         return retryFn();
+      } else {
+        // Nếu đã thử hết danh sách mà vẫn 404
+        throw new Error("Không tìm thấy model AI phù hợp với API Key hiện tại. Thầy/Cô hãy kiểm tra lại loại Key (Gemini/OpenAI/Claude) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
       }
     }
 
