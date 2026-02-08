@@ -49,16 +49,31 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
         setIsTesting(true);
         try {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
+            // Thử với model gemini-1.5-flash-001 (phiên bản ổn định)
+            let response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${apiKey.trim()}`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: 'Trả lời ngắn gọn: 1+1=?' }] }]
+                        contents: [{ parts: [{ text: 'Hello' }] }]
                     })
                 }
             );
+
+            // Nếu lỗi 404 (Model not found), thử fallback sang gemini-pro
+            if (response.status === 404) {
+                response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey.trim()}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: 'Hello' }] }]
+                        })
+                    }
+                );
+            }
 
             if (response.ok) {
                 setStatus('valid');
