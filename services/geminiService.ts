@@ -8,8 +8,8 @@ export interface FilePart {
   }
 }
 
-// Sử dụng các model Gemini mới nhất (2026)
-const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
+// Sử dụng các model Gemini ổn định nhất
+const MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro'];
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;

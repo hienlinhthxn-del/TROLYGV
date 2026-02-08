@@ -49,39 +49,49 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
         setIsTesting(true);
         try {
-            // Thử với model gemini-1.5-flash-001 (phiên bản ổn định)
-            let response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${apiKey.trim()}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: 'Hello' }] }]
-                    })
-                }
-            );
+            // Danh sách các model để thử (ưu tiên model mới nhất và ổn định)
+            const modelsToTry = [
+                'gemini-1.5-flash',
+                'gemini-1.5-flash-latest',
+                'gemini-1.5-pro',
+                'gemini-1.0-pro',
+                'gemini-pro'
+            ];
 
-            // Nếu lỗi 404 (Model not found), thử fallback sang gemini-pro
-            if (response.status === 404) {
-                response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey.trim()}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: 'Hello' }] }]
-                        })
+            let success = false;
+            let lastError = '';
+
+            for (const model of modelsToTry) {
+                try {
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: 'Hello' }] }]
+                            })
+                        }
+                    );
+
+                    if (response.ok) {
+                        success = true;
+                        break;
+                    } else {
+                        const data = await response.json();
+                        lastError = data.error?.message || response.statusText;
                     }
-                );
+                } catch (e: any) {
+                    lastError = e.message;
+                }
             }
 
-            if (response.ok) {
+            if (success) {
                 setStatus('valid');
                 alert('✅ API Key hợp lệ! Thầy/Cô có thể lưu lại.');
             } else {
-                const error = await response.json();
                 setStatus('invalid');
-                alert(`❌ API Key không hợp lệ: ${error.error?.message || 'Lỗi không xác định'}`);
+                alert(`❌ API Key không hợp lệ hoặc không tìm thấy model phù hợp.\n\nChi tiết: ${lastError}`);
             }
         } catch (error: any) {
             setStatus('invalid');
