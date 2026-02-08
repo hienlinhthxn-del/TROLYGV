@@ -10,12 +10,13 @@ export interface FilePart {
 
 // Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
 const MODELS = [
+  'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro-latest',
   'gemini-1.5-pro',
-  'gemini-1.0-pro',
-  'gemini-pro',
-  'gemini-2.0-flash-exp'
+  'gemini-1.5-flash-8b',
+  'gemini-2.0-flash-exp',
+  'gemini-1.0-pro'
 ];
 
 export class GeminiService {
@@ -354,7 +355,7 @@ export class GeminiService {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
         }
-      }, { apiVersion: 'v1beta' });
+      }, { apiVersion: this.currentVersion });
 
       // Use retry logic for API calls
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
@@ -432,7 +433,7 @@ export class GeminiService {
           responseMimeType: "application/json",
           maxOutputTokens: 8192,
         }
-      }, { apiVersion: 'v1beta' });
+      }, { apiVersion: this.currentVersion });
 
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
       const text = result.response.text();
