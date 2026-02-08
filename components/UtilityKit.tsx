@@ -1084,7 +1084,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             "explanation": "Giải thích logic (nêu rõ quy luật nếu là toán/IQ)"
           }
         ]
-      }`; `;
+      }`;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
@@ -1130,7 +1130,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               const [ymin, xmin, ymax, xmax] = bbox;
               const width = img.width;
               const height = img.height;
-              
+
               const y = (ymin / 1000) * height;
               const x = (xmin / 1000) * width;
               const h = ((ymax - ymin) / 1000) * height;
@@ -1144,12 +1144,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
               canvas.height = h + padding * 2;
               const ctx = canvas.getContext('2d');
               if (ctx) {
-                  ctx.fillStyle = '#ffffff';
-                  ctx.fillRect(0, 0, canvas.width, canvas.height);
-                  ctx.drawImage(img, x, y, w, h, padding, padding, w, h);
-                  resolve(canvas.toDataURL('image/jpeg'));
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, x, y, w, h, padding, padding, w, h);
+                resolve(canvas.toDataURL('image/jpeg'));
               } else {
-                  resolve(base64Image);
+                resolve(base64Image);
               }
             };
             img.onerror = () => resolve(base64Image);
@@ -1241,28 +1241,28 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           // Xử lý cắt ảnh nếu có bbox
           let finalImage = questionImage;
           if (q.bbox && Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
-             try {
-                 finalImage = await cropImageFromBbox(pageImage, q.bbox);
-             } catch (e) {
-                 console.warn("Failed to crop image", e);
-             }
+            try {
+              finalImage = await cropImageFromBbox(pageImage, q.bbox);
+            } catch (e) {
+              console.warn("Failed to crop image", e);
+            }
           }
 
           // Xử lý cắt ảnh cho options (NEW)
           const processedOptions = await Promise.all(normalizedOptions.map(async (opt: any) => {
-             let optImage = normalizeImage(opt.image || '');
-             if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
-                 try {
-                     optImage = await cropImageFromBbox(pageImage, opt.bbox);
-                 } catch (e) {
-                     console.warn("Failed to crop option image", e);
-                 }
-             }
-             return { text: opt.text, image: optImage };
+            let optImage = normalizeImage(opt.image || '');
+            if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
+              try {
+                optImage = await cropImageFromBbox(pageImage, opt.bbox);
+              } catch (e) {
+                console.warn("Failed to crop option image", e);
+              }
+            }
+            return { text: opt.text, image: optImage };
           }));
-          
+
           return {
-            id: q.id || `quiz - ${ Date.now() } -${ i } `,
+            id: q.id || `quiz - ${Date.now()} -${i} `,
             type: q.type || 'Trắc nghiệm',
             question: cleanedQuestionText, // QuizPlayer dùng 'question'
             image: finalImage,
@@ -1287,7 +1287,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       if (isNetworkError) {
         alert(`⚠️ Không kết nối được tới Google AI(Failed to fetch).
 
-Chi tiết: ${ errorMessage }
+Chi tiết: ${errorMessage}
 
 ✅ Cách xử lý nhanh:
 - Kiểm tra Internet, VPN, proxy hoặc tường lửa mạng trường học
@@ -1304,7 +1304,7 @@ Chi tiết: ${ errorMessage }
       }
       // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
-        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${ errorMessage } \n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không ? `)) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage} \n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không ? `)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
@@ -1312,9 +1312,9 @@ Chi tiết: ${ errorMessage }
       } else {
         // Kịch bản 4: Lỗi chung khác
         if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận")) {
-           alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${ errorMessage } \n\n👉 GIẢI PHÁP: Thầy / Cô vui lòng vào mục "Cài đặt"(biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân(miễn phí từ Google) để sử dụng ổn định hơn.`);
+          alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${errorMessage} \n\n👉 GIẢI PHÁP: Thầy / Cô vui lòng vào mục "Cài đặt"(biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân(miễn phí từ Google) để sử dụng ổn định hơn.`);
         } else {
-           alert(`Lỗi bóc tách đề: ${ errorMessage } `);
+          alert(`Lỗi bóc tách đề: ${errorMessage} `);
         }
       }
     } finally {
@@ -1398,7 +1398,7 @@ Chi tiết: ${ errorMessage }
       let payloadData = await generatePayload(false);
       let quizData = { s: subject, g: grade, q: payloadData.q };
       let json = JSON.stringify(quizData);
-      
+
       let finalCode = '';
 
       const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -1425,36 +1425,36 @@ Chi tiết: ${ errorMessage }
         finalCode = await blobToBase64(blob);
       }
 
-      let url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
+      let url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
 
       // 2. Nếu Link quá dài (> 4000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
       if (url.length > 4000) {
-         payloadData = await generatePayload(true); // Force strip images
-         quizData = { s: subject, g: grade, q: payloadData.q };
-         json = JSON.stringify(quizData);
-         
-         // @ts-ignore
-         if (window.CompressionStream) {
-            const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
-            finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
-         } else {
-            finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
-         }
-         url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
-         
-         if (url.length > 8000) {
-             alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
-             return;
-         }
-         
-         await navigator.clipboard.writeText(url);
-         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy / Cô hãy dùng nút "Copy Mã Đề"(biểu tượng mã code) bên cạnh nút Chia sẻ.`);
-         return;
+        payloadData = await generatePayload(true); // Force strip images
+        quizData = { s: subject, g: grade, q: payloadData.q };
+        json = JSON.stringify(quizData);
+
+        // @ts-ignore
+        if (window.CompressionStream) {
+          const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+          finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
+        } else {
+          finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+        }
+        url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
+
+        if (url.length > 8000) {
+          alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
+          return;
+        }
+
+        await navigator.clipboard.writeText(url);
+        alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy / Cô hãy dùng nút "Copy Mã Đề"(biểu tượng mã code) bên cạnh nút Chia sẻ.`);
+        return;
       }
 
       await navigator.clipboard.writeText(url);
-      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${ payloadData.dropped } ảnh quá lớn để tối ưu Link)` : '';
-      alert(`✅ Đã sao chép Link Quiz!${ note } \n\nGửi ngay cho học sinh để luyện tập.`);
+      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${payloadData.dropped} ảnh quá lớn để tối ưu Link)` : '';
+      alert(`✅ Đã sao chép Link Quiz!${note} \n\nGửi ngay cho học sinh để luyện tập.`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
@@ -1527,7 +1527,7 @@ Chi tiết: ${ errorMessage }
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${ pendingAttachments.length } tệp đính kèm]` : ''),
+      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${pendingAttachments.length} tệp đính kèm]` : ''),
       timestamp: new Date(),
     };
 
@@ -1552,7 +1552,7 @@ Chi tiết: ${ errorMessage }
       setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
-      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${ errorMessage } `, isThinking: false, isStreaming: false } : msg));
+      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${errorMessage} `, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsAssistantLoading(false);
     }
@@ -1604,7 +1604,7 @@ Chi tiết: ${ errorMessage }
 
     // Bước 1: Dịch (Có thể lỗi Key, nhưng không nên chặn quy trình)
     try {
-      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${ videoStyle }, short animation, simple, for kids, educational.Script: "${topic}"`;
+      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${videoStyle}, short animation, simple, for kids, educational.Script: "${topic}"`;
       const translation = await geminiService.generateText(translationPrompt);
       optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
     } catch (err: any) {
@@ -1613,7 +1613,7 @@ Chi tiết: ${ errorMessage }
       if (err.message && (err.message.includes("429") || err.message.includes("quota"))) {
         // Không làm gì cả, silent fallback
       }
-      optimizedPrompt = `${ topic }, ${ videoStyle }, animation for kids`; // Fallback
+      optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
     }
 
     // Bước 2: Tạo video (Quan trọng)
@@ -1622,7 +1622,7 @@ Chi tiết: ${ errorMessage }
       setResult(videoUrl);
     } catch (error: any) {
       console.error("Video Gen Error:", error);
-      alert(`⚠️ Không thể tạo video: ${ error.message || "Lỗi kết nối" } `);
+      alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi kết nối"} `);
     } finally {
       setIsProcessing(false);
     }
@@ -1694,7 +1694,7 @@ Chi tiết: ${ errorMessage }
 
   const handleSaveToLibrary = () => {
     if (!result) return;
-    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${ subject } `);
+    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${subject} `);
     if (name) {
       const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       onSaveToLibrary(name, contentToSave);
@@ -1849,7 +1849,7 @@ Chi tiết: ${ errorMessage }
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `Cat_Trang_${ start } -${ end }_${ pdfToolFile.name } `;
+      link.download = `Cat_Trang_${start} -${end}_${pdfToolFile.name} `;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1857,7 +1857,7 @@ Chi tiết: ${ errorMessage }
       alert("✅ Đã cắt và tải xuống file PDF thành công!");
     } catch (error: any) {
       console.error("PDF Split Error (Render Method):", error);
-      if (window.confirm(`Lỗi khi cắt file PDF: ${ error.message } \n\nĐây là lỗi phức tạp.Thầy / Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh(ZIP) không ? `)) {
+      if (window.confirm(`Lỗi khi cắt file PDF: ${error.message} \n\nĐây là lỗi phức tạp.Thầy / Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh(ZIP) không ? `)) {
         await handlePdfToImages();
       }
     } finally {
@@ -1896,14 +1896,14 @@ Chi tiết: ${ errorMessage }
 
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         if (blob) {
-          zip.file(`page_${ i }.png`, blob);
+          zip.file(`page_${i}.png`, blob);
         }
       }
 
       const content = await zip.generateAsync({ type: "blob" });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(content);
-      link.download = `Anh_tu_PDF_${ pdfToolFile.name.replace('.pdf', '') }.zip`;
+      link.download = `Anh_tu_PDF_${pdfToolFile.name.replace('.pdf', '')}.zip`;
       link.click();
       alert("✅ Đã chuyển đổi và tải xuống file ZIP thành công!");
 
@@ -1928,49 +1928,49 @@ Chi tiết: ${ errorMessage }
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-file-signature"></i>
           <span>Giáo án 2345</span>
         </button>
         <button
           onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-gamepad"></i>
           <span>Trò chơi</span>
         </button>
         <button
           onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-image"></i>
           <span>Minh họa AI</span>
         </button>
         <button
           onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-volume-up"></i>
           <span>Giọng đọc</span>
         </button>
         <button
           onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-film"></i>
           <span>Tạo Video</span>
         </button>
         <button
           onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-user-robot"></i>
           <span>Trợ lý Chat</span>
         </button>
         <button
           onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
         >
           <i className="fas fa-toolbox"></i>
           <span>Công cụ PDF</span>
@@ -1995,14 +1995,14 @@ Chi tiết: ${ errorMessage }
                 <button
                   key={persona.id}
                   onClick={() => setActiveAssistant(persona)}
-                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${ activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200' } `}
+                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'} `}
                 >
-                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${ activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white' } `}>
-                    <i className={`fas ${ persona.icon } ${ activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600' } `}></i>
+                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'} `}>
+                    <i className={`fas ${persona.icon} ${activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600'} `}></i>
                   </div>
                   <div>
                     <p className="font-black text-sm">{persona.name}</p>
-                    <p className={`text - xs mt - 1 ${ activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500' } `}>{persona.description}</p>
+                    <p className={`text - xs mt - 1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'} `}>{persona.description}</p>
                   </div>
                 </button>
               ))}
@@ -2025,10 +2025,10 @@ Chi tiết: ${ errorMessage }
                       {pendingAttachments.map((att, idx) => (
                         <div key={idx} className="relative shrink-0 group">
                           {att.type === 'image' ? (
-                            <img src={`data:${ att.mimeType }; base64, ${ att.data } `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            <img src={`data:${att.mimeType}; base64, ${att.data} `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${ att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } text - xl mb - 1`}></i>
+                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text - xl mb - 1`}></i>
                               <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                             </div>
                           )}
@@ -2051,16 +2051,16 @@ Chi tiết: ${ errorMessage }
                       value={assistantInput}
                       onChange={e => setAssistantInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
-                      placeholder={`Hỏi ${ activeAssistant.name }...`}
+                      placeholder={`Hỏi ${activeAssistant.name}...`}
                       className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
                       rows={1}
                     />
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${ assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400' } `}
+                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'} `}
                     >
-                      <i className={`fas ${ isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane' } `}></i>
+                      <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'} `}></i>
                     </button>
                   </div>
                 </div>
@@ -2085,9 +2085,9 @@ Chi tiết: ${ errorMessage }
                     <div className="mb-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
                       <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
-                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Soạn Ý tưởng</button>
-                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Tạo Ô chữ</button>
-                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Quiz Thi đua</button>
+                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Soạn Ý tưởng</button>
+                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Tạo Ô chữ</button>
+                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Quiz Thi đua</button>
                       </div>
                       {gameType === 'quiz' && (
                         <button onClick={() => setShowCropper(true)} className="w-full mt-2 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center">
@@ -2097,8 +2097,8 @@ Chi tiết: ${ errorMessage }
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ Chủ đề</button>
-                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ File Ảnh/PDF</button>
+                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ Chủ đề</button>
+                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ File Ảnh/PDF</button>
                           </div>
 
                           {quizMode === 'topic' ? (
@@ -2109,7 +2109,7 @@ Chi tiết: ${ errorMessage }
                                   <button
                                     key={num}
                                     onClick={() => setQuizCount(num)}
-                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${ quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100' } `}
+                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'} `}
                                   >
                                     {num} câu
                                   </button>
@@ -2140,9 +2140,9 @@ Chi tiết: ${ errorMessage }
                     <div className="flex justify-end mb-2 space-x-2">
                       <button
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
-                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${ useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100' } `}
+                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'} `}
                       >
-                        <i className={`fas ${ useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off' } mr - 1`}></i>
+                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr - 1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
                       </button>
                       <button
@@ -2322,13 +2322,13 @@ Chi tiết: ${ errorMessage }
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={() => setVoiceName('Kore')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
                     >
                       <i className="fas fa-mars mr-2"></i>Giọng Nam
                     </button>
                     <button
                       onClick={() => setVoiceName('Puck')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
                     >
                       <i className="fas fa-venus mr-2"></i>Giọng Nữ
                     </button>
@@ -2373,7 +2373,7 @@ Chi tiết: ${ errorMessage }
                     {pendingAttachments.map((at, i) => (
                       <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
                         <div className="flex items-center space-x-2 truncate">
-                          <i className={`fas ${ at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } `}></i>
+                          <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} `}></i>
                           <span className="truncate">{at.name}</span>
                         </div>
                         <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
@@ -2390,7 +2390,7 @@ Chi tiết: ${ errorMessage }
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                 disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${ activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700' } `}
+                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'} `}
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
                 {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
@@ -2434,7 +2434,7 @@ Chi tiết: ${ errorMessage }
                         </select>
                       </div>
                       <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${ topic.replace(/\s+/g, '_') }.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
+                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
                       >
                         <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
@@ -2507,7 +2507,7 @@ Chi tiết: ${ errorMessage }
                         <img
                           src={result}
                           alt="Video Scene"
-                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${ isPlaying ? 'scale-125' : 'scale-100' } `}
+                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${isPlaying ? 'scale-125' : 'scale-100'} `}
                         />
                         {!isPlaying && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
@@ -2519,8 +2519,8 @@ Chi tiết: ${ errorMessage }
                       </div>
                       <div className="mt-8 flex flex-col items-center space-y-3">
                         <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${ isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700' } `}>
-                            <i className={`fas ${ isPlaying ? 'fa-stop' : 'fa-play' } mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
+                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'} `}>
+                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
                           <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
                             <i className="fas fa-download mr-2"></i>Tải Ảnh nền
@@ -2568,9 +2568,9 @@ Chi tiết: ${ errorMessage }
                                     window.speechSynthesis.speak(utterance);
                                   }
                                 }}
-                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${ isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700' } `}
+                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'} `}
                               >
-                                <i className={`fas ${ isPlaying ? 'fa-waveform' : 'fa-play' } text - xl ${ !isPlaying && 'ml-1' } `}></i>
+                                <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text - xl ${!isPlaying && 'ml-1'} `}></i>
                               </button>
                               <button
                                 onClick={() => {
@@ -2586,7 +2586,7 @@ Chi tiết: ${ errorMessage }
                               </button>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${ voiceName === 'Kore' ? 'Nam' : 'Nữ' } • ${ audioUrl ? 'Máy chủ' : 'Hệ thống' } `}
+                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'} `}
                             </p>
                           </div>
                         )}
@@ -2610,7 +2610,7 @@ Chi tiết: ${ errorMessage }
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${ activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone' } text - 5xl text - slate - 300`}></i>
+                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text - 5xl text - slate - 300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>
