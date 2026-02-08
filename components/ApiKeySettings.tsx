@@ -50,7 +50,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         setIsTesting(true);
         try {
             const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -95,7 +95,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             localStorage.setItem('anthropic_api_key', anthropicKey.trim());
         }
 
-        alert('✅ Đã lưu API Key! Vui lòng tải lại trang (F5) để áp dụng.');
+        if (confirm('✅ Đã lưu API Key thành công!\n\nỨng dụng cần tải lại để áp dụng Key mới ngay lập tức. Bạn có muốn tải lại trang không?')) {
+            window.location.reload();
+        }
     };
 
     const handleClearKey = () => {
@@ -167,9 +169,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                     {/* Input */}
                     <div className="space-y-2">
                         <label className="text-xs font-black text-slate-600 uppercase tracking-widest">
-                                Google Gemini API Key
-                            </label>
-                            <div className="relative">
+                            Google Gemini API Key
+                        </label>
+                        <div className="relative">
                             <input
                                 type={showKey ? 'text' : 'password'}
                                 value={apiKey}
@@ -185,13 +187,13 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                                 <i className={`fas ${showKey ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                             </button>
                         </div>
-                    {/* OpenAI / Anthropic fallback keys */}
-                    <div className="space-y-2 mt-3">
-                        <label className="text-xs font-black text-slate-600 uppercase tracking-widest">OpenAI API Key (fallback)</label>
-                        <input type={showKey ? 'text' : 'password'} value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
-                        <label className="text-xs font-black text-slate-600 uppercase tracking-widest mt-2">Anthropic API Key (fallback)</label>
-                        <input type={showKey ? 'text' : 'password'} value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
-                    </div>
+                        {/* OpenAI / Anthropic fallback keys */}
+                        <div className="space-y-2 mt-3">
+                            <label className="text-xs font-black text-slate-600 uppercase tracking-widest">OpenAI API Key (fallback)</label>
+                            <input type={showKey ? 'text' : 'password'} value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
+                            <label className="text-xs font-black text-slate-600 uppercase tracking-widest mt-2">Anthropic API Key (fallback)</label>
+                            <input type={showKey ? 'text' : 'password'} value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-..." className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none" />
+                        </div>
                     </div>
 
                     {/* Help */}

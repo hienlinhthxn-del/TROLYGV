@@ -174,7 +174,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             <div class="question">
               <div><strong>Câu ${i + 1}:</strong> ${q.content}</div>
               ${q.image ? `<div><img src="${q.image}" style="max-width:520px; height:auto;"/></div>` : ''}
-              ${q.options && q.options.length ? `<div><em>Đáp án:</em><ul>${q.options.map(o=>`<li>${typeof o==='string'?o:o.text}</li>`).join('')}</ul></div>` : ''}
+              ${q.options && q.options.length ? `<div><em>Đáp án:</em><ul>${q.options.map(o => `<li>${typeof o === 'string' ? o : o.text}</li>`).join('')}</ul></div>` : ''}
             </div>
           `).join('')}
         </body>
@@ -301,7 +301,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       setViewMode('config');
     } catch (error: any) {
       console.error("Exam Generation Error:", error);
-      alert(`Lỗi khi AI đang soạn đề: ${error.message || 'Lỗi không xác định'}. Thầy/Cô vui lòng thử lại nhé!`);
+      const msg = error.message || 'Lỗi không xác định';
+      if (msg.includes("API key") || msg.includes("400")) {
+        alert(`⚠️ Lỗi API Key: ${msg}\n\nVui lòng kiểm tra lại Key trong Cài đặt.`);
+      } else {
+        alert(`Lỗi khi AI đang soạn đề: ${msg}. Thầy/Cô vui lòng thử lại nhé!`);
+      }
     } finally {
       setIsGenerating(false);
     }

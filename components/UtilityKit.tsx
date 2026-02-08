@@ -997,7 +997,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           let quality = 0.8;
 
           // Tối ưu hóa: Nếu file nhiều trang, giảm chất lượng để tránh lỗi payload
-          if (maxPages > 5) {
+          if (maxPages > 10) {
+            scale = 1.0;
+            quality = 0.5;
+          } else if (maxPages > 5) {
             scale = 1.2;
             quality = 0.6;
           }
@@ -1312,8 +1315,17 @@ Chi tiết: ${errorMessage}
         }
       } else {
         // Kịch bản 4: Lỗi chung khác
-        if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận")) {
-          alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${errorMessage} \n\n👉 GIẢI PHÁP: Thầy / Cô vui lòng vào mục "Cài đặt"(biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân(miễn phí từ Google) để sử dụng ổn định hơn.`);
+        if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận") || errorMessage.includes("429")) {
+          const hasKey = !!localStorage.getItem('manually_entered_api_key');
+          if (hasKey) {
+            alert(`⚠️ API Key cá nhân của Thầy/Cô đã hết hạn mức sử dụng (Quota Exceeded).\n\nGoogle giới hạn số lượng yêu cầu miễn phí mỗi phút/ngày.\n\n👉 GIẢI PHÁP:\n1. Chờ vài phút rồi thử lại.\n2. Tạo một API Key mới từ tài khoản Google khác và cập nhật trong Cài đặt.`);
+          } else {
+            alert(`⚠️ Hệ thống AI đang quá tải (Hết lượt miễn phí chung).\n\n👉 GIẢI PHÁP TỐT NHẤT: Thầy/Cô hãy vào Cài đặt (biểu tượng chìa khóa 🔑) và nhập API Key cá nhân (Miễn phí) để không bị giới hạn chung với người khác.`);
+            try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+          }
+        } else if (errorMessage.includes("API key not valid") || errorMessage.includes("key invalid") || errorMessage.includes("400")) {
+          alert(`⚠️ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\nVui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc nhập Key mới.`);
+          try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
         } else {
           alert(`Lỗi bóc tách đề: ${errorMessage} `);
         }
