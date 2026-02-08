@@ -562,14 +562,32 @@ const App: React.FC = () => {
       }
       setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
 
-      setIsGeneratingSuggestions(true);
-      const suggestions = await geminiService.generateSuggestions([messageContent, fullContent], currentPersona.name);
-      setDynamicSuggestions(suggestions);
-      setIsGeneratingSuggestions(false);
+      // Tách riêng phần gợi ý để nếu lỗi (hết quota) thì không làm mất nội dung chính
+      try {
+        setIsGeneratingSuggestions(true);
+        const suggestions = await geminiService.generateSuggestions([messageContent, fullContent], currentPersona.name);
+        setDynamicSuggestions(suggestions);
+      } catch (suggestionError) {
+        console.warn("Suggestion generation failed:", suggestionError);
+      } finally {
+        setIsGeneratingSuggestions(false);
+      }
+
     } catch (error: any) {
       console.error("Chat Stream Error Details:", error);
-      const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra trong quá trình trao đổi.";
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Đã có lỗi xảy ra: ${errorMessage}. Thầy/Cô vui lòng kiểm tra kết nối mạng hoặc thử lại sau giây lát nhé!`, isThinking: false, isStreaming: false } : msg));
+      let errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra trong quá trình trao đổi.";
+
+      if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota') || errorMessage.includes('resource_exhausted')) {
+        errorMessage = "Hết lượt sử dụng miễn phí (Quota Exceeded). Vui lòng vào Cài đặt (🔑) để nhập API Key mới.";
+        setShowApiKeySettings(true);
+      }
+
+      setMessages(prev => prev.map(msg => msg.id === assistantId ? {
+        ...msg,
+        content: msg.content ? `${msg.content}\n\n⚠️ **Lỗi:** ${errorMessage}` : `⚠️ ${errorMessage}`,
+        isThinking: false,
+        isStreaming: false
+      } : msg));
     } finally {
       setIsLoading(false);
     }
