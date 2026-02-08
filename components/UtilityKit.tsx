@@ -990,7 +990,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const pageImages: string[] = [];
 
           // TỐI ƯU HÓA: Giới hạn số trang và chất lượng để tránh lỗi "Payload Too Large" hoặc Crash trình duyệt
-          const maxPages = Math.min(pdf.numPages, 15);
+          const maxPages = Math.min(pdf.numPages, 20);
 
           // Tự động điều chỉnh chất lượng để tránh quá tải payload
           let scale = 1.5; // Mặc định giảm scale xuống 1.5 (đủ nét cho AI đọc)
@@ -1060,10 +1060,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       NHIỆM VỤ CỦA BẠN:
       1. Trích xuất CHÍNH XÁC và ĐẦY ĐỦ toàn bộ các câu hỏi trong đề (thường là 30 câu). Tuyệt đối không được bỏ sót bất kỳ câu nào.
       2. GIỮ NGUYÊN ĐỊNH DẠNG: Câu hỏi và đáp án phải giữ đúng nguyên văn như trong đề cũ.
-      3. TRÍCH XUẤT HÌNH ẢNH:
-         - Với MỌI câu hỏi hoặc đáp án có chứa hình ảnh, bạn PHẢI cung cấp tọa độ "bbox" để hệ thống cắt ảnh.
-         - "bbox": [ymin, xmin, ymax, xmax] (tọa độ từ 0-1000).
-         - Xác định đúng "page_index" cho mỗi câu hỏi.
+      3. TRÍCH XUẤT HÌNH ẢNH (QUAN TRỌNG):
+         - Với MỌI câu hỏi hoặc đáp án có chứa hình ảnh (biểu đồ, hình vẽ, phép tính dạng ảnh...), bạn PHẢI cung cấp tọa độ "bbox" để hệ thống cắt ảnh từ file gốc.
+         - KHÔNG mô tả hình ảnh bằng lời nếu có thể cắt ảnh.
+         - "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa 0-1000).
+         - Xác định đúng "page_index" (bắt đầu từ 0) cho mỗi câu hỏi.
 
       CẤU TRÚC JSON TRẢ VỀ:
       {
@@ -1071,17 +1072,17 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           {
             "question": "Nội dung văn bản của câu hỏi...",
             "type": "Trắc nghiệm",
-            "page_index": 0,
-            "bbox": [ymin, xmin, ymax, xmax], // Chỉ có nếu câu hỏi có ảnh
+            "page_index": 0, // Bắt buộc
+            "bbox": [ymin, xmin, ymax, xmax], // BẮT BUỘC nếu câu hỏi có hình
             "options": [
               { 
-                "text": "Nội dung đáp án A", 
-                "bbox": [ymin, xmin, ymax, xmax] // Chỉ có nếu đáp án là ảnh hoặc chứa ảnh
+                "text": "Nội dung đáp án (hoặc A/B/C/D)", 
+                "bbox": [ymin, xmin, ymax, xmax] // BẮT BUỘC nếu đáp án là hình ảnh
               },
               ...
             ],
-            "answer": "Đáp án đúng (Nội dung hoặc A/B/C/D)",
-            "explanation": "Giải thích logic (nêu rõ quy luật nếu là toán/IQ)"
+            "answer": "Đáp án đúng",
+            "explanation": "Giải thích (nếu có)"
           }
         ]
       }`;
