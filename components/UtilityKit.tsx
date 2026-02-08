@@ -140,9 +140,9 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCrop
 };
 
 // Component Quiz Player nội bộ
-const QuizPlayer: React.FC<{ 
-  data: any[]; 
-  onShare?: () => void; 
+const QuizPlayer: React.FC<{
+  data: any[];
+  onShare?: () => void;
   onCopyCode?: () => void;
   onCrop?: (src: string, type: 'question' | 'option', qIdx: number, optIdx?: number) => void;
   onUpdateQuestion?: (index: number, updatedQuestion: any) => void;
@@ -243,7 +243,7 @@ const QuizPlayer: React.FC<{
 
   const saveEdit = () => {
     if (onUpdateQuestion && editData) {
-       onUpdateQuestion(currentIndex, editData);
+      onUpdateQuestion(currentIndex, editData);
     }
     setIsEditing(false);
   };
@@ -264,52 +264,52 @@ const QuizPlayer: React.FC<{
   if (isEditing && editData) {
     return (
       <div className="flex flex-col h-full p-6 bg-white rounded-3xl animate-in fade-in">
-         <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Chỉnh sửa câu hỏi {currentIndex + 1}</h3>
-            <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-rose-500"><i className="fas fa-times text-xl"></i></button>
-         </div>
-         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 pr-2">
-            <div>
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung câu hỏi</label>
-               <textarea 
-                 value={editData.question} 
-                 onChange={e => setEditData({...editData, question: e.target.value})}
-                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                 rows={3}
-               />
-            </div>
-            <div className="space-y-3">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn</label>
-               {editData.options.map((opt: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2">
-                     <span className="w-6 text-center font-black text-slate-400 text-xs">{String.fromCharCode(65+idx)}</span>
-                     <input 
-                        value={typeof opt === 'string' ? opt : opt.text}
-                        onChange={e => {
-                           const newOpts = [...editData.options];
-                           if (typeof newOpts[idx] === 'string') newOpts[idx] = e.target.value;
-                           else newOpts[idx] = {...newOpts[idx], text: e.target.value};
-                           setEditData({...editData, options: newOpts});
-                        }}
-                        className="flex-1 p-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                     />
-                  </div>
-               ))}
-            </div>
-            <div>
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đáp án đúng</label>
-               <input 
-                 value={editData.answer} 
-                 onChange={e => setEditData({...editData, answer: e.target.value})}
-                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
-                 placeholder="Nhập đáp án đúng (VD: A hoặc nội dung)"
-               />
-            </div>
-         </div>
-         <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
-            <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all">Hủy bỏ</button>
-            <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-lg transition-all">Lưu thay đổi</button>
-         </div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Chỉnh sửa câu hỏi {currentIndex + 1}</h3>
+          <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-rose-500"><i className="fas fa-times text-xl"></i></button>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 pr-2">
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung câu hỏi</label>
+            <textarea
+              value={editData.question}
+              onChange={e => setEditData({ ...editData, question: e.target.value })}
+              className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              rows={3}
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn</label>
+            {editData.options.map((opt: any, idx: number) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="w-6 text-center font-black text-slate-400 text-xs">{String.fromCharCode(65 + idx)}</span>
+                <input
+                  value={typeof opt === 'string' ? opt : opt.text}
+                  onChange={e => {
+                    const newOpts = [...editData.options];
+                    if (typeof newOpts[idx] === 'string') newOpts[idx] = e.target.value;
+                    else newOpts[idx] = { ...newOpts[idx], text: e.target.value };
+                    setEditData({ ...editData, options: newOpts });
+                  }}
+                  className="flex-1 p-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đáp án đúng</label>
+            <input
+              value={editData.answer}
+              onChange={e => setEditData({ ...editData, answer: e.target.value })}
+              className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
+              placeholder="Nhập đáp án đúng (VD: A hoặc nội dung)"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+          <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all">Hủy bỏ</button>
+          <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-lg transition-all">Lưu thay đổi</button>
+        </div>
       </div>
     );
   }
@@ -365,20 +365,20 @@ const QuizPlayer: React.FC<{
             // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
             /^(http|https|data:image)/i.test(displayImage.trim()) ? (
               <div className="flex justify-center mb-6 relative group">
-                <img 
-                  src={displayImage} 
-                  alt="Minh họa" 
-                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity" 
+                <img
+                  src={displayImage}
+                  alt="Minh họa"
+                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity"
                   onClick={() => setZoomedImage(displayImage)}
                 />
                 {onCrop && currentQuestion.originalPageImage && (
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'question', currentIndex); }}
-                        className="absolute top-2 right-2 bg-white/90 text-indigo-600 p-2 rounded-full shadow-md hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
-                        title="Cắt lại ảnh từ đề gốc"
-                    >
-                        <i className="fas fa-crop-simple"></i>
-                    </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'question', currentIndex); }}
+                    className="absolute top-2 right-2 bg-white/90 text-indigo-600 p-2 rounded-full shadow-md hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
+                    title="Cắt lại ảnh từ đề gốc"
+                  >
+                    <i className="fas fa-crop-simple"></i>
+                  </button>
                 )}
               </div>
             ) : (
@@ -443,12 +443,12 @@ const QuizPlayer: React.FC<{
                           e.currentTarget.style.display = 'none';
                         }} />
                         {onCrop && currentQuestion.originalPageImage && (
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'option', currentIndex, index); }}
-                              className="absolute top-1 right-1 bg-white/90 text-indigo-600 p-1.5 rounded-full shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
-                              title="Cắt lại ảnh"
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'option', currentIndex, index); }}
+                            className="absolute top-1 right-1 bg-white/90 text-indigo-600 p-1.5 rounded-full shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
+                            title="Cắt lại ảnh"
                           >
-                              <i className="fas fa-crop-simple text-xs"></i>
+                            <i className="fas fa-crop-simple text-xs"></i>
                           </button>
                         )}
                       </div>
@@ -908,7 +908,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const handleCropComplete = (newImage: string) => {
     if (!croppingContext || !result) return;
     const { type, qIdx, optIdx } = croppingContext;
-    
+
     const updatedResult = [...result];
     if (type === 'question') {
       updatedResult[qIdx].image = newImage;
@@ -917,7 +917,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         updatedResult[qIdx].options[optIdx].image = newImage;
       }
     }
-    
+
     setResult(updatedResult);
     setCroppingContext(null);
   };
@@ -963,7 +963,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         setIsProcessing(false);
         alert('Chưa cấu hình API Key cho Google Gemini hoặc key fallback (OpenAI/Anthropic).\nVui lòng mở Cài đặt API Key (biểu tượng chìa khóa góc trên) và dán key, hoặc dán key vào LocalStorage.');
         // Emit global event so App can open the modal
-        try { window.dispatchEvent(new Event('openApiSettings')); } catch {}
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
         return;
       }
 
@@ -1055,61 +1055,36 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
       // -------------------------------------------------------------
 
-      const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
-      const prompt = `Bạn là chuyên gia số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
+      const prompt = `Bạn là trợ lý AI chuyên nghiệp trong việc số hóa đề thi tiểu học (Trạng Nguyên Tiếng Việt, Toán Olympic, Violympic...).
       
-      NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi có trong file (thường là 30 câu hoặc nhiều hơn). KHÔNG ĐƯỢC BỎ SÓT.
-      NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ file đính kèm (thường là 30 câu).
-      
-      YÊU CẦU ĐẶC BIỆT VỀ HÌNH ẢNH (BẮT BUỘC):
-      1. **CẮT ẢNH TỪ ĐỀ GỐC:** Với những câu hỏi hoặc đáp án có chứa hình ảnh (biểu đồ, hình vẽ, phép tính dạng hình...), bạn PHẢI trả về tọa độ "bbox" để hệ thống tự động cắt ảnh từ file gốc.
-      2. **CHỈ CẮT KHI CẦN THIẾT:** Nếu câu hỏi chỉ là văn bản thuần túy, KHÔNG trả về bbox, KHÔNG yêu cầu cắt ảnh.
-      3. **TÁCH BIỆT:** Tách riêng hình ảnh của câu hỏi và hình ảnh của từng đáp án (nếu có).
+      NHIỆM VỤ CỦA BẠN:
+      1. Trích xuất CHÍNH XÁC và ĐẦY ĐỦ toàn bộ các câu hỏi trong đề (thường là 30 câu). Tuyệt đối không được bỏ sót bất kỳ câu nào.
+      2. GIỮ NGUYÊN ĐỊNH DẠNG: Câu hỏi và đáp án phải giữ đúng nguyên văn như trong đề cũ.
+      3. TRÍCH XUẤT HÌNH ẢNH:
+         - Với MỌI câu hỏi hoặc đáp án có chứa hình ảnh, bạn PHẢI cung cấp tọa độ "bbox" để hệ thống cắt ảnh.
+         - "bbox": [ymin, xmin, ymax, xmax] (tọa độ từ 0-1000).
+         - Xác định đúng "page_index" cho mỗi câu hỏi.
 
-      ${additionalPrompt ? `LƯU Ý CỦA GIÁO VIÊN: "${additionalPrompt}"` : ''}
-
-      QUY TẮC XỬ LÝ (TUÂN THỦ NGHIÊM NGẶT):
-      1. **VĂN BẢN:** Giữ nguyên nội dung văn bản gốc của câu hỏi và đáp án. KHÔNG tự ý tóm tắt hay thay đổi nếu không cần thiết.
-      2. **HÌNH ẢNH (QUAN TRỌNG):**
-         - Chỉ khi câu hỏi hoặc đáp án CÓ CHỨA HÌNH ẢNH (biểu đồ, hình vẽ, phép tính dạng hình...), bạn mới thực hiện cắt ảnh.
-         - Nếu câu hỏi có hình: Trả về "bbox" (tọa độ) của vùng hình ảnh đó.
-         - Nếu đáp án là hình ảnh: Trả về "bbox" cho từng đáp án trong mảng "options".
-         - Nếu không có hình: Tuyệt đối không trả về bbox hay lệnh cắt ảnh.
-      3. **ĐỊNH DẠNG:**
-         - Trả về đúng cấu trúc JSON.
-         - Xác định chính xác "page_index" (bắt đầu từ 0).
-         - "bbox": Mảng 4 số [ymin, xmin, ymax, xmax] theo thang đo 1000 (0-1000).
-
-      CẤU TRÚC JSON MONG MUỐN:
       CẤU TRÚC JSON TRẢ VỀ:
       {
         "questions": [
           {
-            "page_index": 0,
-            "bbox": [100, 50, 300, 950], // [ymin, xmin, ymax, xmax] (0-1000)
-            "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
-            "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
-            "type": "Trắc nghiệm", // Hoặc "Tự luận"
-            "page_index": 0, // Số thứ tự trang chứa câu hỏi (bắt đầu từ 0)
-            "bbox": [ymin, xmin, ymax, xmax], // Tọa độ vùng ảnh CÂU HỎI (0-1000). Bỏ qua nếu không có ảnh.
             "question": "Nội dung văn bản của câu hỏi...",
             "type": "Trắc nghiệm",
+            "page_index": 0,
+            "bbox": [ymin, xmin, ymax, xmax], // Chỉ có nếu câu hỏi có ảnh
             "options": [
-              { "text": "Nội dung đáp án A", "image": "" },
-              { "text": "", "bbox": [100, 50, 300, 950], "image": "[CẮT ẢNH TỪ ĐỀ]" } // Nếu đáp án là hình
               { 
-                "text": "Nội dung văn bản đáp án A", 
-                "bbox": [ymin, xmin, ymax, xmax] // Tọa độ vùng ảnh ĐÁP ÁN (nếu đáp án là hình). Bỏ qua nếu không có.
+                "text": "Nội dung đáp án A", 
+                "bbox": [ymin, xmin, ymax, xmax] // Chỉ có nếu đáp án là ảnh hoặc chứa ảnh
               },
-              // ... các đáp án khác
+              ...
             ],
-            "answer": "Đáp án đúng (VD: A, hoặc nội dung đúng)",
-            "explanation": "Giải thích ngắn gọn (nếu có)"
-            "answer": "Đáp án đúng (VD: A, hoặc nội dung)",
-            "explanation": "Giải thích (nếu có)"
+            "answer": "Đáp án đúng (Nội dung hoặc A/B/C/D)",
+            "explanation": "Giải thích logic (nêu rõ quy luật nếu là toán/IQ)"
           }
         ]
-      }`;
+      }`; `;
 
       // Sử dụng hàm đã được tối ưu trong geminiService
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
@@ -1227,24 +1202,14 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             pageImage = pageImageUrls[calculatedPage] || pageImageUrls[0];
           }
 
-          const normalizeImage = (value: string, fallback: string) => {
-            if (!value) return fallback || '';
           const normalizeImage = (value: string) => {
             if (!value) return '';
             const trimmed = value.trim();
-            if (!trimmed) return fallback || '';
-            if (!trimmed) return '';
-            
-            // Detect various forms of "Cut Image" instruction from AI
+            // Detect various forms of "Cut Image" instruction from AI or bbox presence
             const isCutCommand = /\[?(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE|HÌNH ẢNH|IMAGE)\]?/i.test(trimmed);
-            
-            if (isCutCommand) {
-                return fallback || trimmed;
-                return trimmed;
-            }
+            if (isCutCommand) return trimmed;
             if (trimmed.startsWith('<svg')) return trimmed;
             if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
-            return fallback || trimmed;
             return trimmed;
           };
 
@@ -1267,7 +1232,6 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           );
           const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):.*?\]/i) : null;
           const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
-          const questionImage = normalizeImage(q.image || imageMarker, pageImage);
           const questionImage = normalizeImage(q.image || imageMarker);
           const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;
           const cleanedQuestionText = strippedQuestionText
@@ -1286,7 +1250,6 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           // Xử lý cắt ảnh cho options (NEW)
           const processedOptions = await Promise.all(normalizedOptions.map(async (opt: any) => {
-             let optImage = normalizeImage(opt.image || '', pageImage);
              let optImage = normalizeImage(opt.image || '');
              if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
                  try {
@@ -1299,7 +1262,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           }));
           
           return {
-            id: q.id || `quiz-${Date.now()}-${i}`,
+            id: q.id || `quiz - ${ Date.now() } -${ i } `,
             type: q.type || 'Trắc nghiệm',
             question: cleanedQuestionText, // QuizPlayer dùng 'question'
             image: finalImage,
@@ -1322,18 +1285,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       // Kịch bản 1: Lỗi do mất kết nối / chặn mạng tới Google AI
       if (isNetworkError) {
-        alert(`⚠️ Không kết nối được tới Google AI (Failed to fetch).
+        alert(`⚠️ Không kết nối được tới Google AI(Failed to fetch).
 
-Chi tiết: ${errorMessage}
+Chi tiết: ${ errorMessage }
 
 ✅ Cách xử lý nhanh:
 - Kiểm tra Internet, VPN, proxy hoặc tường lửa mạng trường học
-- Tắt extension chặn quảng cáo/chặn script nếu có
-- Thử tải lại trang và tạo lại quiz sau 1-2 phút`);
+  - Tắt extension chặn quảng cáo / chặn script nếu có
+    - Thử tải lại trang và tạo lại quiz sau 1 - 2 phút`);
       }
       // Kịch bản 2: Lỗi do dung lượng quá lớn
       else if (isPayloadError) {
-        if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy/Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file (thử với 1-2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay?`)) {
+        if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy / Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file(thử với 1 - 2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay ? `)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]);
@@ -1341,7 +1304,7 @@ Chi tiết: ${errorMessage}
       }
       // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
-        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage}\n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy/Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không?`)) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${ errorMessage } \n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không ? `)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
@@ -1349,9 +1312,9 @@ Chi tiết: ${errorMessage}
       } else {
         // Kịch bản 4: Lỗi chung khác
         if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận")) {
-           alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${errorMessage}\n\n👉 GIẢI PHÁP: Thầy/Cô vui lòng vào mục "Cài đặt" (biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân (miễn phí từ Google) để sử dụng ổn định hơn.`);
+           alert(`⚠️ Hệ thống AI đang quá tải hoặc hết lượt miễn phí.\n\nChi tiết: ${ errorMessage } \n\n👉 GIẢI PHÁP: Thầy / Cô vui lòng vào mục "Cài đặt"(biểu tượng chìa khóa trên góc phải) để nhập API Key cá nhân(miễn phí từ Google) để sử dụng ổn định hơn.`);
         } else {
-           alert(`Lỗi bóc tách đề: ${errorMessage}`);
+           alert(`Lỗi bóc tách đề: ${ errorMessage } `);
         }
       }
     } finally {
@@ -1462,7 +1425,7 @@ Chi tiết: ${errorMessage}
         finalCode = await blobToBase64(blob);
       }
 
-      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      let url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
 
       // 2. Nếu Link quá dài (> 4000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
       if (url.length > 4000) {
@@ -1477,7 +1440,7 @@ Chi tiết: ${errorMessage}
          } else {
             finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
          }
-         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+         url = `${ window.location.origin }${ window.location.pathname }?exam = ${ finalCode } `;
          
          if (url.length > 8000) {
              alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
@@ -1485,13 +1448,13 @@ Chi tiết: ${errorMessage}
          }
          
          await navigator.clipboard.writeText(url);
-         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link (bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy/Cô hãy dùng nút "Copy Mã Đề" (biểu tượng mã code) bên cạnh nút Chia sẻ.`);
+         alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy / Cô hãy dùng nút "Copy Mã Đề"(biểu tượng mã code) bên cạnh nút Chia sẻ.`);
          return;
       }
 
       await navigator.clipboard.writeText(url);
-      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${payloadData.dropped} ảnh quá lớn để tối ưu Link)` : '';
-      alert(`✅ Đã sao chép Link Quiz!${note}\n\nGửi ngay cho học sinh để luyện tập.`);
+      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${ payloadData.dropped } ảnh quá lớn để tối ưu Link)` : '';
+      alert(`✅ Đã sao chép Link Quiz!${ note } \n\nGửi ngay cho học sinh để luyện tập.`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
@@ -1564,7 +1527,7 @@ Chi tiết: ${errorMessage}
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${pendingAttachments.length} tệp đính kèm]` : ''),
+      content: messageContent || (pendingAttachments.length > 0 ? `[Đã gửi ${ pendingAttachments.length } tệp đính kèm]` : ''),
       timestamp: new Date(),
     };
 
@@ -1589,7 +1552,7 @@ Chi tiết: ${errorMessage}
       setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
-      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${errorMessage} `, isThinking: false, isStreaming: false } : msg));
+      setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: `⚠️ Lỗi: ${ errorMessage } `, isThinking: false, isStreaming: false } : msg));
     } finally {
       setIsAssistantLoading(false);
     }
@@ -1641,7 +1604,7 @@ Chi tiết: ${errorMessage}
 
     // Bước 1: Dịch (Có thể lỗi Key, nhưng không nên chặn quy trình)
     try {
-      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${videoStyle}, short animation, simple, for kids, educational.Script: "${topic}"`;
+      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${ videoStyle }, short animation, simple, for kids, educational.Script: "${topic}"`;
       const translation = await geminiService.generateText(translationPrompt);
       optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
     } catch (err: any) {
@@ -1650,7 +1613,7 @@ Chi tiết: ${errorMessage}
       if (err.message && (err.message.includes("429") || err.message.includes("quota"))) {
         // Không làm gì cả, silent fallback
       }
-      optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
+      optimizedPrompt = `${ topic }, ${ videoStyle }, animation for kids`; // Fallback
     }
 
     // Bước 2: Tạo video (Quan trọng)
@@ -1659,7 +1622,7 @@ Chi tiết: ${errorMessage}
       setResult(videoUrl);
     } catch (error: any) {
       console.error("Video Gen Error:", error);
-      alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi kết nối"}`);
+      alert(`⚠️ Không thể tạo video: ${ error.message || "Lỗi kết nối" } `);
     } finally {
       setIsProcessing(false);
     }
@@ -1731,7 +1694,7 @@ Chi tiết: ${errorMessage}
 
   const handleSaveToLibrary = () => {
     if (!result) return;
-    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${subject} `);
+    const name = prompt("Đặt tên cho tài liệu:", topic || `Tài liệu ${ subject } `);
     if (name) {
       const contentToSave = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       onSaveToLibrary(name, contentToSave);
@@ -1759,55 +1722,55 @@ Chi tiết: ${errorMessage}
       }
     });
 
-    let gridHtml = `<div class="grid" style="grid-template-columns: repeat(${size}, 1fr);">`;
+    let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const isActive = gridMap[r][c];
-        gridHtml += `<div class="cell ${isActive ? 'active' : 'black'}"></div>`;
+        gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
       }
     }
-    gridHtml += `</div>`;
+    gridHtml += `</div > `;
 
     const html = `
-        <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Ô chữ: ${topic}</title>
-              <style>
-                body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-                h1 { text-align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
-                .sub-title { text-align: center; margin-bottom: 30px; font-style: italic; color: #666; }
-                .container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
-                .grid { display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
-                .cell { background: #fff; position: relative; }
-                .cell.black { background: #333; }
-                .clues-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-                .clues-col h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-                ul { list-style: none; padding: 0; }
-                li { margin-bottom: 10px; line-height: 1.4; }
-                .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
-              </style>
-            </head>
-            <body>
-              <h1>Trò chơi Ô chữ</h1>
-              <p class="sub-title">Chủ đề: ${topic}</p>
-              <div class="container">
-                ${gridHtml}
-                <div class="clues-container">
-                  <div class="clues-col">
-                    <h3>Hàng ngang</h3>
-                    <ul>${words.filter((w: any) => w.direction === 'across').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
-                  </div>
-                  <div class="clues-col">
-                    <h3>Hàng dọc</h3>
-                    <ul>${words.filter((w: any) => w.direction === 'down').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
-                  </div>
-                </div>
-              </div>
-              <div class="footer">Được tạo bởi Trợ lý Giáo viên AI</div>
-              <script>setTimeout(() => window.print(), 500);</script>
-            </body>
-          </html>`;
+  < !DOCTYPE html >
+    <html>
+      <head>
+        <title>Ô chữ: ${topic}</title>
+        <style>
+          body {font - family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          h1 {text - align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
+          .sub-title {text - align: center; margin-bottom: 30px; font-style: italic; color: #666; }
+          .container {display: flex; flex-direction: column; align-items: center; gap: 30px; }
+          .grid {display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
+          .cell {background: #fff; position: relative; }
+          .cell.black {background: #333; }
+          .clues-container {width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+          .clues-col h3 {border - bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+          ul {list - style: none; padding: 0; }
+          li {margin - bottom: 10px; line-height: 1.4; }
+          .footer {margin - top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <h1>Trò chơi Ô chữ</h1>
+        <p class="sub-title">Chủ đề: ${topic}</p>
+        <div class="container">
+          ${gridHtml}
+          <div class="clues-container">
+            <div class="clues-col">
+              <h3>Hàng ngang</h3>
+              <ul>${words.filter((w: any) => w.direction === 'across').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+            </div>
+            <div class="clues-col">
+              <h3>Hàng dọc</h3>
+              <ul>${words.filter((w: any) => w.direction === 'down').map((w: any) => `<li><b>(${w.col + 1}, ${w.row + 1}):</b> ${w.clue}</li>`).join('')}</ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer">Được tạo bởi Trợ lý Giáo viên AI</div>
+        <script>setTimeout(() => window.print(), 500);</script>
+      </body>
+    </html>`;
 
     printWindow.document.write(html);
     printWindow.document.close();
@@ -1886,7 +1849,7 @@ Chi tiết: ${errorMessage}
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `Cat_Trang_${start}-${end}_${pdfToolFile.name}`;
+      link.download = `Cat_Trang_${ start } -${ end }_${ pdfToolFile.name } `;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1894,7 +1857,7 @@ Chi tiết: ${errorMessage}
       alert("✅ Đã cắt và tải xuống file PDF thành công!");
     } catch (error: any) {
       console.error("PDF Split Error (Render Method):", error);
-      if (window.confirm(`Lỗi khi cắt file PDF: ${error.message}\n\nĐây là lỗi phức tạp. Thầy/Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh (ZIP) không?`)) {
+      if (window.confirm(`Lỗi khi cắt file PDF: ${ error.message } \n\nĐây là lỗi phức tạp.Thầy / Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh(ZIP) không ? `)) {
         await handlePdfToImages();
       }
     } finally {
@@ -1933,14 +1896,14 @@ Chi tiết: ${errorMessage}
 
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         if (blob) {
-          zip.file(`page_${i}.png`, blob);
+          zip.file(`page_${ i }.png`, blob);
         }
       }
 
       const content = await zip.generateAsync({ type: "blob" });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(content);
-      link.download = `Anh_tu_PDF_${pdfToolFile.name.replace('.pdf', '')}.zip`;
+      link.download = `Anh_tu_PDF_${ pdfToolFile.name.replace('.pdf', '') }.zip`;
       link.click();
       alert("✅ Đã chuyển đổi và tải xuống file ZIP thành công!");
 
@@ -1965,49 +1928,49 @@ Chi tiết: ${errorMessage}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-file-signature"></i>
           <span>Giáo án 2345</span>
         </button>
         <button
           onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-gamepad"></i>
           <span>Trò chơi</span>
         </button>
         <button
           onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-image"></i>
           <span>Minh họa AI</span>
         </button>
         <button
           onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-volume-up"></i>
           <span>Giọng đọc</span>
         </button>
         <button
           onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-film"></i>
           <span>Tạo Video</span>
         </button>
         <button
           onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-user-robot"></i>
           <span>Trợ lý Chat</span>
         </button>
         <button
           onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${ activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50' } `}
         >
           <i className="fas fa-toolbox"></i>
           <span>Công cụ PDF</span>
@@ -2032,14 +1995,14 @@ Chi tiết: ${errorMessage}
                 <button
                   key={persona.id}
                   onClick={() => setActiveAssistant(persona)}
-                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start space-x-4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'}`}
+                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${ activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200' } `}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'}`}>
-                    <i className={`fas ${persona.icon} ${activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600'}`}></i>
+                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${ activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white' } `}>
+                    <i className={`fas ${ persona.icon } ${ activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600' } `}></i>
                   </div>
                   <div>
                     <p className="font-black text-sm">{persona.name}</p>
-                    <p className={`text-xs mt-1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'}`}>{persona.description}</p>
+                    <p className={`text - xs mt - 1 ${ activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500' } `}>{persona.description}</p>
                   </div>
                 </button>
               ))}
@@ -2062,10 +2025,10 @@ Chi tiết: ${errorMessage}
                       {pendingAttachments.map((att, idx) => (
                         <div key={idx} className="relative shrink-0 group">
                           {att.type === 'image' ? (
-                            <img src={`data:${att.mimeType};base64,${att.data}`} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            <img src={`data:${ att.mimeType }; base64, ${ att.data } `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
+                              <i className={`fas ${ att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } text - xl mb - 1`}></i>
                               <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                             </div>
                           )}
@@ -2088,16 +2051,16 @@ Chi tiết: ${errorMessage}
                       value={assistantInput}
                       onChange={e => setAssistantInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
-                      placeholder={`Hỏi ${activeAssistant.name}...`}
+                      placeholder={`Hỏi ${ activeAssistant.name }...`}
                       className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
                       rows={1}
                     />
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${ assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400' } `}
                     >
-                      <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'}`}></i>
+                      <i className={`fas ${ isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane' } `}></i>
                     </button>
                   </div>
                 </div>
@@ -2122,9 +2085,9 @@ Chi tiết: ${errorMessage}
                     <div className="mb-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
                       <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
-                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Soạn Ý tưởng</button>
-                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
-                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
+                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Soạn Ý tưởng</button>
+                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Tạo Ô chữ</button>
+                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${ gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Quiz Thi đua</button>
                       </div>
                       {gameType === 'quiz' && (
                         <button onClick={() => setShowCropper(true)} className="w-full mt-2 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center">
@@ -2134,8 +2097,8 @@ Chi tiết: ${errorMessage}
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                            <button onClick={() => setQuizMode('topic')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ Chủ đề</button>
-                            <button onClick={() => setQuizMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ File Ảnh/PDF</button>
+                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ Chủ đề</button>
+                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${ quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500' } `}>Từ File Ảnh/PDF</button>
                           </div>
 
                           {quizMode === 'topic' ? (
@@ -2146,7 +2109,7 @@ Chi tiết: ${errorMessage}
                                   <button
                                     key={num}
                                     onClick={() => setQuizCount(num)}
-                                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${ quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100' } `}
                                   >
                                     {num} câu
                                   </button>
@@ -2177,9 +2140,9 @@ Chi tiết: ${errorMessage}
                     <div className="flex justify-end mb-2 space-x-2">
                       <button
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
-                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
+                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${ useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100' } `}
                       >
-                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>
+                        <i className={`fas ${ useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off' } mr - 1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
                       </button>
                       <button
@@ -2359,13 +2322,13 @@ Chi tiết: ${errorMessage}
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={() => setVoiceName('Kore')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
                     >
                       <i className="fas fa-mars mr-2"></i>Giọng Nam
                     </button>
                     <button
                       onClick={() => setVoiceName('Puck')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${ voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100' } `}
                     >
                       <i className="fas fa-venus mr-2"></i>Giọng Nữ
                     </button>
@@ -2410,7 +2373,7 @@ Chi tiết: ${errorMessage}
                     {pendingAttachments.map((at, i) => (
                       <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-bold text-slate-600">
                         <div className="flex items-center space-x-2 truncate">
-                          <i className={`fas ${at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} `}></i>
+                          <i className={`fas ${ at.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500' } `}></i>
                           <span className="truncate">{at.name}</span>
                         </div>
                         <button onClick={() => removeAttachment(i)} className="text-slate-300 hover:text-rose-500">
@@ -2427,7 +2390,7 @@ Chi tiết: ${errorMessage}
               <button
                 onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
                 disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className={`w-full py-4 mt-auto rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'}`}
+                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${ activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700' } `}
               >
                 {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
                 {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
@@ -2471,7 +2434,7 @@ Chi tiết: ${errorMessage}
                         </select>
                       </div>
                       <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
+                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${ topic.replace(/\s+/g, '_') }.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
                       >
                         <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
@@ -2544,7 +2507,7 @@ Chi tiết: ${errorMessage}
                         <img
                           src={result}
                           alt="Video Scene"
-                          className={`w-full h-full object-cover transition-transform duration-[20s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
+                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${ isPlaying ? 'scale-125' : 'scale-100' } `}
                         />
                         {!isPlaying && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
@@ -2556,8 +2519,8 @@ Chi tiết: ${errorMessage}
                       </div>
                       <div className="mt-8 flex flex-col items-center space-y-3">
                         <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
-                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
+                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${ isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700' } `}>
+                            <i className={`fas ${ isPlaying ? 'fa-stop' : 'fa-play' } mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
                           <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
                             <i className="fas fa-download mr-2"></i>Tải Ảnh nền
@@ -2605,9 +2568,9 @@ Chi tiết: ${errorMessage}
                                     window.speechSynthesis.speak(utterance);
                                   }
                                 }}
-                                className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${ isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700' } `}
                               >
-                                <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text-xl ${!isPlaying && 'ml-1'}`}></i>
+                                <i className={`fas ${ isPlaying ? 'fa-waveform' : 'fa-play' } text - xl ${ !isPlaying && 'ml-1' } `}></i>
                               </button>
                               <button
                                 onClick={() => {
@@ -2623,7 +2586,7 @@ Chi tiết: ${errorMessage}
                               </button>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'}`}
+                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${ voiceName === 'Kore' ? 'Nam' : 'Nữ' } • ${ audioUrl ? 'Máy chủ' : 'Hệ thống' } `}
                             </p>
                           </div>
                         )}
@@ -2647,7 +2610,7 @@ Chi tiết: ${errorMessage}
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text-5xl text-slate-300`}></i>
+                    <i className={`fas ${ activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone' } text - 5xl text - slate - 300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>

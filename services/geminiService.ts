@@ -160,17 +160,17 @@ export class GeminiService {
       let result: any;
       let streamAttempt = 0;
       const maxStreamAttempts = 5;
-      
+
       while (streamAttempt < maxStreamAttempts) {
         try {
           result = await this.chat.sendMessageStream(parts);
           break;
         } catch (streamError: any) {
-          const isRetryable = streamError.message?.includes('429') || 
-            streamError.message?.includes('503') || 
+          const isRetryable = streamError.message?.includes('429') ||
+            streamError.message?.includes('503') ||
             streamError.message?.includes('502') ||
             streamError.message?.includes('timeout');
-          
+
           if (!isRetryable || streamAttempt === maxStreamAttempts - 1) {
             throw streamError;
           }
@@ -178,7 +178,7 @@ export class GeminiService {
           await this.delayWithBackoff(streamAttempt, 3000);
         }
       }
-      
+
       for await (const chunk of result.stream) {
         let text = '';
         try {
@@ -232,20 +232,20 @@ export class GeminiService {
       } catch (error: any) {
         lastError = error;
         // Check if error is retryable (rate limiting, server errors, network issues)
-        const isRetryable = error.message?.includes('429') || 
-          error.message?.includes('503') || 
-          error.message?.includes('502') || 
+        const isRetryable = error.message?.includes('429') ||
+          error.message?.includes('503') ||
+          error.message?.includes('502') ||
           error.message?.includes('500') ||
-          error.message?.includes('timeout') || 
+          error.message?.includes('timeout') ||
           error.message?.includes('network') ||
           error.message?.includes('ECONNRESET') ||
           error.message?.includes('ETIMEDOUT') ||
           error.message?.includes('ENOTFOUND');
-        
+
         if (!isRetryable || attempt === maxRetries - 1) {
           throw error;
         }
-        
+
         await this.delayWithBackoff(attempt, baseDelay);
       }
     }
@@ -277,8 +277,8 @@ export class GeminiService {
 
     const fullPrompt = `${this.currentInstruction}
 
-    **NHIỆM VỤ CỐT LÕI:** Số hóa đề thi từ file PDF/Ảnh đính kèm (Dạng đề Trạng Nguyên Tiếng Việt, Toán Violympic, Khảo sát chất lượng...).
-    **MỤC TIÊU:** Trích xuất TOÀN BỘ câu hỏi (thường là 30 câu hoặc nhiều hơn). Hãy kiên nhẫn xử lý từng trang, TUYỆT ĐỐI KHÔNG BỎ SÓT câu hỏi nào.
+    **NHIỆM VỤ CỐT LÕI:** Số hóa đề thi từ file PDF/Ảnh đính kèm. Đặc biệt ưu tiên các đề Trạng Nguyên Tiếng Việt, Toán Olympic, Violympic.
+    **MỤC TIÊU:** Phải trích xuất ĐẦY ĐỦ 30 CÂU HỎI (theo đúng số lượng trong các đề thi này). Hãy kiên nhẫn xử lý đến câu cuối cùng (câu 30), TUYỆT ĐỐI KHÔNG BỎ QUA hay tóm tắt nội dung.
 
     **QUY TẮC XỬ LÝ (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):**
 
