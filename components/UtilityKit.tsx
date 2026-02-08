@@ -760,7 +760,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
     } catch (error: any) {
       console.error("Lesson Plan Error:", error);
-      alert(`Lỗi khi soạn giáo án: ${error.message || "Không thể kết nối với AI"}`);
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert(`Lỗi khi soạn giáo án: ${msg || "Không thể kết nối với AI"}`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -791,7 +797,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       }
     } catch (error: any) {
       console.error("Game Generation Error:", error);
-      alert(`Lỗi khi tạo trò chơi: ${error.message || "Không thể kết nối với AI"}`);
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert(`Lỗi khi tạo trò chơi: ${msg || "Không thể kết nối với AI"}`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -847,7 +859,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         throw new Error("AI không thể tạo ô chữ với chủ đề này. Vui lòng thử một chủ đề khác tổng quát hơn.");
       }
     } catch (error: any) {
-      alert(`Không thể tạo ô chữ: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert(`Không thể tạo ô chữ: ${msg || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -894,7 +912,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         throw new Error("AI không tạo được câu hỏi hoặc định dạng trả về không đúng.");
       }
     } catch (error: any) {
-      alert(`Không thể tạo Quiz: ${error.message || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert(`Không thể tạo Quiz: ${msg || "Lỗi kết nối"}. Thầy Cô vui lòng thử lại nhé!`);
+      }
     } finally {
       setIsProcessing(false);
     }

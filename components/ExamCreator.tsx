@@ -302,8 +302,12 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     } catch (error: any) {
       console.error("Exam Generation Error:", error);
       const msg = error.message || 'Lỗi không xác định';
-      if (msg.includes("API key") || msg.includes("400")) {
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else if (msg.includes("API key") || msg.includes("400")) {
         alert(`⚠️ Lỗi API Key: ${msg}\n\nVui lòng kiểm tra lại Key trong Cài đặt.`);
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
       } else {
         alert(`Lỗi khi AI đang soạn đề: ${msg}. Thầy/Cô vui lòng thử lại nhé!`);
       }

@@ -1034,9 +1034,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       }));
       const resultText = await geminiService.generateText(prompt, fileParts);
       processAIReviewResponse(resultText);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Review Generation Error:", error);
-      alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại hoặc kiểm tra định dạng dữ liệu.");
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại hoặc kiểm tra định dạng dữ liệu.");
+      }
     } finally {
       setIsGeneratingReview(false);
       setShowReviewPasteModal(false);
@@ -1066,9 +1072,15 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     try {
       const resultText = await geminiService.generateText(prompt);
       processAIReviewResponse(resultText);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Review Generation Error:", error);
-      alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại.");
+      const msg = error.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+        alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+        try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else {
+        alert("Lỗi khi tạo nhận xét AI. Vui lòng thử lại.");
+      }
     } finally {
       setIsGeneratingReview(false);
     }

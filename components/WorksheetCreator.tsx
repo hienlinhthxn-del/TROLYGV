@@ -122,7 +122,13 @@ const WorksheetCreator: React.FC = () => {
             await generateImages(content);
         } catch (error: any) {
             console.error('Lỗi khi tạo phiếu học tập:', error);
-            alert(`Có lỗi xảy ra: ${error.message || 'Lỗi không xác định'}. Thầy Cô vui lòng thử lại nhé!`);
+            const msg = error.message || "";
+            if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
+                alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
+                try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+            } else {
+                alert(`Có lỗi xảy ra: ${msg || 'Lỗi không xác định'}. Thầy Cô vui lòng thử lại nhé!`);
+            }
         } finally {
             setIsGenerating(false);
         }
@@ -228,28 +234,28 @@ const WorksheetCreator: React.FC = () => {
         setTimeout(() => printWindow.print(), 1000);
     };
 
-        const handleExportJSON = () => {
-                if (!worksheet) return;
-                saveToHistory(worksheet);
-                try {
-                        const jsonStr = JSON.stringify(worksheet, null, 2);
-                        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${worksheet.title || 'quiz'}.json`;
-                        a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 5000);
-                } catch (e: any) {
-                        alert('Lỗi khi xuất JSON: ' + (e.message || e));
-                }
-        };
+    const handleExportJSON = () => {
+        if (!worksheet) return;
+        saveToHistory(worksheet);
+        try {
+            const jsonStr = JSON.stringify(worksheet, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${worksheet.title || 'quiz'}.json`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch (e: any) {
+            alert('Lỗi khi xuất JSON: ' + (e.message || e));
+        }
+    };
 
-        const handleExportDOCX = async () => {
-                if (!worksheet) return;
-                saveToHistory(worksheet);
-                try {
-                        const html = `
+    const handleExportDOCX = async () => {
+        if (!worksheet) return;
+        saveToHistory(worksheet);
+        try {
+            const html = `
             <!DOCTYPE html>
             <html>
             <head>
@@ -268,25 +274,25 @@ const WorksheetCreator: React.FC = () => {
                     <div class="question">
                         <div><strong>Câu ${index + 1}:</strong> ${q.question}</div>
                         ${q.imageUrl ? `<div class="question-image"><img src="${q.imageUrl}" /></div>` : ''}
-                        ${q.options && q.options.length > 0 ? `<div><em>Đáp án:</em><ul>${q.options.map(o=>`<li>${o}</li>`).join('')}</ul></div>` : ''}
+                        ${q.options && q.options.length > 0 ? `<div><em>Đáp án:</em><ul>${q.options.map(o => `<li>${o}</li>`).join('')}</ul></div>` : ''}
                     </div>
                 `).join('')}
             </body>
             </html>
         `;
 
-                        // Create a blob and save as .docx (Word will open HTML content inside)
-                        const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${worksheet.title || 'quiz'}.docx`;
-                        a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 5000);
-                } catch (e: any) {
-                        alert('Lỗi khi xuất DOCX: ' + (e.message || e));
-                }
-        };
+            // Create a blob and save as .docx (Word will open HTML content inside)
+            const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${worksheet.title || 'quiz'}.docx`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch (e: any) {
+            alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+        }
+    };
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: '100%', overflowY: 'auto', borderRadius: '20px' }} className="custom-scrollbar">
