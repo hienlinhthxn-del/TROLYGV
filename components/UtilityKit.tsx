@@ -1056,8 +1056,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       // -------------------------------------------------------------
 
       const prompt = `Bạn là trợ lý AI chuyên số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
+      const prompt = `Bạn là chuyên gia số hóa đề thi (đặc biệt là các đề Trạng Nguyên Tiếng Việt, Toán Olympic...).
       
       NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi có trong file (thường là 30 câu hoặc nhiều hơn). KHÔNG ĐƯỢC BỎ SÓT.
+      NHIỆM VỤ: Trích xuất TOÀN BỘ câu hỏi từ file đính kèm (thường là 30 câu).
+      
+      YÊU CẦU ĐẶC BIỆT VỀ HÌNH ẢNH (BẮT BUỘC):
+      1. **CẮT ẢNH TỪ ĐỀ GỐC:** Với những câu hỏi hoặc đáp án có chứa hình ảnh (biểu đồ, hình vẽ, phép tính dạng hình...), bạn PHẢI trả về tọa độ "bbox" để hệ thống tự động cắt ảnh từ file gốc.
+      2. **CHỈ CẮT KHI CẦN THIẾT:** Nếu câu hỏi chỉ là văn bản thuần túy, KHÔNG trả về bbox, KHÔNG yêu cầu cắt ảnh.
+      3. **TÁCH BIỆT:** Tách riêng hình ảnh của câu hỏi và hình ảnh của từng đáp án (nếu có).
 
       ${additionalPrompt ? `LƯU Ý CỦA GIÁO VIÊN: "${additionalPrompt}"` : ''}
 
@@ -1074,6 +1081,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
          - "bbox": Mảng 4 số [ymin, xmin, ymax, xmax] theo thang đo 1000 (0-1000).
 
       CẤU TRÚC JSON MONG MUỐN:
+      CẤU TRÚC JSON TRẢ VỀ:
       {
         "questions": [
           {
@@ -1082,12 +1090,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             "question": "Nội dung câu hỏi (giữ nguyên văn bản gốc)...",
             "image": "[CẮT ẢNH TỪ ĐỀ]", // Hoặc để trống nếu không có hình
             "type": "Trắc nghiệm", // Hoặc "Tự luận"
+            "page_index": 0, // Số thứ tự trang chứa câu hỏi (bắt đầu từ 0)
+            "bbox": [ymin, xmin, ymax, xmax], // Tọa độ vùng ảnh CÂU HỎI (0-1000). Bỏ qua nếu không có ảnh.
+            "question": "Nội dung văn bản của câu hỏi...",
+            "type": "Trắc nghiệm",
             "options": [
               { "text": "Nội dung đáp án A", "image": "" },
               { "text": "", "bbox": [100, 50, 300, 950], "image": "[CẮT ẢNH TỪ ĐỀ]" } // Nếu đáp án là hình
+              { 
+                "text": "Nội dung văn bản đáp án A", 
+                "bbox": [ymin, xmin, ymax, xmax] // Tọa độ vùng ảnh ĐÁP ÁN (nếu đáp án là hình). Bỏ qua nếu không có.
+              },
+              // ... các đáp án khác
             ],
             "answer": "Đáp án đúng (VD: A, hoặc nội dung đúng)",
             "explanation": "Giải thích ngắn gọn (nếu có)"
+            "answer": "Đáp án đúng (VD: A, hoặc nội dung)",
+            "explanation": "Giải thích (nếu có)"
           }
         ]
       }`;
@@ -1210,18 +1229,23 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           const normalizeImage = (value: string, fallback: string) => {
             if (!value) return fallback || '';
+          const normalizeImage = (value: string) => {
+            if (!value) return '';
             const trimmed = value.trim();
             if (!trimmed) return fallback || '';
+            if (!trimmed) return '';
             
             // Detect various forms of "Cut Image" instruction from AI
             const isCutCommand = /\[?(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE|HÌNH ẢNH|IMAGE)\]?/i.test(trimmed);
             
             if (isCutCommand) {
                 return fallback || trimmed;
+                return trimmed;
             }
             if (trimmed.startsWith('<svg')) return trimmed;
             if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
             return fallback || trimmed;
+            return trimmed;
           };
 
           const pickQuestionText = (...values: Array<unknown>) => {
@@ -1244,6 +1268,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):.*?\]/i) : null;
           const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
           const questionImage = normalizeImage(q.image || imageMarker, pageImage);
+          const questionImage = normalizeImage(q.image || imageMarker);
           const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;
           const cleanedQuestionText = strippedQuestionText
             || questionText
@@ -1262,6 +1287,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           // Xử lý cắt ảnh cho options (NEW)
           const processedOptions = await Promise.all(normalizedOptions.map(async (opt: any) => {
              let optImage = normalizeImage(opt.image || '', pageImage);
+             let optImage = normalizeImage(opt.image || '');
              if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
                  try {
                      optImage = await cropImageFromBbox(pageImage, opt.bbox);
