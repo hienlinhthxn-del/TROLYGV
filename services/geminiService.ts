@@ -13,6 +13,8 @@ const MODELS = [
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
   'gemini-1.5-pro',
+  'gemini-1.0-pro',
+  'gemini-pro',
   'gemini-2.0-flash-exp'
 ];
 
@@ -57,7 +59,7 @@ export class GeminiService {
     const key = this.getApiKey();
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      this.setupModel(MODELS[0], 'v1beta');
+      this.setupModel(MODELS[0], 'v1');
       console.log("AI Assistant: API Key detected and active.");
     } else {
       this.setStatus("LỖI: Chưa cấu hình API Key");
@@ -807,11 +809,13 @@ export class GeminiService {
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = (error.message || "").toLowerCase();
-    console.warn("AI Encountered Error:", msg);
+    const status = error.status || 0;
+    console.warn("AI Encountered Error:", msg, "Status:", status);
 
-    // Xử lý lỗi 404 hoặc Model Not Found
-    if (msg.includes("404") || msg.includes("not found")) {
-      if (this.currentVersion === 'v1') {
+    // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
+    // Lỗi 400/403 thường do Model không hỗ trợ hoặc Key không có quyền, nên đổi Model luôn
+    if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid")) {
+      if (this.currentVersion === 'v1' && !msg.includes("2.0")) {
         this.setStatus(`Dò tìm kênh dự phòng cho ${this.currentModelName}...`);
         this.setupModel(this.currentModelName, 'v1beta');
         return retryFn();
@@ -824,8 +828,8 @@ export class GeminiService {
         this.retryAttempt = 0; // Reset retry attempt when changing model
         return retryFn();
       } else {
-        // Nếu đã thử hết danh sách mà vẫn 404
-        throw new Error("Không tìm thấy model AI phù hợp với API Key hiện tại. Thầy/Cô hãy kiểm tra lại loại Key (Gemini/OpenAI/Claude) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
+        // Nếu đã thử hết danh sách mà vẫn lỗi
+        throw new Error("Không tìm thấy model AI phù hợp hoặc API Key gặp lỗi quyền truy cập. Thầy/Cô hãy kiểm tra lại loại Key (Gemini) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
       }
     }
 
@@ -839,10 +843,6 @@ export class GeminiService {
       msg.includes("busy") ||
       msg.includes("503") ||
       msg.includes("500") ||
-      msg.includes("400") ||
-      msg.includes("403") ||
-      msg.includes("key not valid") ||
-      msg.includes("api key") ||
       msg.includes("failed to fetch") ||
       msg.includes("networkerror") ||
       msg.includes("network request failed") ||
