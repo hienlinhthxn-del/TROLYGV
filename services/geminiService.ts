@@ -839,6 +839,10 @@ export class GeminiService {
       msg.includes("busy") ||
       msg.includes("503") ||
       msg.includes("500") ||
+      msg.includes("400") ||
+      msg.includes("403") ||
+      msg.includes("key not valid") ||
+      msg.includes("api key") ||
       msg.includes("failed to fetch") ||
       msg.includes("networkerror") ||
       msg.includes("network request failed") ||
