@@ -532,6 +532,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const assistantMessagesEndRef = useRef<HTMLDivElement>(null);
+  const forceStopRef = useRef(false);
 
   const ASSISTANT_PERSONAS = useMemo(() => {
     const ids = ['lesson-planner', 'student-advisor', 'admin-writer', 'form-creator', 'paperwork-assistant'];
@@ -741,6 +742,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       try {
         for await (const chunk of stream) {
+          if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
           if (timedOut) throw new Error('AI stream timeout: no response from model.');
 
           if (!started) {
@@ -791,9 +793,37 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     try {
       let fullContent = '';
       const stream = geminiService.sendMessageStream(prompt, getFileParts());
-      for await (const chunk of stream) {
-        fullContent += chunk.text;
-        setResult(fullContent);
+
+      const START_TIMEOUT_MS = 15000;
+      const INACTIVITY_TIMEOUT_MS = 30000;
+      let timedOut = false;
+      let started = false;
+      let inactivityTimer: any = null;
+      const startWatchdog = setTimeout(() => { timedOut = true; }, START_TIMEOUT_MS);
+      const resetInactivity = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => { timedOut = true; }, INACTIVITY_TIMEOUT_MS);
+      };
+
+      try {
+        for await (const chunk of stream) {
+          if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
+          if (timedOut) throw new Error('AI đang phản hồi quá chậm, vui lòng thử lại.');
+
+          if (!started) {
+            started = true;
+            clearTimeout(startWatchdog);
+            resetInactivity();
+          } else {
+            resetInactivity();
+          }
+
+          fullContent += chunk.text;
+          setResult(fullContent);
+        }
+      } finally {
+        clearTimeout(startWatchdog);
+        if (inactivityTimer) clearTimeout(inactivityTimer);
       }
     } catch (error: any) {
       console.error("Game Generation Error:", error);
@@ -1582,9 +1612,26 @@ Chi tiết: ${errorMessage}
       let fullContent = '';
       const stream = geminiService.sendMessageStream(messageContent, currentAttachments);
 
-      for await (const chunk of stream) {
-        fullContent += chunk.text;
-        setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: fullContent, isThinking: false } : msg));
+      const INACTIVITY_TIMEOUT_MS = 40000;
+      let timedOut = false;
+      let inactivityTimer: any = null;
+      const resetInactivity = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => { timedOut = true; }, INACTIVITY_TIMEOUT_MS);
+      };
+      resetInactivity();
+
+      try {
+        for await (const chunk of stream) {
+          if (forceStopRef.current) throw new Error('Đã dừng hội thoại.');
+          if (timedOut) throw new Error('AI không phản hồi, vui lòng thử lại.');
+          resetInactivity();
+
+          fullContent += chunk.text;
+          setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: fullContent, isThinking: false } : msg));
+        }
+      } finally {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
       }
       setAssistantMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, isStreaming: false } : msg));
     } catch (error: any) {
@@ -2424,14 +2471,28 @@ Chi tiết: ${errorMessage}
             </div>
 
             {!showHistory && (
-              <button
-                onClick={activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS}
-                disabled={isProcessing || (activeTab === 'lesson_plan' && useTemplateMode ? (!templateFile || !planFile) : activeTab === 'pdf_tools' ? !pdfToolFile : (activeTab === 'games' && gameType === 'quiz' && quizMode === 'file' ? pendingAttachments.length === 0 : !topic.trim()))}
-                className={`w - full py - 4 mt - auto rounded - 2xl font - black text - [10px] uppercase tracking - widest shadow - xl transition - all active: scale - 95 disabled: opacity - 50 ${activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100 hover:bg-emerald-700' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'} `}
-              >
-                {isProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-magic mr-2"></i>}
-                {isProcessing ? 'Đang thực hiện...' : activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}
-              </button>
+              <div className="flex flex-col space-y-2 mt-auto">
+                <button
+                  onClick={() => {
+                    if (isProcessing) {
+                      forceStopRef.current = true;
+                      setIsProcessing(false);
+                      return;
+                    }
+                    forceStopRef.current = false;
+                    const fn = activeTab === 'lesson_plan' ? generateLessonPlan : activeTab === 'games' ? (gameType === 'crossword' ? generateCrossword : gameType === 'quiz' ? (quizMode === 'file' ? generateQuizFromUpload : generateQuiz) : generateGame) : activeTab === 'images' ? generateAIVisual : activeTab === 'video' ? generateVideo : activeTab === 'pdf_tools' ? handleSplitPdf : generateTTS;
+                    fn();
+                  }}
+                  className={`w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${isProcessing ? 'bg-rose-500 text-white animate-pulse' : (activeTab === 'pdf_tools' ? 'bg-emerald-600 text-white shadow-emerald-100' : 'bg-indigo-600 text-white shadow-indigo-100')} `}
+                >
+                  {isProcessing ? <><i className="fas fa-hand mr-2"></i>DỪNG LẠI (CANCEL)</> : <><i className="fas fa-magic mr-2"></i>{activeTab === 'lesson_plan' ? 'Bắt đầu soạn giáo án' : activeTab === 'games' ? (gameType === 'crossword' ? 'Tạo ô chữ' : gameType === 'quiz' ? 'Tạo Quiz' : 'Bắt đầu sáng tạo') : activeTab === 'images' ? 'Tạo Hình ảnh' : activeTab === 'video' ? 'Tạo Video' : activeTab === 'pdf_tools' ? 'Cắt & Tải về' : activeTab === 'tts' ? 'Tạo Giọng đọc' : 'Bắt đầu sáng tạo'}</>}
+                </button>
+                {isProcessing && (
+                  <p className="text-[9px] text-center text-rose-500 font-bold animate-bounce mt-1">
+                    Hệ thống đang chạy. Bấm "DỪNG LẠI" nếu muốn hủy yêu cầu.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

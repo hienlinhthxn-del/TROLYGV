@@ -40,6 +40,7 @@ const WorksheetCreator: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isGeneratingImages, setIsGeneratingImages] = useState(false);
     const [progress, setProgress] = useState('');
+    const forceStopRef = useRef(false);
 
     const subjects = ['Toán', 'Tiếng Việt', 'Tự nhiên & Xã hội', 'Đạo đức', 'Âm nhạc', 'Mỹ thuật'];
 
@@ -117,6 +118,7 @@ const WorksheetCreator: React.FC = () => {
         try {
             const fileParts = sampleImage ? [{ inlineData: { data: sampleImage.split(',')[1], mimeType: 'image/png' } }] : undefined;
             const content = await generateWorksheetContentDetailed(topic, subject, config, fileParts);
+            if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
             setWorksheet(content);
             setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
             await generateImages(content);
@@ -140,13 +142,15 @@ const WorksheetCreator: React.FC = () => {
 
         try {
             for (let i = 0; i < updatedQuestions.length; i++) {
+                if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
                 const q = updatedQuestions[i];
                 if (q.imagePrompt || q.question) {
                     const promptToUse = q.imagePrompt || q.question;
                     if (i > 0) {
                         setProgress(`Đang chuẩn bị vẽ câu ${i + 1}...`);
-                        await new Promise(resolve => setTimeout(resolve, 800)); // Giảm từ 3500 xuống 800ms
+                        await new Promise(resolve => setTimeout(resolve, 800));
                     }
+                    if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
                     setProgress(`🎨 Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
                     try {
                         const imageUrl = await geminiService.generateImage(promptToUse);

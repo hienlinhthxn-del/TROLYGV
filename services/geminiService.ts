@@ -203,29 +203,39 @@ export class GeminiService {
     if (!this.chat) await this.initChat(this.currentInstruction);
 
     const parts = [...(fileParts || []), { text: prompt }];
+
     try {
       // Retry logic for streaming
       let result: any;
       let streamAttempt = 0;
-      const maxStreamAttempts = 5;
+      const maxStreamAttempts = 3;
 
       while (streamAttempt < maxStreamAttempts) {
         try {
+          // Timeout cho việc kết nối luồng ban đầu
+          const controller = new AbortController();
+          const connTimeout = setTimeout(() => controller.abort(), 20000);
+
           result = await this.chat.sendMessageStream(parts);
+          clearTimeout(connTimeout);
           break;
         } catch (streamError: any) {
           const isRetryable = streamError.message?.includes('429') ||
             streamError.message?.includes('503') ||
             streamError.message?.includes('502') ||
-            streamError.message?.includes('timeout');
+            streamError.message?.includes('timeout') ||
+            streamError.name === 'AbortError';
 
           if (!isRetryable || streamAttempt === maxStreamAttempts - 1) {
             throw streamError;
           }
           streamAttempt++;
-          await this.delayWithBackoff(streamAttempt, 3000);
+          console.warn(`Retry stream attempt ${streamAttempt}`);
+          await this.delayWithBackoff(streamAttempt, 1500);
         }
       }
+
+      if (!result || !result.stream) throw new Error("Dịch vụ AI không phản hồi (Stream null)");
 
       for await (const chunk of result.stream) {
         let text = '';
@@ -883,6 +893,7 @@ export class GeminiService {
   }
 
   private retryAttempt: number = 0;
+  private modelCycleCount: number = 0;
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = (error.message || "").toLowerCase();
@@ -911,7 +922,8 @@ export class GeminiService {
         return retryFn();
       } else {
         // Nếu đã thử hết danh sách mà vẫn lỗi
-        throw new Error("❌ LOI KET NOI (403/404): Không tìm thấy model AI phù hợp hoặc API Key gặp lỗi quyền truy cập. Thầy/Cô hãy kiểm tra lại loại Key (Gemini) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
+        this.modelCycleCount = 0;
+        throw new Error("❌ LỖI KẾT NỐI (403/404): Không tìm thấy model AI phù hợp hoặc API Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key hoặc thử đổi sang Key khác nhé!");
       }
     }
 
@@ -937,10 +949,10 @@ export class GeminiService {
         msg.includes("load failed");
 
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = isNetworkIssue ? 1000 : (this.retryAttempt === 0 ? 1500 : 3500); // Giảm thời gian chờ
+      let waitMs = isNetworkIssue ? 1000 : (this.retryAttempt === 0 ? 1200 : 2500); // Giảm thời gian chờ
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 800;
       }
 
       // Nếu Google bảo chờ quá lâu (> 6s), hoặc đã thử lại 2 lần bận liên tiếp
@@ -950,12 +962,13 @@ export class GeminiService {
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
 
-        // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
-        if (nextIdx === 0 && currentIdx !== -1) {
+        this.modelCycleCount++;
+        if (this.modelCycleCount >= MODELS.length) {
+          this.modelCycleCount = 0;
           if (isNetworkIssue) {
             throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN hoặc thử lại sau nhé.");
           }
-          throw new Error("⚠️ QUOTA EXCEEDED (429): Tất cả các đường truyền AI (Gemini 1.5, 2.0...) đều đang bận hoặc hết hạn mức sử dụng miễn phí.");
+          throw new Error("⚠️ TẤT CẢ ĐƯỜNG TRUYỀN ĐỀU BẬN: Hệ thống AI đang quá tải. Thầy/Cô vui lòng dán API Key cá nhân hoặc thử lại sau ít phút nhé.");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
