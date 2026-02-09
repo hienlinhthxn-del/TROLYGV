@@ -11,11 +11,9 @@ export interface FilePart {
 // Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
 const MODELS = [
   'gemini-1.5-flash',
+  'gemini-2.0-flash-exp',
   'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-2.5-flash',
   'gemini-1.5-pro',
-  'gemini-2.5-pro',
   'gemini-1.5-flash-8b',
   'gemini-1.0-pro'
 ];
@@ -63,7 +61,7 @@ export class GeminiService {
     const key = this.getApiKey();
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      this.setupModel(MODELS[0], 'v1');
+      this.setupModel(MODELS[0], 'v1beta');
       console.log("AI Assistant: API Key detected and active.");
     } else {
       this.setStatus("LỖI: Chưa cấu hình API Key");
@@ -371,19 +369,33 @@ export class GeminiService {
       const text = result.response.text();
       let json = this.parseJSONSafely(text);
 
-      // Fallback: Nếu AI chỉ trả về mảng câu hỏi (do lỗi format), tự động bọc lại
+      // Fallback 1: Nếu AI chỉ trả về mảng (do lỗi format), tự động bọc lại
       if (Array.isArray(json)) {
         json = { questions: json };
       }
 
-      if (json.questions) {
+      // Fallback 2: Nếu AI trả về object nhưng không có trường 'questions', thử tìm mảng thay thế
+      if (json && typeof json === 'object' && (!json.questions || !Array.isArray(json.questions))) {
+        for (const key in json) {
+          if (Array.isArray(json[key]) && json[key].length > 0) {
+            json.questions = json[key];
+            break;
+          }
+        }
+      }
+
+      if (json && json.questions && Array.isArray(json.questions)) {
         json.questions = json.questions.map((q: any) => ({
           ...q,
-          id: 'q-' + Math.random().toString(36).substr(2, 9),
-          content: q.content || q.question || '',
-          question: q.question || q.content || ''
+          id: q.id || 'q-' + Math.random().toString(36).substr(2, 9),
+          content: q.content || q.question || 'Nội dung chưa rõ',
+          question: q.question || q.content || 'Nội dung chưa rõ'
         }));
+      } else {
+        // Trả về một object trống nếu hoàn toàn thất bại để Frontend báo lỗi rõ ràng
+        return { questions: [] };
       }
+
       return json;
     } catch (error: any) {
       console.error("Lỗi AI:", error);

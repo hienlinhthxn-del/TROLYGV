@@ -1626,7 +1626,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       }
       // --- END: PDF processing logic ---
 
-      const prompt = `Trích xuất câu hỏi từ file đính kèm theo định dạng đề thi Violympic, Trạng Nguyên Tiếng Việt.`;
+      const prompt = `Phân tích file đề thi này và trích xuất TOÀN BỘ các câu hỏi.
+      Yêu cầu:
+      1. Tìm đủ số câu hỏi trong đề (thường là 10, 20 hoặc 30 câu).
+      2. Với mỗi câu hỏi, trích xuất: Nội dung câu hỏi, các lựa chọn (A, B, C, D), đáp án đúng và giải thích.
+      3. Nếu câu hỏi có hình ảnh, hãy ghi chú vị trí trang để hệ thống cắt ảnh.
+      4. TRẢ VỀ DỮ LIÊU DƯỚI DẠNG JSON với cấu trúc: { "title": "...", "questions": [...] }`;
       const result = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
 
       let rawQuestions = [];
