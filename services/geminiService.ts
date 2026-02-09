@@ -34,6 +34,26 @@ export class GeminiService {
     if (typeof window !== 'undefined') (window as any).ai_status = status;
   }
 
+  public getApiKeySource(): string {
+    const sources = [
+      { name: 'Manual', key: localStorage.getItem('manually_entered_api_key') },
+      { name: 'Vite Env', key: (import.meta as any).env?.VITE_GEMINI_API_KEY },
+      { name: 'Gemini Env', key: (import.meta as any).env?.GEMINI_API_KEY },
+      { name: 'Window Vite', key: (window as any).VITE_GEMINI_API_KEY },
+      { name: 'Window Gemini', key: (window as any).GEMINI_API_KEY }
+    ];
+
+    for (const source of sources) {
+      if (typeof source.key === 'string') {
+        const cleaned = source.key.trim().replace(/["']/g, '');
+        if (cleaned.startsWith('AIza') && cleaned.length > 30 && cleaned !== 'YOUR_NEW_API_KEY_HERE') {
+          return source.name;
+        }
+      }
+    }
+    return 'None';
+  }
+
   private getApiKey(): string {
     // Thử tìm Key ở tất cả các nguồn có thể
     const sources = [
@@ -208,20 +228,15 @@ export class GeminiService {
       // Retry logic for streaming
       let result: any;
       let streamAttempt = 0;
-      const maxStreamAttempts = 3;
+      const maxStreamAttempts = 2; // Giảm xuống 2 để chuyển model nhanh hơn nếu 429
 
       while (streamAttempt < maxStreamAttempts) {
         if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
 
         try {
-          // Timeout cho việc kết nối luồng ban đầu
           const controller = new AbortController();
           const connTimeout = setTimeout(() => controller.abort(), 20000);
-
-          // Link local signal to this internal controller
-          if (signal) {
-            signal.addEventListener('abort', () => controller.abort());
-          }
+          if (signal) signal.addEventListener('abort', () => controller.abort());
 
           result = await this.chat.sendMessageStream(parts);
           clearTimeout(connTimeout);
@@ -229,52 +244,49 @@ export class GeminiService {
         } catch (streamError: any) {
           if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
 
-          const isRetryable = streamError.message?.includes('429') ||
-            streamError.message?.includes('503') ||
-            streamError.message?.includes('502') ||
-            streamError.message?.includes('timeout') ||
-            streamError.name === 'AbortError';
-
-          if (!isRetryable || streamAttempt === maxStreamAttempts - 1) {
-            throw streamError;
+          const isQuota = streamError.message?.includes('429') || streamError.message?.includes('503');
+          if (isQuota && streamAttempt < maxStreamAttempts - 1) {
+            streamAttempt++;
+            await this.delayWithBackoff(streamAttempt, 1000);
+            continue;
           }
-          streamAttempt++;
-          console.warn(`Retry stream attempt ${streamAttempt}`);
-          await this.delayWithBackoff(streamAttempt, 1500);
+          throw streamError;
         }
       }
 
-      if (!result || !result.stream) throw new Error("Dịch vụ AI không phản hồi (Stream null)");
+      if (!result || !result.stream) throw new Error("AI không phản hồi");
 
       for await (const chunk of result.stream) {
-        if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
-
+        if (signal?.aborted) break;
         let text = '';
-        try {
-          text = chunk.text();
-        } catch (e) {
-          // Skip errors if chunk is blocked by safety settings
-        }
-        yield {
-          text: text,
-          grounding: (chunk as any).candidates?.[0]?.groundingMetadata
-        };
+        try { text = chunk.text(); } catch (e) { }
+        yield { text, grounding: (chunk as any).candidates?.[0]?.groundingMetadata };
       }
     } catch (error: any) {
-      if (signal?.aborted || error.message?.includes("hủy")) throw new Error("Đã dừng yêu cầu.");
+      if (signal?.aborted) throw new Error("Đã dừng yêu cầu.");
 
-      if (error.message?.includes("429") || error.message?.includes("503")) {
-        // Rate limit or service unavailable - try fallback providers
+      const msg = (error.message || "").toLowerCase();
+      // Nếu lỗi 429 hoặc các lỗi tương tự, thử dùng handleError để đổi model
+      if (msg.includes("429") || msg.includes("quota") || msg.includes("limit") || msg.includes("503") || msg.includes("404") || msg.includes("found")) {
         try {
-          const fallbackText = await this.fallbackToOtherProviders(prompt, false, fileParts);
-          yield { text: fallbackText, grounding: null };
+          // Thử đổi model thông qua handleError
+          await this.handleError(error, async () => { }); // Chỉ gọi để đổi model nội bộ
+          // Sau khi đổi model, thực hiện lại generator
+          const newStream = this.sendMessageStream(prompt, fileParts, signal);
+          for await (const chunk of newStream) {
+            yield chunk;
+          }
           return;
         } catch (e) {
-          throw new Error("Lượt dùng miễn phí hiện tại đã hết. Thầy Cô vui lòng đợi 1 phút rồi thử lại nhé!");
+          // Nếu đã thử hết các model Gemini vẫn lỗi, mới chuyển sang fallback providers
+          try {
+            const fallbackText = await this.fallbackToOtherProviders(prompt, false, fileParts);
+            yield { text: fallbackText, grounding: null };
+            return;
+          } catch (finalError: any) {
+            throw finalError;
+          }
         }
-      }
-      if (error.message?.includes("safety") || error.message?.includes("blocked")) {
-        throw new Error("Nội dung câu hỏi hoặc câu trả lời bị hệ thống an toàn chặn. Thầy/Cô vui lòng diễn đạt lại câu hỏi nhé!");
       }
       throw error;
     }

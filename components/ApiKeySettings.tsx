@@ -10,6 +10,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     const [openaiKey, setOpenaiKey] = useState('');
     const [anthropicKey, setAnthropicKey] = useState('');
     const [status, setStatus] = useState<'checking' | 'valid' | 'invalid' | 'empty'>('checking');
+    const [keySource, setKeySource] = useState<string>('None');
     const [showKey, setShowKey] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
 
@@ -25,6 +26,9 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         const savedOpen = localStorage.getItem('openai_api_key');
         const savedAnth = localStorage.getItem('anthropic_api_key');
         const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+
+        const source = geminiService.getApiKeySource();
+        setKeySource(source);
 
         if (savedKey && savedKey.startsWith('AIza') && savedKey.length > 30) {
             setApiKey(savedKey);
@@ -213,22 +217,22 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                                     status === 'checking' ? 'fa-spinner fa-spin text-slate-400' :
                                         'fa-exclamation-triangle text-amber-500'
                                 } text-2xl`}></i>
-                            <div>
+                            <div className="flex-1">
                                 <p className={`font-bold text-sm ${status === 'valid' ? 'text-emerald-700' :
                                     status === 'invalid' ? 'text-rose-700' :
                                         status === 'checking' ? 'text-slate-600' :
                                             'text-amber-700'
                                     }`}>
-                                    {status === 'valid' && 'API Key đang hoạt động'}
-                                    {status === 'invalid' && 'API Key không hợp lệ'}
+                                    {status === 'valid' && (keySource === 'Manual' ? '✅ Mã cá nhân của Thầy/Cô đang hoạt động' : '⚠️ Đang dùng mã mặc định của Hệ thống')}
+                                    {status === 'invalid' && '❌ API Key không hợp lệ'}
                                     {status === 'checking' && 'Đang kiểm tra...'}
-                                    {status === 'empty' && 'Chưa có API Key'}
+                                    {status === 'empty' && 'Chưa có API Key cá nhân'}
                                 </p>
-                                <p className="text-xs text-slate-500">
-                                    {status === 'valid' && 'Các tính năng AI sẵn sàng sử dụng'}
-                                    {status === 'invalid' && 'Vui lòng nhập key mới bên dưới'}
-                                    {status === 'checking' && 'Vui lòng chờ...'}
-                                    {status === 'empty' && 'Nhập API Key để sử dụng AI'}
+                                <p className="text-[10px] text-slate-500 leading-tight mt-1">
+                                    {status === 'valid' && keySource === 'Manual' && 'Thầy/Cô có thể sử dụng AI không giới hạn.'}
+                                    {status === 'valid' && keySource !== 'Manual' && 'Mã hệ thống có lượt dùng miễn phí hữu hạn. Nếu gặp lỗi QUOTA (429), Thầy/Cô hãy nhập mã cá nhân bên dưới.'}
+                                    {status === 'invalid' && 'Vui lòng kiểm tra lại mã và xóa các khoảng trắng thừa.'}
+                                    {status === 'empty' && 'Hệ thống đang dùng mã dự phòng (nếu có).'}
                                 </p>
                             </div>
                         </div>
