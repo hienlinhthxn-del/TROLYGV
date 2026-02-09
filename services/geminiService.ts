@@ -11,10 +11,10 @@ export interface FilePart {
 // Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
 const MODELS = [
   'gemini-1.5-flash',
-  'gemini-2.0-flash-exp',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro',
   'gemini-1.5-flash-8b',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-1.5-pro',
   'gemini-1.0-pro'
 ];
 
@@ -37,19 +37,18 @@ export class GeminiService {
   private getApiKey(): string {
     // Thử tìm Key ở tất cả các nguồn có thể
     const sources = [
-      localStorage.getItem('manually_entered_api_key'),
-      (import.meta as any).env?.VITE_GEMINI_API_KEY,
-      (import.meta as any).env?.GEMINI_API_KEY,
-      (window as any).VITE_GEMINI_API_KEY,
-      (window as any).GEMINI_API_KEY,
-      (window as any).process?.env?.VITE_GEMINI_API_KEY
+      { name: 'Manual', key: localStorage.getItem('manually_entered_api_key') },
+      { name: 'Vite Env', key: (import.meta as any).env?.VITE_GEMINI_API_KEY },
+      { name: 'Gemini Env', key: (import.meta as any).env?.GEMINI_API_KEY },
+      { name: 'Window Vite', key: (window as any).VITE_GEMINI_API_KEY },
+      { name: 'Window Gemini', key: (window as any).GEMINI_API_KEY }
     ];
 
-    for (const key of sources) {
-      if (typeof key === 'string') {
-        const cleaned = key.trim().replace(/["']/g, '');
-        // Kiểm tra xem có phải mã Key thật của Google không (bắt đầu bằng AIza và đủ độ dài)
+    for (const source of sources) {
+      if (typeof source.key === 'string') {
+        const cleaned = source.key.trim().replace(/["']/g, '');
         if (cleaned.startsWith('AIza') && cleaned.length > 30 && cleaned !== 'YOUR_NEW_API_KEY_HERE') {
+          console.log(`Assistant: Using API Key from ${source.name}`);
           return cleaned;
         }
       }
@@ -108,25 +107,45 @@ export class GeminiService {
     return '';
   }
 
-  private async fallbackToOtherProviders(prompt: string, isJson: boolean = false): Promise<string> {
-    // 1. Thử OpenAI (GPT-4o-mini)
+  private async fallbackToOtherProviders(prompt: string, isJson: boolean = false, fileParts?: FilePart[]): Promise<string> {
+    // 1. Thử OpenAI (GPT-4o-mini hỗ trợ Vision)
     const openaiKey = this.getOtherApiKey('openai');
     if (openaiKey) {
       this.setStatus("Đang chuyển sang OpenAI (GPT)...");
       try {
+        const messages: any[] = [];
+        const content: any[] = [{ type: "text", text: prompt }];
+
+        // Thêm ảnh nếu có
+        if (fileParts && fileParts.length > 0) {
+          fileParts.forEach(part => {
+            if (part.inlineData.mimeType.startsWith('image/')) {
+              content.push({
+                type: "image_url",
+                image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` }
+              });
+            }
+          });
+        }
+
+        messages.push({ role: 'user', content });
+
         const res = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
           body: JSON.stringify({
             model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }],
-            response_format: isJson ? { type: "json_object" } : undefined
+            messages,
+            response_format: isJson ? { type: "json_object" } : undefined,
+            max_tokens: 4096
           })
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error.message);
         return data.choices[0].message.content;
-      } catch (e) { console.warn("OpenAI Fallback Error:", e); }
+      } catch (e) {
+        console.warn("OpenAI Fallback Error:", e);
+      }
     }
 
     // 2. Thử Anthropic (Claude 3 Haiku)
@@ -134,6 +153,7 @@ export class GeminiService {
     if (anthropicKey) {
       this.setStatus("Đang chuyển sang Claude...");
       try {
+        // Claude 3 cũng hỗ trợ ảnh nhưng định dạng hơi khác, tạm thời gửi text để đảm bảo ổn định
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'dangerously-allow-browser': 'true' },
@@ -416,16 +436,10 @@ export class GeminiService {
       return json;
     } catch (error: any) {
       console.error("Lỗi AI bóc tách đề:", error);
-      const errorMsg = error.message || "";
-      if (errorMsg.includes("429") || errorMsg.toLowerCase().includes("quota")) {
-        // Tái ném lỗi để UI bắt được và nhắc nhập Key
-        throw error;
-      }
       try {
         return await this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
       } catch (finalError) {
-        if (fileParts && fileParts.length > 0) throw finalError;
-        const text = await this.fallbackToOtherProviders(fullPrompt, true);
+        const text = await this.fallbackToOtherProviders(fullPrompt, true, fileParts);
         return this.parseJSONSafely(text);
       }
     }
@@ -859,8 +873,13 @@ export class GeminiService {
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
     // Lỗi 400/403 thường do Model không hỗ trợ hoặc Key không có quyền, nên đổi Model luôn
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid")) {
-      if (this.currentVersion === 'v1' && !msg.includes("2.0")) {
-        this.setStatus(`Dò tìm kênh dự phòng cho ${this.currentModelName}...`);
+      // Thử đổi version API (v1 <-> v1beta) trước khi đổi model
+      if (this.currentVersion === 'v1beta' && !msg.includes("2.0")) {
+        this.setStatus(`Thử lại với kênh v1 cho ${this.currentModelName}...`);
+        this.setupModel(this.currentModelName, 'v1');
+        return retryFn();
+      } else if (this.currentVersion === 'v1') {
+        this.setStatus(`Thử lại với kênh v1beta cho ${this.currentModelName}...`);
         this.setupModel(this.currentModelName, 'v1beta');
         return retryFn();
       }
