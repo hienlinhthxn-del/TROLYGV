@@ -9,8 +9,10 @@ export interface FilePart {
 }
 
 const MODELS = [
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-pro-latest',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-8b',
   'gemini-1.0-pro'
 ];
 
@@ -967,7 +969,7 @@ export class GeminiService {
     console.warn("AI Encountered Error:", msg, "Status:", status);
 
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
-    if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid")) {
+    if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
 
       const isModelNotFound = msg.includes("404") || msg.includes("not found");
 
@@ -975,12 +977,13 @@ export class GeminiService {
       if (!isModelNotFound && this.versionRetryCount < 1) {
         this.versionRetryCount++;
         const newVersion = this.currentVersion === 'v1beta' ? 'v1' : 'v1beta';
-        this.setStatus(`Thử lại với kênh ${newVersion} cho ${this.currentModelName}...`);
+        this.setStatus(`Thử kênh ${newVersion} cho ${this.currentModelName}...`);
+        console.warn(`Version switch: ${this.currentVersion} -> ${newVersion} for ${this.currentModelName}`);
         this.setupModel(this.currentModelName, newVersion);
         return retryFn();
       }
 
-      // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo trong danh sách.
+      // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo.
       this.versionRetryCount = 0;
       const currentIdx = MODELS.indexOf(this.currentModelName);
       const nextIdx = (currentIdx + 1) % MODELS.length;
@@ -988,11 +991,12 @@ export class GeminiService {
       this.modelCycleCount++;
       if (this.modelCycleCount >= MODELS.length) {
         this.modelCycleCount = 0;
-        throw new Error("❌ LỖI KẾT NỐI (403/404): Không tìm thấy model AI phù hợp hoặc API Key không hợp lệ. Đã thử tất cả các model có sẵn.");
+        throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
       }
 
-      this.setStatus(`Model ${this.currentModelName} lỗi, chuyển sang ${MODELS[nextIdx]}...`);
-      this.setupModel(MODELS[nextIdx], 'v1beta'); // Luôn bắt đầu model mới với v1beta
+      this.setStatus(`Thử đường truyền ${MODELS[nextIdx]}...`);
+      console.log(`Model switch: ${this.currentModelName} -> ${MODELS[nextIdx]}`);
+      this.setupModel(MODELS[nextIdx], 'v1beta');
       this.retryAttempt = 0;
       return retryFn();
     }
