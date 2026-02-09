@@ -9,11 +9,8 @@ export interface FilePart {
 }
 
 const MODELS = [
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash-exp',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro-latest',
   'gemini-1.0-pro'
 ];
 
@@ -972,8 +969,10 @@ export class GeminiService {
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid")) {
 
-      // Thử đổi version API (v1 <-> v1beta) tối đa 1 lần cho mỗi model
-      if (this.versionRetryCount < 1) {
+      const isModelNotFound = msg.includes("404") || msg.includes("not found");
+
+      // Thử đổi version API (v1 <-> v1beta), nhưng bỏ qua nếu lỗi là do model không tồn tại (404).
+      if (!isModelNotFound && this.versionRetryCount < 1) {
         this.versionRetryCount++;
         const newVersion = this.currentVersion === 'v1beta' ? 'v1' : 'v1beta';
         this.setStatus(`Thử lại với kênh ${newVersion} cho ${this.currentModelName}...`);
@@ -981,20 +980,21 @@ export class GeminiService {
         return retryFn();
       }
 
-      // Nếu đổi version vẫn lỗi, chuyển sang model tiếp theo
+      // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo trong danh sách.
       this.versionRetryCount = 0;
       const currentIdx = MODELS.indexOf(this.currentModelName);
-      const nextIdx = currentIdx + 1;
+      const nextIdx = (currentIdx + 1) % MODELS.length;
 
-      if (nextIdx < MODELS.length) {
-        this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx], 'v1beta');
-        this.retryAttempt = 0;
-        return retryFn();
-      } else {
+      this.modelCycleCount++;
+      if (this.modelCycleCount >= MODELS.length) {
         this.modelCycleCount = 0;
-        throw new Error("❌ LỖI KẾT NỐI (403/404): Không tìm thấy model AI phù hợp hoặc API Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key hoặc thử đổi sang Key khác nhé!");
+        throw new Error("❌ LỖI KẾT NỐI (403/404): Không tìm thấy model AI phù hợp hoặc API Key không hợp lệ. Đã thử tất cả các model có sẵn.");
       }
+
+      this.setStatus(`Model ${this.currentModelName} lỗi, chuyển sang ${MODELS[nextIdx]}...`);
+      this.setupModel(MODELS[nextIdx], 'v1beta'); // Luôn bắt đầu model mới với v1beta
+      this.retryAttempt = 0;
+      return retryFn();
     }
 
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota)
