@@ -49,51 +49,66 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
         setIsTesting(true);
         try {
-            // Danh sách các model để thử (ưu tiên model mới nhất và ổn định)
+            // Danh sách các model phổ biến nhất
             const modelsToTry = [
                 'gemini-1.5-flash',
-                'gemini-2.0-flash-exp',
                 'gemini-2.0-flash',
                 'gemini-1.5-pro'
             ];
+
+            // Thử cả v1 và v1beta vì một số vùng/key có thể bị hạn chế v1beta hoặc ngược lại
+            const versionsToTry: ('v1' | 'v1beta')[] = ['v1', 'v1beta'];
+
             let success = false;
             let lastError = '';
+            let detailedLog = '';
 
-            for (const model of modelsToTry) {
-                try {
-                    const response = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
-                        {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{ parts: [{ text: 'Hello' }] }]
-                            })
+            for (const version of versionsToTry) {
+                for (const model of modelsToTry) {
+                    try {
+                        const response = await fetch(
+                            `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey.trim()}`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: 'Hi' }] }]
+                                })
+                            }
+                        );
+
+                        if (response.ok) {
+                            success = true;
+                            break;
+                        } else {
+                            const data = await response.json();
+                            lastError = data.error?.message || response.statusText;
+                            detailedLog += `[${version}/${model}]: ${lastError}\n`;
+
+                            // Nếu lỗi là API Key invalid thì dừng luôn không cần thử model khác
+                            if (lastError.toLowerCase().includes('key not valid') || lastError.toLowerCase().includes('invalid')) {
+                                break;
+                            }
                         }
-                    );
-
-                    if (response.ok) {
-                        success = true;
-                        break;
-                    } else {
-                        const data = await response.json();
-                        lastError = data.error?.message || response.statusText;
+                    } catch (e: any) {
+                        lastError = e.message;
+                        detailedLog += `[${version}/${model}] Network: ${lastError}\n`;
                     }
-                } catch (e: any) {
-                    lastError = e.message;
                 }
+                if (success) break;
             }
 
             if (success) {
                 setStatus('valid');
-                alert('✅ API Key hợp lệ! Thầy/Cô có thể lưu lại.');
+                alert('✅ API Key hợp lệ! Thầy/Cô có thể lưu lại và bắt đầu sử dụng.');
             } else {
                 setStatus('invalid');
-                alert(`❌ API Key không hợp lệ hoặc không tìm thấy model phù hợp.\n\nChi tiết: ${lastError}`);
+                console.error("API Key Test Log:\n", detailedLog);
+                alert(`❌ API Key không hợp lệ hoặc không tìm thấy model phù hợp.\n\nChi tiết lỗi cuối: ${lastError}\n\nThầy Cô hãy kiểm tra kỹ Key xem có copy dư khoảng trắng không, hoặc thử lấy lại Key mới từ Google AI Studio nhé.`);
             }
         } catch (error: any) {
             setStatus('invalid');
-            alert(`❌ Lỗi kết nối: ${error.message}`);
+            alert(`❌ Lỗi kết nối máy chủ: ${error.message}`);
         } finally {
             setIsTesting(false);
         }
