@@ -130,6 +130,9 @@ export class GeminiService {
 
         messages.push({ role: 'user', content });
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
         const res = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
@@ -138,12 +141,15 @@ export class GeminiService {
             messages,
             response_format: isJson ? { type: "json_object" } : undefined,
             max_tokens: 4096
-          })
+          }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const data = await res.json();
         if (data.error) throw new Error(data.error.message);
         return data.choices[0].message.content;
-      } catch (e) {
+      } catch (e: any) {
+        if (e.name === 'AbortError') console.warn("OpenAI Timeout reached.");
         console.warn("OpenAI Fallback Error:", e);
       }
     }
@@ -153,7 +159,9 @@ export class GeminiService {
     if (anthropicKey) {
       this.setStatus("Đang chuyển sang Claude...");
       try {
-        // Claude 3 cũng hỗ trợ ảnh nhưng định dạng hơi khác, tạm thời gửi text để đảm bảo ổn định
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
+
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'dangerously-allow-browser': 'true' },
@@ -161,12 +169,17 @@ export class GeminiService {
             model: 'claude-3-haiku-20240307',
             max_tokens: 4096,
             messages: [{ role: 'user', content: prompt + (isJson ? "\n\nIMPORTANT: Respond with valid JSON only." : "") }]
-          })
+          }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const data = await res.json();
         if (data.error) throw new Error(data.error.message);
         return data.content[0].text;
-      } catch (e) { console.warn("Anthropic Fallback Error:", e); }
+      } catch (e: any) {
+        if (e.name === 'AbortError') console.warn("Claude Timeout reached.");
+        console.warn("Anthropic Fallback Error:", e);
+      }
     }
 
     throw new Error("⚠️ QUOTA EXCEEDED (429): Thầy/Cô đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\n💡 GIẢI PHÁP:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' (biểu tượng 🔑) để tiếp tục sử dụng KHÔNG GIỚI HẠN.");
@@ -257,8 +270,8 @@ export class GeminiService {
   // Generic retry logic for API calls
   private async retryWithBackoff<T>(
     fn: () => Promise<T>,
-    maxRetries: number = 5,
-    baseDelay: number = 2000
+    maxRetries: number = 3, // Giảm từ 5 xuống 3 để không bị treo quá lâu
+    baseDelay: number = 1500
   ): Promise<T> {
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -578,7 +591,12 @@ export class GeminiService {
       const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
 
       try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per image
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
         if (response.ok) {
           const blob = await response.blob();
           if (blob.type.startsWith('image/')) {
@@ -590,12 +608,13 @@ export class GeminiService {
             });
           }
         }
-      } catch (error) {
+      } catch (error: any) {
+        if (error.name === 'AbortError') console.warn("Image generation timeout reached.");
         console.warn(`Lỗi tạo ảnh lần ${i + 1}:`, error);
         if (i === 2) {
-          throw new Error("Dịch vụ tạo ảnh đang gặp sự cố hoặc quá tải. Thầy Cô vui lòng thử lại sau ít phút.");
+          throw new Error("Dịch vụ tạo ảnh đang bận. Thầy Cô có thể bấm 'Vẽ lại' từng câu sau nhé.");
         }
-        await new Promise(r => setTimeout(r, 1500)); // Đợi một chút trước khi thử lại
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
     throw new Error("Không thể tạo ảnh lúc này.");
@@ -918,15 +937,15 @@ export class GeminiService {
         msg.includes("load failed");
 
       // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = isNetworkIssue ? 1500 : (this.retryAttempt === 0 ? 2000 : 5000); // Mạng lỗi thì thử lại nhanh hơn
+      let waitMs = isNetworkIssue ? 1000 : (this.retryAttempt === 0 ? 1500 : 3500); // Giảm thời gian chờ
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000; // Thêm buffer 2s an toàn
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 1000;
       }
 
-      // Nếu Google bảo chờ quá lâu (> 8s), hoặc đã thử lại 1 lần bận liên tiếp
+      // Nếu Google bảo chờ quá lâu (> 6s), hoặc đã thử lại 2 lần bận liên tiếp
       // thì đổi model luôn cho nhanh
-      if (waitMs > 10000 || this.retryAttempt >= 2 || isNetworkIssue) {
+      if (waitMs > 6000 || this.retryAttempt >= 2 || isNetworkIssue) {
         this.retryAttempt = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
         const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model

@@ -144,10 +144,10 @@ const WorksheetCreator: React.FC = () => {
                 if (q.imagePrompt || q.question) {
                     const promptToUse = q.imagePrompt || q.question;
                     if (i > 0) {
-                        setProgress(`Nghỉ chút để chuẩn bị vẽ câu ${i + 1}...`);
-                        await new Promise(resolve => setTimeout(resolve, 3500));
+                        setProgress(`Đang chuẩn bị vẽ câu ${i + 1}...`);
+                        await new Promise(resolve => setTimeout(resolve, 800)); // Giảm từ 3500 xuống 800ms
                     }
-                    setProgress(`Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
+                    setProgress(`🎨 Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
                     try {
                         const imageUrl = await geminiService.generateImage(promptToUse);
                         updatedQuestions[i].imageUrl = imageUrl;
