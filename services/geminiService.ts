@@ -10,12 +10,13 @@ export interface FilePart {
 
 // Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
 const MODELS = [
-  'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
-  'gemini-1.5-pro-latest',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-2.5-flash',
   'gemini-1.5-pro',
+  'gemini-2.5-pro',
   'gemini-1.5-flash-8b',
-  'gemini-2.0-flash-exp',
   'gemini-1.0-pro'
 ];
 
@@ -40,7 +41,9 @@ export class GeminiService {
     const sources = [
       localStorage.getItem('manually_entered_api_key'),
       (import.meta as any).env?.VITE_GEMINI_API_KEY,
+      (import.meta as any).env?.GEMINI_API_KEY,
       (window as any).VITE_GEMINI_API_KEY,
+      (window as any).GEMINI_API_KEY,
       (window as any).process?.env?.VITE_GEMINI_API_KEY
     ];
 
@@ -98,7 +101,13 @@ export class GeminiService {
     const keyName = provider === 'openai' ? 'VITE_OPENAI_API_KEY' : 'VITE_ANTHROPIC_API_KEY';
     const localKey = localStorage.getItem(provider + '_api_key');
     if (localKey) return localKey;
-    return (import.meta as any).env?.[keyName] || (window as any)[keyName] || '';
+    const envKey = (import.meta as any).env?.[keyName] || (window as any)[keyName] || '';
+    if (envKey) return envKey;
+
+    if (provider === 'openai') {
+      return '';
+    }
+    return '';
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean = false): Promise<string> {
@@ -872,9 +881,9 @@ export class GeminiService {
         // Nếu đã thử qua tất cả các model mà vẫn lỗi (vòng quay trở lại model đầu)
         if (nextIdx === 0 && currentIdx !== -1) {
           if (isNetworkIssue) {
-            throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn (Failed to fetch). Thầy/Cô kiểm tra Internet/VPN/Tường lửa hoặc thử lại sau ít phút.");
+            throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN hoặc thử lại sau nhé.");
           }
-          throw new Error("Tất cả các model AI của Google đều đang bận hoặc đã hết lượt sử dụng. Hệ thống sẽ thử chuyển sang nhà cung cấp dự phòng (nếu có).");
+          throw new Error("Tất cả các đường truyền AI (Gemini 1.5, 2.0, 2.5) đều đang bận hoặc hết hạn mức. Hệ thống đang chuyển sang kênh dự phòng OpenAI/Claude...");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);

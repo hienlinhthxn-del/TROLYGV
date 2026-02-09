@@ -1,5 +1,5 @@
 // Quick script to list available Gemini models
-const API_KEY = 'AIzaSyBWkCZUYFFmPJzxMqviFKoU7iYcSAa6-JY';
+const API_KEY = 'YOUR_API_KEY_HERE';
 
 async function listModels() {
     try {
