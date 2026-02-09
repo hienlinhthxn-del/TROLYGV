@@ -42,73 +42,103 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     };
 
     const handleTestKey = async () => {
-        if (!apiKey.trim()) {
+        const cleanKey = apiKey.trim().replace(/["']/g, '');
+        if (!cleanKey) {
             alert('Vui lòng nhập API Key!');
             return;
         }
 
         setIsTesting(true);
         try {
-            // Danh sách các model phổ biến nhất
+            // Danh sách model đa dạng để thử, từ mới nhất đến ổn định nhất
             const modelsToTry = [
                 'gemini-1.5-flash',
+                'gemini-1.5-flash-8b',
                 'gemini-2.0-flash',
-                'gemini-1.5-pro'
+                'gemini-1.5-pro',
+                'gemini-1.0-pro'
             ];
 
-            // Thử cả v1 và v1beta vì một số vùng/key có thể bị hạn chế v1beta hoặc ngược lại
-            const versionsToTry: ('v1' | 'v1beta')[] = ['v1', 'v1beta'];
-
+            const versionsToTry: ('v1beta' | 'v1')[] = ['v1beta', 'v1'];
             let success = false;
             let lastError = '';
-            let detailedLog = '';
+            let workingModel = '';
+            let workingVersion = '';
 
+            // Bước 1: Thử trực tiếp gọi generateContent
             for (const version of versionsToTry) {
                 for (const model of modelsToTry) {
                     try {
                         const response = await fetch(
-                            `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey.trim()}`,
+                            `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${cleanKey}`,
                             {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    contents: [{ parts: [{ text: 'Hi' }] }]
-                                })
+                                body: JSON.stringify({ contents: [{ parts: [{ text: 'Hi' }] }] })
                             }
                         );
 
                         if (response.ok) {
                             success = true;
+                            workingModel = model;
+                            workingVersion = version;
                             break;
                         } else {
                             const data = await response.json();
                             lastError = data.error?.message || response.statusText;
-                            detailedLog += `[${version}/${model}]: ${lastError}\n`;
-
-                            // Nếu lỗi là API Key invalid thì dừng luôn không cần thử model khác
                             if (lastError.toLowerCase().includes('key not valid') || lastError.toLowerCase().includes('invalid')) {
-                                break;
+                                throw new Error("API Key không hợp lệ (Invalid Key). Hãy kiểm tra lại mã Key.");
                             }
                         }
                     } catch (e: any) {
                         lastError = e.message;
-                        detailedLog += `[${version}/${model}] Network: ${lastError}\n`;
                     }
                 }
                 if (success) break;
             }
 
+            // Bước 2: Nếu thất bại, thử liệt kê danh sách model để xem cái nào khả dụng
+            if (!success) {
+                try {
+                    const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+                    const listData = await listResponse.json();
+                    if (listData.models && listData.models.length > 0) {
+                        const firstValidModel = listData.models.find((m: any) =>
+                            m.supportedGenerationMethods?.includes('generateContent')
+                        );
+                        if (firstValidModel) {
+                            success = true;
+                            workingModel = firstValidModel.name.replace('models/', '');
+                            workingVersion = 'v1beta';
+                        }
+                    } else if (listData.error) {
+                        lastError = listData.error.message;
+                    }
+                } catch (e: any) {
+                    console.warn("Failed to list models:", e);
+                }
+            }
+
             if (success) {
                 setStatus('valid');
-                alert('✅ API Key hợp lệ! Thầy/Cô có thể lưu lại và bắt đầu sử dụng.');
+                setApiKey(cleanKey); // Cập nhật key đã được làm sạch
+                alert(`✅ API Key Hợp Lệ!\n\nĐã kết nối thành công qua model: ${workingModel} (${workingVersion}).\n\nThầy/Cô hãy bấm 'Lưu API Key' để bắt đầu sử dụng nhé.`);
             } else {
                 setStatus('invalid');
-                console.error("API Key Test Log:\n", detailedLog);
-                alert(`❌ API Key không hợp lệ hoặc không tìm thấy model phù hợp.\n\nChi tiết lỗi cuối: ${lastError}\n\nThầy Cô hãy kiểm tra kỹ Key xem có copy dư khoảng trắng không, hoặc thử lấy lại Key mới từ Google AI Studio nhé.`);
+                let advice = "Hãy kiểm tra xem Key có bị thừa ký tự không, hoặc thử lấy lại Key mới.";
+                if (lastError.includes("location") || lastError.includes("unsupported")) {
+                    advice = "Vùng (Location) của Thầy/Cô có thể chưa được hỗ trợ Gemini trực tiếp. Hãy thử dùng VPN hoặc đổi tài khoản Google khác.";
+                } else if (lastError.includes("not found")) {
+                    advice = "Có vẻ tài khoản của Thầy/Cô chưa được kích hoạt dòng model này. Hãy thử tạo lại API Key mới từ Google AI Studio.";
+                } else if (lastError.includes("403") || lastError.includes("permission")) {
+                    advice = "Lỗi quyền truy cập (403). Nếu dùng Key từ Google Cloud, hãy chắc chắn đã bật 'Generative Language API'.";
+                }
+
+                alert(`❌ API Key chưa hoạt động.\n\nChi tiết: ${lastError}\n\n👉 Lời khuyên: ${advice}`);
             }
         } catch (error: any) {
             setStatus('invalid');
-            alert(`❌ Lỗi kết nối máy chủ: ${error.message}`);
+            alert(`❌ Lỗi hệ thống: ${error.message}`);
         } finally {
             setIsTesting(false);
         }
