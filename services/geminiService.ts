@@ -310,7 +310,7 @@ export class GeminiService {
   // Generic retry logic for API calls
   private async retryWithBackoff<T>(
     fn: () => Promise<T>,
-    maxRetries: number = 3, // Giảm từ 5 xuống 3 để không bị treo quá lâu
+    maxRetries: number = 3,
     baseDelay: number = 1500
   ): Promise<T> {
     let lastError: Error | null = null;
@@ -319,16 +319,22 @@ export class GeminiService {
         return await fn();
       } catch (error: any) {
         lastError = error;
-        // Check if error is retryable (rate limiting, server errors, network issues)
-        const isRetryable = error.message?.includes('429') ||
-          error.message?.includes('503') ||
-          error.message?.includes('502') ||
-          error.message?.includes('500') ||
-          error.message?.includes('timeout') ||
-          error.message?.includes('network') ||
-          error.message?.includes('ECONNRESET') ||
-          error.message?.includes('ETIMEDOUT') ||
-          error.message?.includes('ENOTFOUND');
+        const msg = (error.message || "").toLowerCase();
+
+        // Check if error is retryable
+        const isQuota = msg.includes('429') || msg.includes('quota') || msg.includes('limit');
+        const isRetryable = isQuota ||
+          msg.includes('503') ||
+          msg.includes('502') ||
+          msg.includes('500') ||
+          msg.includes('timeout') ||
+          msg.includes('network') ||
+          msg.includes('fetch');
+
+        // Nếu là lỗi Quota (429), giảm số lần thử lại nội bộ để chuyển model nhanh hơn
+        if (isQuota && attempt >= 1) {
+          throw error;
+        }
 
         if (!isRetryable || attempt === maxRetries - 1) {
           throw error;
@@ -421,16 +427,20 @@ export class GeminiService {
     try {
       // Kết hợp instruction mặc định và prompt tùy chỉnh của người dùng
       const combinedPrompt = `${fullPrompt}\n\nBỔ XUNG YÊU CẦU CỤ THỂ:\n${prompt}`;
-      const parts = [...(fileParts || []), { text: combinedPrompt }];
 
       // Cấu hình generationConfig linh hoạt theo version
       const generationConfig: any = {
         maxOutputTokens: 8192,
       };
 
+      let finalPrompt = combinedPrompt;
+
       // Chỉ dùng responseMimeType nếu version là v1beta
       if (this.currentVersion === 'v1beta') {
         generationConfig.responseMimeType = "application/json";
+      } else {
+        // Nếu dùng v1 (không hỗ trợ JSON mode), tiêm thêm lệnh gắt gao vào prompt
+        finalPrompt += "\n\nCRITICAL: Return ONLY a valid JSON object. No markdown, no backticks, no introduction. Start with '{' and end with '}'.";
       }
 
       // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
@@ -444,6 +454,8 @@ export class GeminiService {
         ],
         generationConfig
       }, { apiVersion: this.currentVersion });
+
+      const parts = [...(fileParts || []), { text: finalPrompt }];
 
       // Use retry logic for API calls
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
@@ -543,8 +555,11 @@ export class GeminiService {
       const generationConfig: any = {
         maxOutputTokens: 8192,
       };
+      let finalPrompt = prompt;
       if (this.currentVersion === 'v1beta') {
         generationConfig.responseMimeType = "application/json";
+      } else {
+        finalPrompt += "\n\nRETURN ONLY VALID JSON. NO MARKDOWN.";
       }
 
       const jsonModel = this.genAI!.getGenerativeModel({
@@ -558,7 +573,7 @@ export class GeminiService {
         generationConfig
       }, { apiVersion: this.currentVersion });
 
-      const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(finalPrompt), 5, 3000);
       const text = result.response.text();
       return this.parseJSONSafely(text);
     } catch (error: any) {
@@ -603,9 +618,12 @@ export class GeminiService {
         maxOutputTokens: 8192,
       };
       // Luôn ưu tiên v1beta nếu model là flash, nếu hien tai la v1 thi khong dung JSON mode
+      let finalPrompt = prompt;
       const selectedVersion = this.currentVersion;
       if (selectedVersion === 'v1beta') {
         generationConfig.responseMimeType = "application/json";
+      } else {
+        finalPrompt += "\n\nRETURN ONLY VALID JSON ARRAY. NO MARKDOWN.";
       }
 
       const jsonModel = this.genAI!.getGenerativeModel({
@@ -619,7 +637,7 @@ export class GeminiService {
         generationConfig
       }, { apiVersion: selectedVersion });
 
-      const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(finalPrompt), 5, 3000);
       const text = result.response.text();
       return this.parseJSONSafely(text);
     } catch (error: any) {
