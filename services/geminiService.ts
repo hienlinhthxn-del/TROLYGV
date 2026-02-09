@@ -23,8 +23,9 @@ export class GeminiService {
   private chat: any | null = null;
   private model: any | null = null;
   private currentModelName: string = MODELS[0];
-  private currentVersion: 'v1' | 'v1beta' = 'v1';
+  private currentVersion: 'v1' | 'v1beta' = 'v1beta';
   private currentInstruction: string = "Bạn là một trợ lý giáo dục chuyên nghiệp tại Việt Nam.";
+  private activeKey: string = "";
 
   constructor() {
     this.initialize();
@@ -78,14 +79,24 @@ export class GeminiService {
 
   private initialize() {
     const key = this.getApiKey();
+    this.activeKey = key;
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
       this.setupModel(MODELS[0], 'v1beta');
-      console.log("AI Assistant: API Key detected and active.");
+      console.log(`AI Assistant: API Key detected (${this.getApiKeySource()}) and active.`);
     } else {
+      this.genAI = null;
       this.setStatus("LỖI: Chưa cấu hình API Key");
       console.warn("AI Assistant: No valid API Key found.");
     }
+  }
+
+  private async ensureInitialized() {
+    const currentKey = this.getApiKey();
+    if (!this.genAI || this.activeKey !== currentKey) {
+      this.initialize();
+    }
+    if (!this.genAI) throw new Error("Chưa có API Key. Thầy/Cô hãy mở Cài đặt (🔑) để cấu hình nhé!");
   }
 
   private setupModel(modelName: string, version: 'v1' | 'v1beta' = 'v1beta') {
@@ -105,11 +116,6 @@ export class GeminiService {
       ]
     }, { apiVersion: version });
     this.setStatus(`AI Sẵn sàng (${modelName})`);
-  }
-
-  private async ensureInitialized() {
-    if (!this.genAI) this.initialize();
-    if (!this.genAI) throw new Error("Chưa có API Key. Thầy/Cô hãy kiểm tra lại cấu hình nhé!");
   }
 
   // --- FALLBACK PROVIDERS (OpenAI / Claude) ---
@@ -694,13 +700,14 @@ export class GeminiService {
     }
     throw new Error("Không thể tạo video sau nhiều lần thử. Dịch vụ có thể đang bảo trì.");
   }
-  public async generateSuggestions(history: string[], persona: string): Promise<string[]> {
-    if (history.length === 0) return [];
+  public async generateSuggestions(history: any[], personaName: string) {
+    await this.ensureInitialized();
+    if (!this.genAI) return ["Hãy kể cho tôi nghe thêm về chủ đề này", "Tôi nên bắt đầu từ đâu?", "Bạn có thể ví dụ không?"];
     try {
       const res = await this.generateText(`Dựa trên cuộc trò chuyện: ${history.slice(-2).join(' | ')}. Gợi ý 3 câu hỏi tiếp theo ngắn gọn.`);
       return res.split('\n').filter(s => s.trim().length > 5).slice(0, 3);
     } catch {
-      return [];
+      return ["Hãy kể cho tôi nghe thêm về chủ đề này", "Tôi nên bắt đầu từ đâu?", "Bạn có thể ví dụ không?"];
     }
   }
 
@@ -976,8 +983,8 @@ export class GeminiService {
         waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 500;
       }
 
-      // Nếu đã thử lại quá nhiều lần trên model này, đổi luôn model
-      if (this.retryAttempt >= 2 || isNetworkIssue || waitMs > 10000) {
+      // Nếu gặp 429/503 một phát, thử chuyển sang model khác LUÔN cho lẹ (vì thường cả model đó đang bị limit)
+      if (this.retryAttempt >= 1 || isNetworkIssue || waitMs > 8000) {
         this.retryAttempt = 0;
         this.versionRetryCount = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
@@ -987,9 +994,9 @@ export class GeminiService {
         if (this.modelCycleCount >= MODELS.length) {
           this.modelCycleCount = 0;
           if (isNetworkIssue) {
-            throw new Error("Kết nối mạng AI bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN nhé.");
+            throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
           }
-          throw new Error("⚠️ HỆ THỐNG BẬN: Tất cả các đường truyền AI đều đang quá tải. Thầy/Cô hãy thử lại sau ít phút.");
+          throw new Error("Quota Exceeded: Đã thử tất cả các model AI nhưng đều hết lượt dùng. Thầy/Cô hãy kiểm tra lại Key cá nhân trong Cài đặt nhé!");
         }
 
         this.setStatus(`Đường truyền ${this.currentModelName} bận, thử ${MODELS[nextIdx]}...`);
