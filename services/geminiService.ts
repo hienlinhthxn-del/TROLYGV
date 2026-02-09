@@ -198,7 +198,7 @@ export class GeminiService {
     });
   }
 
-  public async* sendMessageStream(prompt: string, fileParts?: FilePart[]) {
+  public async* sendMessageStream(prompt: string, fileParts?: FilePart[], signal?: AbortSignal) {
     await this.ensureInitialized();
     if (!this.chat) await this.initChat(this.currentInstruction);
 
@@ -211,15 +211,24 @@ export class GeminiService {
       const maxStreamAttempts = 3;
 
       while (streamAttempt < maxStreamAttempts) {
+        if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
+
         try {
           // Timeout cho việc kết nối luồng ban đầu
           const controller = new AbortController();
           const connTimeout = setTimeout(() => controller.abort(), 20000);
 
+          // Link local signal to this internal controller
+          if (signal) {
+            signal.addEventListener('abort', () => controller.abort());
+          }
+
           result = await this.chat.sendMessageStream(parts);
           clearTimeout(connTimeout);
           break;
         } catch (streamError: any) {
+          if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
+
           const isRetryable = streamError.message?.includes('429') ||
             streamError.message?.includes('503') ||
             streamError.message?.includes('502') ||
@@ -238,6 +247,8 @@ export class GeminiService {
       if (!result || !result.stream) throw new Error("Dịch vụ AI không phản hồi (Stream null)");
 
       for await (const chunk of result.stream) {
+        if (signal?.aborted) throw new Error("Yêu cầu đã bị hủy");
+
         let text = '';
         try {
           text = chunk.text();
@@ -250,10 +261,12 @@ export class GeminiService {
         };
       }
     } catch (error: any) {
+      if (signal?.aborted || error.message?.includes("hủy")) throw new Error("Đã dừng yêu cầu.");
+
       if (error.message?.includes("429") || error.message?.includes("503")) {
         // Rate limit or service unavailable - try fallback providers
         try {
-          const fallbackText = await this.fallbackToOtherProviders(prompt, false);
+          const fallbackText = await this.fallbackToOtherProviders(prompt, false, fileParts);
           yield { text: fallbackText, grounding: null };
           return;
         } catch (e) {
@@ -316,7 +329,8 @@ export class GeminiService {
     await this.ensureInitialized();
     try {
       const parts = [...(fileParts || []), { text: `${this.currentInstruction}\n\nYêu cầu: ${prompt}` }];
-      return await this.retryWithBackoff(() => this.model.generateContent(parts));
+      const result = await this.retryWithBackoff(() => this.model.generateContent(parts));
+      return result.response.text();
     } catch (error: any) {
       try {
         return await this.handleError(error, () => this.generateText(prompt, fileParts));
@@ -893,6 +907,7 @@ export class GeminiService {
   }
 
   private retryAttempt: number = 0;
+  private versionRetryCount: number = 0;
   private modelCycleCount: number = 0;
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
@@ -901,34 +916,34 @@ export class GeminiService {
     console.warn("AI Encountered Error:", msg, "Status:", status);
 
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
-    // Lỗi 400/403 thường do Model không hỗ trợ hoặc Key không có quyền, nên đổi Model luôn
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid")) {
-      // Thử đổi version API (v1 <-> v1beta) trước khi đổi model
-      if (this.currentVersion === 'v1beta' && !msg.includes("2.0")) {
-        this.setStatus(`Thử lại với kênh v1 cho ${this.currentModelName}...`);
-        this.setupModel(this.currentModelName, 'v1');
-        return retryFn();
-      } else if (this.currentVersion === 'v1') {
-        this.setStatus(`Thử lại với kênh v1beta cho ${this.currentModelName}...`);
-        this.setupModel(this.currentModelName, 'v1beta');
+
+      // Thử đổi version API (v1 <-> v1beta) tối đa 1 lần cho mỗi model
+      if (this.versionRetryCount < 1) {
+        this.versionRetryCount++;
+        const newVersion = this.currentVersion === 'v1beta' ? 'v1' : 'v1beta';
+        this.setStatus(`Thử lại với kênh ${newVersion} cho ${this.currentModelName}...`);
+        this.setupModel(this.currentModelName, newVersion);
         return retryFn();
       }
 
-      const nextIdx = MODELS.indexOf(this.currentModelName) + 1;
+      // Nếu đổi version vẫn lỗi, chuyển sang model tiếp theo
+      this.versionRetryCount = 0;
+      const currentIdx = MODELS.indexOf(this.currentModelName);
+      const nextIdx = currentIdx + 1;
+
       if (nextIdx < MODELS.length) {
         this.setStatus(`Chuyển sang model ${MODELS[nextIdx]}...`);
         this.setupModel(MODELS[nextIdx], 'v1beta');
-        this.retryAttempt = 0; // Reset retry attempt when changing model
+        this.retryAttempt = 0;
         return retryFn();
       } else {
-        // Nếu đã thử hết danh sách mà vẫn lỗi
         this.modelCycleCount = 0;
         throw new Error("❌ LỖI KẾT NỐI (403/404): Không tìm thấy model AI phù hợp hoặc API Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key hoặc thử đổi sang Key khác nhé!");
       }
     }
 
-    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota) - Tự động thử lại hoặc đổi Model
-    // Bổ sung thêm các lỗi 503, 500, overloaded, busy
+    // Xử lý lỗi 429 (Giới hạn tốc độ/Quota)
     if (
       msg.includes("429") ||
       msg.includes("quota") ||
@@ -938,51 +953,46 @@ export class GeminiService {
       msg.includes("503") ||
       msg.includes("500") ||
       msg.includes("failed to fetch") ||
-      msg.includes("networkerror") ||
-      msg.includes("network request failed") ||
-      msg.includes("load failed")
+      msg.includes("network")
     ) {
-      const isNetworkIssue =
-        msg.includes("failed to fetch") ||
-        msg.includes("networkerror") ||
-        msg.includes("network request failed") ||
-        msg.includes("load failed");
+      const isNetworkIssue = msg.includes("fetch") || msg.includes("network");
 
-      // Tự động đọc thời gian chờ từ thông báo lỗi của Google
-      let waitMs = isNetworkIssue ? 1000 : (this.retryAttempt === 0 ? 1200 : 2500); // Giảm thời gian chờ
+      // Giảm thời gian chờ để không cảm thấy bị treo quá lâu
+      let waitMs = isNetworkIssue ? 800 : (this.retryAttempt === 0 ? 1000 : 2000);
       const match = msg.match(/retry in (\d+(\.\d+)?)s/);
       if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 800;
+        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 500;
       }
 
-      // Nếu Google bảo chờ quá lâu (> 6s), hoặc đã thử lại 2 lần bận liên tiếp
-      // thì đổi model luôn cho nhanh
-      if (waitMs > 6000 || this.retryAttempt >= 2 || isNetworkIssue) {
+      // Nếu đã thử lại quá nhiều lần trên model này, đổi luôn model
+      if (this.retryAttempt >= 2 || isNetworkIssue || waitMs > 10000) {
         this.retryAttempt = 0;
+        this.versionRetryCount = 0;
         const currentIdx = MODELS.indexOf(this.currentModelName);
-        const nextIdx = (currentIdx + 1) % MODELS.length; // Vòng lặp các model
+        const nextIdx = (currentIdx + 1) % MODELS.length;
 
         this.modelCycleCount++;
         if (this.modelCycleCount >= MODELS.length) {
           this.modelCycleCount = 0;
           if (isNetworkIssue) {
-            throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN hoặc thử lại sau nhé.");
+            throw new Error("Kết nối mạng AI bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN nhé.");
           }
-          throw new Error("⚠️ TẤT CẢ ĐƯỜNG TRUYỀN ĐỀU BẬN: Hệ thống AI đang quá tải. Thầy/Cô vui lòng dán API Key cá nhân hoặc thử lại sau ít phút nhé.");
+          throw new Error("⚠️ HỆ THỐNG BẬN: Tất cả các đường truyền AI đều đang quá tải. Thầy/Cô hãy thử lại sau ít phút.");
         }
 
-        this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
+        this.setStatus(`Đường truyền ${this.currentModelName} bận, thử ${MODELS[nextIdx]}...`);
         this.setupModel(MODELS[nextIdx], 'v1beta');
         return retryFn();
       }
 
       this.retryAttempt++;
-      this.setStatus(`Google báo bận, đang thử lại sau ${Math.round(waitMs / 1000)} giây...`);
+      this.setStatus(`Đang thử lại sau ${Math.round(waitMs / 1000)}s...`);
       await new Promise(r => setTimeout(r, waitMs));
       return retryFn();
     }
 
-    this.retryAttempt = 0; // Reset nếu là lỗi khác
+    this.retryAttempt = 0;
+    this.versionRetryCount = 0;
     throw error;
   }
 }
