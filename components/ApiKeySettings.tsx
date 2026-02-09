@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { geminiService } from '../services/geminiService';
 
 interface ApiKeySettingsProps {
@@ -22,28 +22,43 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
     }, [isOpen]);
 
     const checkCurrentKey = () => {
-        setStatus('checking');
-        const savedKey = localStorage.getItem('manually_entered_api_key');
-        const savedOpen = localStorage.getItem('openai_api_key');
-        const savedAnth = localStorage.getItem('anthropic_api_key');
-        const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+        try {
+            setStatus('checking');
+            const savedKey = localStorage.getItem('manually_entered_api_key');
+            const savedOpen = localStorage.getItem('openai_api_key');
+            const savedAnth = localStorage.getItem('anthropic_api_key');
 
-        const source = geminiService.getApiKeySource();
-        setKeySource(source);
+            // Dùng cách an toàn hơn để truy cập biến môi trường
+            let envKey = '';
+            try {
+                envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+            } catch (e) { }
 
-        if (savedKey && savedKey.startsWith('AIza') && savedKey.length > 30) {
-            setApiKey(savedKey);
-            setStatus('valid');
-        } else if (envKey && envKey.startsWith('AIza') && envKey.length > 30 && envKey !== 'YOUR_NEW_API_KEY_HERE') {
-            setApiKey(envKey);
-            setStatus('valid');
-        } else {
-            setApiKey('');
+            let source = 'None';
+            try {
+                source = geminiService.getApiKeySource();
+            } catch (e) {
+                console.error("Error getting key source:", e);
+            }
+            setKeySource(source);
+
+            if (savedKey && savedKey.startsWith('AIza') && savedKey.length > 30) {
+                setApiKey(savedKey);
+                setStatus('valid');
+            } else if (envKey && envKey.startsWith('AIza') && envKey.length > 30 && envKey !== 'YOUR_NEW_API_KEY_HERE') {
+                setApiKey(envKey);
+                setStatus('valid');
+            } else {
+                setApiKey('');
+                setStatus('empty');
+            }
+
+            setOpenaiKey(savedOpen || '');
+            setAnthropicKey(savedAnth || '');
+        } catch (error) {
+            console.error("Critical error in checkCurrentKey:", error);
             setStatus('empty');
         }
-
-        setOpenaiKey(savedOpen || '');
-        setAnthropicKey(savedAnth || '');
     };
 
     const handleTestKey = async () => {
