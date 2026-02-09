@@ -149,7 +149,7 @@ export class GeminiService {
       } catch (e) { console.warn("Anthropic Fallback Error:", e); }
     }
 
-    throw new Error("Đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\nThầy/Cô vui lòng:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' để sử dụng không giới hạn.");
+    throw new Error("⚠️ QUOTA EXCEEDED (429): Thầy/Cô đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\n💡 GIẢI PHÁP:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' (biểu tượng 🔑) để tiếp tục sử dụng KHÔNG GIỚI HẠN.");
   }
 
   // --- TRÒ CHUYỆN (Chat & Streaming) ---
@@ -374,35 +374,57 @@ export class GeminiService {
         json = { questions: json };
       }
 
-      // Fallback 2: Nếu AI trả về object nhưng không có trường 'questions', thử tìm mảng thay thế
-      if (json && typeof json === 'object' && (!json.questions || !Array.isArray(json.questions))) {
-        for (const key in json) {
-          if (Array.isArray(json[key]) && json[key].length > 0) {
-            json.questions = json[key];
-            break;
+      // Fallback 2: Duyệt tìm mảng 'questions' hoặc bất kỳ mảng nào có thể là danh sách câu hỏi
+      const findQuestionsArray = (obj: any): any[] | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (Array.isArray(obj.questions) && obj.questions.length > 0) return obj.questions;
+        if (Array.isArray(obj.items) && obj.items.length > 0) return obj.items;
+        if (Array.isArray(obj.data) && obj.data.length > 0) return obj.data;
+
+        for (const key in obj) {
+          if (Array.isArray(obj[key]) && obj[key].length > 0) {
+            // Kiểm tra xem các phần tử trong mảng có giống câu hỏi không
+            const firstItem = obj[key][0];
+            if (firstItem && (firstItem.question || firstItem.content || firstItem.q)) {
+              return obj[key];
+            }
+          } else if (typeof obj[key] === 'object') {
+            const found = findQuestionsArray(obj[key]);
+            if (found) return found;
           }
         }
+        return null;
+      };
+
+      const extractedQuestions = findQuestionsArray(json);
+      if (extractedQuestions) {
+        json.questions = extractedQuestions;
       }
 
       if (json && json.questions && Array.isArray(json.questions)) {
         json.questions = json.questions.map((q: any) => ({
           ...q,
           id: q.id || 'q-' + Math.random().toString(36).substr(2, 9),
-          content: q.content || q.question || 'Nội dung chưa rõ',
-          question: q.question || q.content || 'Nội dung chưa rõ'
+          content: q.content || q.question || q.q || 'Nội dung chưa rõ',
+          question: q.question || q.content || q.q || 'Nội dung chưa rõ'
         }));
       } else {
-        // Trả về một object trống nếu hoàn toàn thất bại để Frontend báo lỗi rõ ràng
+        // Nếu hoàn toàn không tìm thấy mảng câu hỏi
         return { questions: [] };
       }
 
       return json;
     } catch (error: any) {
-      console.error("Lỗi AI:", error);
+      console.error("Lỗi AI bóc tách đề:", error);
+      const errorMsg = error.message || "";
+      if (errorMsg.includes("429") || errorMsg.toLowerCase().includes("quota")) {
+        // Tái ném lỗi để UI bắt được và nhắc nhập Key
+        throw error;
+      }
       try {
         return await this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
       } catch (finalError) {
-        if (fileParts && fileParts.length > 0) throw finalError; // Fallback chưa hỗ trợ file
+        if (fileParts && fileParts.length > 0) throw finalError;
         const text = await this.fallbackToOtherProviders(fullPrompt, true);
         return this.parseJSONSafely(text);
       }
@@ -851,7 +873,7 @@ export class GeminiService {
         return retryFn();
       } else {
         // Nếu đã thử hết danh sách mà vẫn lỗi
-        throw new Error("Không tìm thấy model AI phù hợp hoặc API Key gặp lỗi quyền truy cập. Thầy/Cô hãy kiểm tra lại loại Key (Gemini) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
+        throw new Error("❌ LOI KET NOI (403/404): Không tìm thấy model AI phù hợp hoặc API Key gặp lỗi quyền truy cập. Thầy/Cô hãy kiểm tra lại loại Key (Gemini) hoặc thử đổi sang Key khác trong phần Cài đặt nhé!");
       }
     }
 
@@ -895,7 +917,7 @@ export class GeminiService {
           if (isNetworkIssue) {
             throw new Error("Kết nối mạng tới Google AI đang bị gián đoạn. Thầy/Cô kiểm tra Internet/VPN hoặc thử lại sau nhé.");
           }
-          throw new Error("Tất cả các đường truyền AI (Gemini 1.5, 2.0, 2.5) đều đang bận hoặc hết hạn mức. Hệ thống đang chuyển sang kênh dự phòng OpenAI/Claude...");
+          throw new Error("⚠️ QUOTA EXCEEDED (429): Tất cả các đường truyền AI (Gemini 1.5, 2.0...) đều đang bận hoặc hết hạn mức sử dụng miễn phí.");
         }
 
         this.setStatus(`Chuyển sang đường truyền dự phòng ${MODELS[nextIdx]}...`);
