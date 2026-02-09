@@ -8,13 +8,12 @@ export interface FilePart {
   }
 }
 
-// Sử dụng các model Gemini ổn định nhất và hỗ trợ v1beta/v1
 const MODELS = [
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-exp',
   'gemini-1.5-pro',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-2.0-flash-exp',
   'gemini-1.0-pro'
 ];
 
@@ -424,6 +423,16 @@ export class GeminiService {
       const combinedPrompt = `${fullPrompt}\n\nBỔ XUNG YÊU CẦU CỤ THỂ:\n${prompt}`;
       const parts = [...(fileParts || []), { text: combinedPrompt }];
 
+      // Cấu hình generationConfig linh hoạt theo version
+      const generationConfig: any = {
+        maxOutputTokens: 8192,
+      };
+
+      // Chỉ dùng responseMimeType nếu version là v1beta
+      if (this.currentVersion === 'v1beta') {
+        generationConfig.responseMimeType = "application/json";
+      }
+
       // Sử dụng model tạm thời với cấu hình JSON Mode để đảm bảo dữ liệu trả về luôn chuẩn
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
@@ -433,15 +442,13 @@ export class GeminiService {
           { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
           { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-        }
+        generationConfig
       }, { apiVersion: this.currentVersion });
 
       // Use retry logic for API calls
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
       const text = result.response.text();
+      console.log(`Assistant: Successfully received content from ${this.currentModelName} (${this.currentVersion})`);
       let json = this.parseJSONSafely(text);
 
       // Fallback 1: Nếu AI chỉ trả về mảng (do lỗi format), tự động bọc lại
@@ -533,6 +540,13 @@ export class GeminiService {
     }`;
 
     try {
+      const generationConfig: any = {
+        maxOutputTokens: 8192,
+      };
+      if (this.currentVersion === 'v1beta') {
+        generationConfig.responseMimeType = "application/json";
+      }
+
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
         safetySettings: [
@@ -541,10 +555,7 @@ export class GeminiService {
           { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
           { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-        }
+        generationConfig
       }, { apiVersion: this.currentVersion });
 
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
@@ -588,6 +599,15 @@ export class GeminiService {
     LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
 
     try {
+      const generationConfig: any = {
+        maxOutputTokens: 8192,
+      };
+      // Luôn ưu tiên v1beta nếu model là flash, nếu hien tai la v1 thi khong dung JSON mode
+      const selectedVersion = this.currentVersion;
+      if (selectedVersion === 'v1beta') {
+        generationConfig.responseMimeType = "application/json";
+      }
+
       const jsonModel = this.genAI!.getGenerativeModel({
         model: this.currentModelName,
         safetySettings: [
@@ -596,11 +616,8 @@ export class GeminiService {
           { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
           { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-        }
-      }, { apiVersion: 'v1beta' });
+        generationConfig
+      }, { apiVersion: selectedVersion });
 
       const result = await this.retryWithBackoff(() => jsonModel.generateContent(prompt), 5, 3000);
       const text = result.response.text();
