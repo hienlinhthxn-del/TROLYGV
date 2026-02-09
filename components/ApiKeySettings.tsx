@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { geminiService } from '../services/geminiService';
 
 interface ApiKeySettingsProps {
     isOpen: boolean;
