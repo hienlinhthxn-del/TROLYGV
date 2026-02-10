@@ -72,12 +72,10 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         try {
             // Danh sách model đa dạng để thử, từ mới nhất đến ổn định nhất
             const modelsToTry = [
-                'gemini-2.0-flash-exp',
-                'gemini-1.5-flash-002',
                 'gemini-1.5-flash',
-                'gemini-1.0-pro',
                 'gemini-1.5-flash-8b',
-                'gemini-pro'
+                'gemini-1.5-pro',
+                'gemini-1.0-pro'
             ];
 
             const versionsToTry: ('v1beta' | 'v1')[] = ['v1beta', 'v1'];
