@@ -74,8 +74,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             const modelsToTry = [
                 'gemini-2.5-flash',
                 'gemini-2.0-flash',
-                'gemini-1.5-flash',
-                'gemini-1.5-pro'
+                'gemini-flash-latest'
             ];
 
             const versionsToTry: ('v1beta' | 'v1')[] = ['v1beta', 'v1'];
