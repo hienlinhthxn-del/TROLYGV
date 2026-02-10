@@ -342,6 +342,13 @@ const App: React.FC = () => {
 
   // Logic chạy khi đổi Persona hoặc khi ứng dụng khởi tạo
   useEffect(() => {
+    // Tự động xóa cấu hình model cũ bị lỗi (gemini-2.0-flash-exp) để tránh lỗi 404
+    const savedModel = localStorage.getItem('preferred_gemini_model');
+    if (savedModel === 'gemini-2.0-flash-exp' || savedModel === 'gemini-1.5-flash-002') {
+      localStorage.removeItem('preferred_gemini_model');
+      localStorage.removeItem('preferred_gemini_version');
+    }
+
     geminiService.initChat(currentPersona.instruction);
     setDynamicSuggestions([]);
 

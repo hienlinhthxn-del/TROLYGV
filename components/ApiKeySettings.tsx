@@ -17,6 +17,12 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
 
     useEffect(() => {
         if (isOpen) {
+            // Tự động làm sạch model cũ khi mở cài đặt để đảm bảo nút Kiểm tra hoạt động đúng
+            const savedModel = localStorage.getItem('preferred_gemini_model');
+            if (savedModel === 'gemini-2.0-flash-exp' || savedModel === 'gemini-1.5-flash-002') {
+                localStorage.removeItem('preferred_gemini_model');
+                localStorage.removeItem('preferred_gemini_version');
+            }
             checkCurrentKey();
         }
     }, [isOpen]);
