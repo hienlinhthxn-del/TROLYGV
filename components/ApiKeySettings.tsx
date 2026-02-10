@@ -142,6 +142,12 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
             if (success) {
                 setStatus('valid');
                 setApiKey(cleanKey); // Cập nhật key đã được làm sạch
+
+                // Lưu model và version đã test thành công để GeminiService sử dụng
+                localStorage.setItem('preferred_gemini_model', workingModel);
+                localStorage.setItem('preferred_gemini_version', workingVersion);
+                localStorage.setItem('manually_entered_api_key', cleanKey);
+
                 alert(`✅ API Key Hợp Lệ!\n\nĐã kết nối thành công qua model: ${workingModel} (${workingVersion}).\n\nThầy/Cô hãy bấm 'Lưu API Key' để bắt đầu sử dụng nhé.`);
             } else {
                 setStatus('invalid');

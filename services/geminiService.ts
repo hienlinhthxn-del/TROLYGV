@@ -9,9 +9,9 @@ export interface FilePart {
 }
 
 const MODELS = [
+  'gemini-2.0-flash',
   'gemini-1.5-flash',
   'gemini-1.5-pro',
-  'gemini-2.0-flash',
   'gemini-1.5-flash-8b',
   'gemini-1.0-pro'
 ];
@@ -80,7 +80,18 @@ export class GeminiService {
     this.activeKey = key;
     if (key) {
       this.genAI = new GoogleGenerativeAI(key);
-      this.setupModel(MODELS[0], 'v1beta');
+
+      // Thử dùng model và version đã được test thành công trước đó
+      const preferredModel = localStorage.getItem('preferred_gemini_model');
+      const preferredVersion = localStorage.getItem('preferred_gemini_version') as 'v1' | 'v1beta' | null;
+
+      if (preferredModel) {
+        console.log(`AI Assistant: Using preferred model: ${preferredModel}`);
+        this.setupModel(preferredModel, preferredVersion || 'v1beta');
+      } else {
+        this.setupModel(MODELS[0], 'v1beta');
+      }
+
       console.log(`AI Assistant: API Key detected (${this.getApiKeySource()}) and active.`);
     } else {
       this.genAI = null;
@@ -206,7 +217,7 @@ export class GeminiService {
       }
     }
 
-    throw new Error("⚠️ QUOTA EXCEEDED (429): Thầy/Cô đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\n💡 GIẢI PHÁP:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' (biểu tượng 🔑) để tiếp tục sử dụng KHÔNG GIỚI HẠN.");
+    throw new Error("⚠️ HẾT HẠN MỨC (429): Thầy/Cô đã hết lượt sử dụng miễn phí của Google Gemini và không tìm thấy Key dự phòng (OpenAI/Claude).\n\n💡 GIẢI PHÁP:\n1. Đợi vài phút rồi thử lại (nếu bị giới hạn tạm thời).\n2. Nhập API Key cá nhân trong phần 'Cài đặt' (biểu tượng 🔑) để tiếp tục sử dụng KHÔNG GIỚI HẠN.");
   }
 
   // --- TRÒ CHUYỆN (Chat & Streaming) ---
@@ -1035,7 +1046,7 @@ export class GeminiService {
           if (isNetworkIssue) {
             throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
           }
-          throw new Error("Quota Exceeded: Đã thử tất cả các model AI nhưng đều hết lượt dùng. Thầy/Cô hãy kiểm tra lại Key cá nhân trong Cài đặt nhé!");
+          throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
         }
 
         this.setStatus(`Đường truyền ${this.currentModelName} bận, thử ${MODELS[nextIdx]}...`);
