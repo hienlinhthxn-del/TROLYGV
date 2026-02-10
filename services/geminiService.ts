@@ -1,7 +1,3 @@
-
-
-  }
-
   public async generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise < any > {
   await this.ensureInitialized();
   this.setStatus("Đang soạn câu hỏi Quiz...");
