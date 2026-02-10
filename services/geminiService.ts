@@ -10,7 +10,6 @@ export interface FilePart {
 
 const MODELS = [
   'gemini-1.5-flash',
-  'gemini-1.5-pro',
   'gemini-1.0-pro'
 ];
 
