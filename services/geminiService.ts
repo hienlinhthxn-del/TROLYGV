@@ -340,8 +340,8 @@ export class GeminiService {
           msg.includes('network') ||
           msg.includes('fetch');
 
-        // Nếu là lỗi Quota (429), giảm số lần thử lại nội bộ để chuyển model nhanh hơn
-        if (isQuota && attempt >= 1) {
+        // Nếu là lỗi Quota (429), ném lỗi NGAY LẬP TỨC để handleError xử lý chuyển model (Fail Fast)
+        if (isQuota) {
           throw error;
         }
 
@@ -1025,37 +1025,31 @@ export class GeminiService {
     ) {
       const isNetworkIssue = msg.includes("fetch") || msg.includes("network");
 
-      // Giảm thời gian chờ để không cảm thấy bị treo quá lâu
-      let waitMs = isNetworkIssue ? 800 : (this.retryAttempt === 0 ? 1000 : 2000);
-      const match = msg.match(/retry in (\d+(\.\d+)?)s/);
-      if (match) {
-        waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 500;
-      }
+      // Nếu gặp lỗi Quota (429), chuyển model NGAY LẬP TỨC (Fail-Fast Strategy)
+      // Không cần chờ đợi vì Free Tier của Google thường khóa cả phút.
 
-      // Nếu gặp 429/503 một phát, thử chuyển sang model khác LUÔN cho lẹ (vì thường cả model đó đang bị limit)
-      if (this.retryAttempt >= 1 || isNetworkIssue || waitMs > 8000) {
-        this.retryAttempt = 0;
-        this.versionRetryCount = 0;
-        const currentIdx = MODELS.indexOf(this.currentModelName);
-        const nextIdx = (currentIdx + 1) % MODELS.length;
+      this.retryAttempt = 0;
+      this.versionRetryCount = 0;
+      const currentIdx = MODELS.indexOf(this.currentModelName);
+      const nextIdx = (currentIdx + 1) % MODELS.length;
 
-        this.modelCycleCount++;
-        if (this.modelCycleCount >= MODELS.length) {
-          this.modelCycleCount = 0;
-          if (isNetworkIssue) {
-            throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-          }
-          throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
+      this.modelCycleCount++;
+      if (this.modelCycleCount >= MODELS.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
+        this.modelCycleCount = 0;
+        if (isNetworkIssue) {
+          throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
         }
-
-        this.setStatus(`Đường truyền ${this.currentModelName} bận, thử ${MODELS[nextIdx]}...`);
-        this.setupModel(MODELS[nextIdx], 'v1beta');
-        return retryFn();
+        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
       }
 
-      this.retryAttempt++;
-      this.setStatus(`Đang thử lại sau ${Math.round(waitMs / 1000)}s...`);
-      await new Promise(r => setTimeout(r, waitMs));
+      const nextModel = MODELS[nextIdx];
+      this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
+      console.warn(`[Auto-Switch] ${this.currentModelName} (429) -> ${nextModel}`);
+
+      this.setupModel(nextModel, 'v1beta');
+
+      // Thêm một chút delay nhỏ để tránh spam
+      await new Promise(r => setTimeout(r, 1000));
       return retryFn();
     }
 
