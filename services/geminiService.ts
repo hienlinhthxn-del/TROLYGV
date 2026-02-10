@@ -39,10 +39,14 @@ class GeminiService {
   }
 
   private getApiKey(): string | null {
+    // Guard against non-browser environments where localStorage is not available.
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
     try {
       return localStorage.getItem('google_api_key');
     } catch (e) {
-      console.warn("Could not access localStorage.");
+      console.warn("Could not access localStorage, it might be disabled by browser settings.", e);
       return null;
     }
   }
@@ -53,7 +57,8 @@ class GeminiService {
     if (key) {
       try {
         this.genAI = new GoogleGenerativeAI(key);
-        const preferredModel = localStorage.getItem('preferred_gemini_model');
+        // Make this call server-safe as well
+        const preferredModel = typeof localStorage !== 'undefined' ? localStorage.getItem('preferred_gemini_model') : null;
         const startModel = (preferredModel && GeminiService.MODELS.includes(preferredModel)) ? preferredModel : GeminiService.MODELS[0];
         this.setupModel(startModel, 'v1beta');
         console.log("AI Assistant: API Key detected and active.");
@@ -86,7 +91,10 @@ class GeminiService {
     }, { apiVersion: version });
 
     this.setStatus(`AI Sẵn sàng (${modelName})`);
-    localStorage.setItem('preferred_gemini_model', modelName);
+    // Make this call server-safe
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('preferred_gemini_model', modelName);
+    }
   }
 
   private async ensureInitialized() {
@@ -493,7 +501,9 @@ class GeminiService {
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
 
       // Nếu model hiện tại bị lỗi, xóa khỏi bộ nhớ đệm để lần sau không tự động chọn lại
-      localStorage.removeItem('preferred_gemini_model');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('preferred_gemini_model');
+      }
 
       const isModelNotFound = msg.includes("404") || msg.includes("not found");
 
