@@ -12,9 +12,9 @@ export async function generateLessonPlanFromTemplate(
     templateText: string,
     planText: string
 ): Promise<string> {
-    // Khởi tạo model Gemini (sử dụng gemini-1.5-flash cho tốc độ phản hồi nhanh)
+    // Khởi tạo model Gemini (sử dụng gemini-1.5-flash-002 cho tốc độ phản hồi nhanh và ổn định)
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-002" });
 
     // Xây dựng câu lệnh (Prompt) chi tiết để hướng dẫn AI
     const prompt = `
