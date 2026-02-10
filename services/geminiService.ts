@@ -10,9 +10,8 @@ export interface FilePart {
 
 const MODELS = [
   'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-pro'
+  'gemini-1.5-pro',
+  'gemini-1.0-pro'
 ];
 
 export class GeminiService {
@@ -980,6 +979,9 @@ export class GeminiService {
 
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
+
+      // Nếu model hiện tại bị lỗi, xóa khỏi bộ nhớ đệm để lần sau không tự động chọn lại
+      localStorage.removeItem('preferred_gemini_model');
 
       const isModelNotFound = msg.includes("404") || msg.includes("not found");
 
