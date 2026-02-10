@@ -25,7 +25,11 @@ class GeminiService {
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
 
   constructor() {
-    this.initialize();
+    // Defer initialization to run only on the client-side (in the browser)
+    // to prevent crashes during server-side build processes.
+    if (typeof window !== 'undefined') {
+      this.initialize();
+    }
   }
 
   public setStatusCallback(callback: (status: string) => void) {
@@ -39,10 +43,6 @@ class GeminiService {
   }
 
   private getApiKey(): string | null {
-    // Guard against non-browser environments where localStorage is not available.
-    if (typeof localStorage === 'undefined') {
-      return null;
-    }
     try {
       return localStorage.getItem('google_api_key');
     } catch (e) {
@@ -57,8 +57,7 @@ class GeminiService {
     if (key) {
       try {
         this.genAI = new GoogleGenerativeAI(key);
-        // Make this call server-safe as well
-        const preferredModel = typeof localStorage !== 'undefined' ? localStorage.getItem('preferred_gemini_model') : null;
+        const preferredModel = localStorage.getItem('preferred_gemini_model');
         const startModel = (preferredModel && GeminiService.MODELS.includes(preferredModel)) ? preferredModel : GeminiService.MODELS[0];
         this.setupModel(startModel, 'v1beta');
         console.log("AI Assistant: API Key detected and active.");
@@ -91,10 +90,7 @@ class GeminiService {
     }, { apiVersion: version });
 
     this.setStatus(`AI Sẵn sàng (${modelName})`);
-    // Make this call server-safe
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('preferred_gemini_model', modelName);
-    }
+    localStorage.setItem('preferred_gemini_model', modelName);
   }
 
   private async ensureInitialized() {
@@ -501,9 +497,7 @@ class GeminiService {
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
 
       // Nếu model hiện tại bị lỗi, xóa khỏi bộ nhớ đệm để lần sau không tự động chọn lại
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('preferred_gemini_model');
-      }
+      localStorage.removeItem('preferred_gemini_model');
 
       const isModelNotFound = msg.includes("404") || msg.includes("not found");
 
