@@ -411,18 +411,18 @@ throw new Error("Không thể tạo video sau nhiều lần thử. Dịch vụ c
 
   // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo.
   this.versionRetryCount = 0;
-  const currentIdx = MODELS.indexOf(this.currentModelName);
-  const nextIdx = (currentIdx + 1) % MODELS.length;
+  const currentIdx = GeminiService.MODELS.indexOf(this.currentModelName);
+  const nextIdx = (currentIdx + 1) % GeminiService.MODELS.length;
 
   this.modelCycleCount++;
-  if (this.modelCycleCount >= MODELS.length) {
+  if (this.modelCycleCount >= GeminiService.MODELS.length) {
     this.modelCycleCount = 0;
     throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
   }
 
-  this.setStatus(`Thử đường truyền ${MODELS[nextIdx]}...`);
-  console.log(`Model switch: ${this.currentModelName} -> ${MODELS[nextIdx]}`);
-  this.setupModel(MODELS[nextIdx], 'v1beta');
+  this.setStatus(`Thử đường truyền ${GeminiService.MODELS[nextIdx]}...`);
+  console.log(`Model switch: ${this.currentModelName} -> ${GeminiService.MODELS[nextIdx]}`);
+  this.setupModel(GeminiService.MODELS[nextIdx], 'v1beta');
   this.retryAttempt = 0;
   return retryFn();
 }
@@ -446,11 +446,11 @@ if (
 
   this.retryAttempt = 0;
   this.versionRetryCount = 0;
-  const currentIdx = MODELS.indexOf(this.currentModelName);
-  const nextIdx = (currentIdx + 1) % MODELS.length;
+  const currentIdx = GeminiService.MODELS.indexOf(this.currentModelName);
+  const nextIdx = (currentIdx + 1) % GeminiService.MODELS.length;
 
   this.modelCycleCount++;
-  if (this.modelCycleCount >= MODELS.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
+  if (this.modelCycleCount >= GeminiService.MODELS.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
     this.modelCycleCount = 0;
     if (isNetworkIssue) {
       throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
@@ -458,7 +458,7 @@ if (
     throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
   }
 
-  const nextModel = MODELS[nextIdx];
+  const nextModel = GeminiService.MODELS[nextIdx];
   this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
   console.warn(`[Auto-Switch] ${this.currentModelName} (429) -> ${nextModel}`);
 
