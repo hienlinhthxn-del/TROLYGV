@@ -215,6 +215,7 @@ class GeminiService {
 
   public async generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
     await this.ensureInitialized();
+    this.totalRetryCount = 0; // Reset counter cho mỗi request mới
     const parts: any[] = [{ text: prompt }];
     if (fileParts && fileParts.length > 0) {
       fileParts.forEach(p => parts.push(p));
