@@ -344,7 +344,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // Tự động xóa cấu hình model cũ bị lỗi (gemini-2.0-flash-exp) để tránh lỗi 404
     const savedModel = localStorage.getItem('preferred_gemini_model');
-    if (savedModel === 'gemini-2.0-flash-exp' || savedModel === 'gemini-1.5-flash-002') {
+    if (savedModel && ['gemini-2.0-flash-exp', 'gemini-1.5-flash-002', 'gemini-1.0-pro'].includes(savedModel)) {
       localStorage.removeItem('preferred_gemini_model');
       localStorage.removeItem('preferred_gemini_version');
     }

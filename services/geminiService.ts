@@ -15,12 +15,16 @@ class GeminiService {
   private currentModelName: string = '';
   private onStatusChange: ((status: string) => void) | null = null;
 
-  // Using static readonly as corrected in the previous step
-  private static readonly MODELS = [
+  // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found"
+  private static readonly MODEL_CANDIDATES = [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
-    // 'gemini-2.5-flash', // Experimental
-    // 'gemini-2.0-flash',   // Experimental
+    'gemini-1.5-pro',
+    'gemini-pro',
   ];
+
+  private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
 
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
 
@@ -61,8 +65,9 @@ class GeminiService {
     if (key) {
       try {
         this.genAI = new GoogleGenerativeAI(key);
+        this.refreshAvailableModels().catch(e => console.warn('Could not refresh model list, using defaults.', e));
         const preferredModel = localStorage.getItem('preferred_gemini_model');
-        const startModel = (preferredModel && GeminiService.MODELS.includes(preferredModel)) ? preferredModel : GeminiService.MODELS[0];
+        const startModel = (preferredModel && this.availableModels.includes(preferredModel)) ? preferredModel : this.availableModels[0];
         this.setupModel(startModel, 'v1beta');
         console.log("AI Assistant: API Key detected and active.");
       } catch (e: any) {
@@ -73,6 +78,32 @@ class GeminiService {
     } else {
       this.setStatus("LỖI: Chưa cấu hình API Key");
       console.warn("AI Assistant: No valid API Key found.");
+    }
+  }
+
+  private async refreshAvailableModels(): Promise<void> {
+    const key = this.getApiKey();
+    if (!key) return;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const listedModels = (data.models || [])
+        .filter((m: any) => m?.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: any) => (m?.name || '').replace('models/', ''))
+        .filter((name: string) => Boolean(name));
+
+      if (!listedModels.length) return;
+
+      const prioritized = GeminiService.MODEL_CANDIDATES.filter(m => listedModels.includes(m));
+      const others = listedModels.filter((m: string) => !prioritized.includes(m));
+      this.availableModels = [...prioritized, ...others];
+      console.log('AI available models:', this.availableModels);
+    } catch (e) {
+      // Không chặn luồng chính nếu API list model lỗi
+      console.warn('Model discovery failed:', e);
     }
   }
 
@@ -627,18 +658,19 @@ class GeminiService {
 
       // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo.
       this.versionRetryCount = 0;
-      const currentIdx = GeminiService.MODELS.indexOf(this.currentModelName);
-      const nextIdx = (currentIdx + 1) % GeminiService.MODELS.length;
+      const currentIdx = this.availableModels.indexOf(this.currentModelName);
+      const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+      const nextIdx = (safeCurrentIdx + 1) % this.availableModels.length;
 
       this.modelCycleCount++;
-      if (this.modelCycleCount >= GeminiService.MODELS.length) {
+      if (this.modelCycleCount >= this.availableModels.length) {
         this.modelCycleCount = 0;
         throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
       }
 
-      this.setStatus(`Thử đường truyền ${GeminiService.MODELS[nextIdx]}...`);
-      console.log(`Model switch: ${this.currentModelName} -> ${GeminiService.MODELS[nextIdx]}`);
-      this.setupModel(GeminiService.MODELS[nextIdx], 'v1beta');
+      this.setStatus(`Thử đường truyền ${this.availableModels[nextIdx]}...`);
+      console.log(`Model switch: ${this.currentModelName} -> ${this.availableModels[nextIdx]}`);
+      this.setupModel(this.availableModels[nextIdx], 'v1beta');
       this.retryAttempt = 0;
       return retryFn();
     }
@@ -662,11 +694,12 @@ class GeminiService {
 
       this.retryAttempt = 0;
       this.versionRetryCount = 0;
-      const currentIdx = GeminiService.MODELS.indexOf(this.currentModelName);
-      const nextIdx = (currentIdx + 1) % GeminiService.MODELS.length;
+      const currentIdx = this.availableModels.indexOf(this.currentModelName);
+      const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+      const nextIdx = (safeCurrentIdx + 1) % this.availableModels.length;
 
       this.modelCycleCount++;
-      if (this.modelCycleCount >= GeminiService.MODELS.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
+      if (this.modelCycleCount >= this.availableModels.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
         this.modelCycleCount = 0;
         if (isNetworkIssue) {
           throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
@@ -674,7 +707,7 @@ class GeminiService {
         throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
       }
 
-      const nextModel = GeminiService.MODELS[nextIdx];
+      const nextModel = this.availableModels[nextIdx];
       this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
       console.warn(`[Auto-Switch] ${this.currentModelName} (429) -> ${nextModel}`);
 
