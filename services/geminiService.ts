@@ -228,31 +228,28 @@ class GeminiService {
   }
 
   public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts: FilePart[] = []): Promise<any> {
-    const prompt = `Bạn là trợ lý giáo dục chuyên nghiệp.
-    Nhiệm vụ: Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1, chủ đề "${topic}".
-    Cấu hình câu hỏi: ${JSON.stringify(config)}.
-    
-    YÊU CẦU QUAN TRỌNG:
-    1. Trả về DUY NHẤT một JSON hợp lệ.
-    2. Không thêm markdown (\`\`\`json).
-    3. Nội dung phù hợp lứa tuổi lớp 1 (ngắn gọn, dễ hiểu, vui tươi).
-    4. "imagePrompt": Mô tả ngắn gọn để AI vẽ hình minh họa (nếu cần).
-    
-    CẤU TRÚC JSON TRẢ VỀ (Bắt buộc):
+    const prompt = `Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1, chủ đề "${topic}".
+Cấu hình: ${JSON.stringify(config)}.
+
+QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG thêm markdown hay giải thích.
+
+Cấu trúc JSON:
+{
+  "title": "Tên phiếu bài tập",
+  "subject": "${subject}",
+  "questions": [
     {
-      "title": "Tên phiếu bài tập (ngắn gọn, hấp dẫn)",
-      "subject": "${subject}",
-      "questions": [
-        {
-          "id": "1",
-          "type": "mcq | tf | fill | match | essay | arrange",
-          "question": "Nội dung câu hỏi...",
-          "imagePrompt": "Tranh vẽ con mèo đang cười...",
-          "options": ["Đáp án A", "Đáp án B", "Đáp án C"] (nếu có),
-          "answer": "Đáp án đúng"
-        }
-      ]
-    }`;
+      "id": "1",
+      "type": "mcq",
+      "question": "Nội dung câu hỏi",
+      "imagePrompt": "Mô tả hình minh họa",
+      "options": ["A", "B", "C", "D"],
+      "answer": "A"
+    }
+  ]
+}
+
+Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyết), match (nối), essay (tự luận), arrange (sắp xếp).`;
     return this.generateExamQuestionsStructured(prompt, fileParts);
   }
 
