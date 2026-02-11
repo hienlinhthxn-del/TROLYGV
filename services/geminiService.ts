@@ -44,6 +44,10 @@ class GeminiService {
 
   private getApiKey(): string | null {
     try {
+      // Ưu tiên key nhập thủ công từ Cài đặt
+      const manualKey = localStorage.getItem('manually_entered_api_key');
+      if (manualKey) return manualKey;
+
       return localStorage.getItem('google_api_key');
     } catch (e) {
       console.warn("Could not access localStorage, it might be disabled by browser settings.", e);
@@ -100,6 +104,13 @@ class GeminiService {
         throw new Error("Chưa cấu hình API Key. Vui lòng vào Cài đặt (🔑) để nhập API Key của bạn.");
       }
     }
+  }
+
+  public getApiKeySource(): string {
+    if (typeof window === 'undefined') return 'Server';
+    if (localStorage.getItem('manually_entered_api_key')) return 'Manual';
+    if (localStorage.getItem('google_api_key')) return 'Legacy';
+    return 'Env/Default';
   }
 
   // Giả định rằng các phương thức khác như generateText, generateExamQuestionsStructured, retryWithBackoff... tồn tại ở đây
