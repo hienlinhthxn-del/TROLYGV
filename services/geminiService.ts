@@ -113,7 +113,110 @@ class GeminiService {
     return 'Env/Default';
   }
 
-  // Giả định rằng các phương thức khác như generateText, generateExamQuestionsStructured, retryWithBackoff... tồn tại ở đây
+  public async generateText(prompt: string): Promise<string> {
+    await this.ensureInitialized();
+    try {
+      const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 3, 1000);
+      return result.response.text();
+    } catch (error: any) {
+      return this.handleError(error, () => this.generateText(prompt));
+    }
+  }
+
+  public initChat(instruction: string) {
+    if (!this.genAI) this.initialize();
+    if (!this.model) return;
+
+    this.chat = this.model.startChat({
+      history: [
+        { role: "user", parts: [{ text: instruction }] },
+        { role: "model", parts: [{ text: "Xin chào! Tôi là trợ lý AI giáo dục. Tôi có thể giúp gì cho Thầy/Cô?" }] }
+      ]
+    });
+  }
+
+  public async *sendMessageStream(message: string, fileParts: FilePart[] = [], signal?: AbortSignal): AsyncGenerator<{ text: string }> {
+    await this.ensureInitialized();
+    if (!this.chat) this.initChat("Bạn là trợ lý giáo viên.");
+
+    const parts: any[] = [];
+    if (message) parts.push({ text: message });
+    if (fileParts && fileParts.length > 0) {
+      fileParts.forEach(p => parts.push(p));
+    }
+
+    if (parts.length === 0) return;
+
+    try {
+      const result = await this.chat!.sendMessageStream(parts);
+      for await (const chunk of result.stream) {
+        if (signal?.aborted) break;
+        yield { text: chunk.text() };
+      }
+    } catch (error: any) {
+      console.error("Stream error:", error);
+      throw error;
+    }
+  }
+
+  public async generateCrossword(topic: string): Promise<any> {
+    await this.ensureInitialized();
+    const prompt = `Tạo một trò chơi ô chữ (Crossword) về chủ đề: "${topic}".
+    Yêu cầu:
+    - Khoảng 8-12 từ vựng liên quan.
+    - Có gợi ý (clue) rõ ràng bằng tiếng Việt.
+    - Trả về JSON hợp lệ để render lên lưới.
+    
+    JSON Format:
+    {
+      "size": 15,
+      "words": [
+        { "word": "GIAOVIEN", "clue": "Người dạy học", "row": 5, "col": 2, "direction": "across" },
+        { "word": "HOCSINH", "clue": "Người đi học", "row": 2, "col": 5, "direction": "down" }
+      ]
+    }
+    RETURN JSON ONLY.`;
+
+    const text = await this.generateText(prompt);
+    return this.parseJSONSafely(text);
+  }
+
+  public async generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
+    await this.ensureInitialized();
+    const parts: any[] = [{ text: prompt }];
+    if (fileParts && fileParts.length > 0) {
+      fileParts.forEach(p => parts.push(p));
+    }
+
+    try {
+      const result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
+      return this.parseJSONSafely(result.response.text());
+    } catch (error: any) {
+      return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
+    }
+  }
+
+  public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts: FilePart[] = []): Promise<any> {
+    const prompt = `Soạn phiếu bài tập chi tiết môn ${subject}, chủ đề "${topic}".
+    Cấu hình: ${JSON.stringify(config)}.
+    Trả về JSON cấu trúc: { "title": "", "sections": [ { "title": "", "content": "" } ] }`;
+    return this.generateExamQuestionsStructured(prompt, fileParts);
+  }
+
+  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number, delay: number): Promise<T> {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (retries <= 0) throw error;
+      if (error.message?.includes("429")) delay *= 2;
+      await new Promise(r => setTimeout(r, delay));
+      return this.retryWithBackoff(fn, retries - 1, delay);
+    }
+  }
+
+  private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
+    throw new Error("AI Service unavailable.");
+  }
 
   public async generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise<any> {
     await this.ensureInitialized();
