@@ -308,6 +308,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       } else if (msg.includes("API key") || msg.includes("400")) {
         alert(`⚠️ Lỗi API Key: ${msg}\n\nVui lòng kiểm tra lại Key trong Cài đặt.`);
         try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+      } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
+        localStorage.removeItem('preferred_gemini_model');
+        localStorage.removeItem('preferred_gemini_version');
       } else {
         alert(`Lỗi khi AI đang soạn đề: ${msg}. Thầy/Cô vui lòng thử lại nhé!`);
       }

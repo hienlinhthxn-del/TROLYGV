@@ -713,6 +713,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       } else {
         console.error("Lesson Plan Error:", error);
         alert(`Lỗi khi soạn giáo án: ${error.message || "Không thể kết nối"}`);
+        if (error.message?.includes('404') || error.message?.includes('not found')) {
+             localStorage.removeItem('preferred_gemini_model');
+             localStorage.removeItem('preferred_gemini_version');
+        }
       }
     } finally {
       setIsProcessing(false);
@@ -1249,6 +1253,10 @@ Chi tiết: ${errorMessage}
         } else if (errorMessage.includes("API key not valid") || errorMessage.includes("key invalid") || errorMessage.includes("400")) {
           alert(`⚠️ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\nVui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc nhập Key mới.`);
           try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+        } else if (errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found')) {
+           alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
+           localStorage.removeItem('preferred_gemini_model');
+           localStorage.removeItem('preferred_gemini_version');
         } else {
           alert(`Lỗi bóc tách đề: ${errorMessage} `);
         }

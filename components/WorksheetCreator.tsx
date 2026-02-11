@@ -128,6 +128,10 @@ const WorksheetCreator: React.FC = () => {
             if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.includes("resource_exhausted")) {
                 alert("⚠️ Hết lượt sử dụng miễn phí (Quota Exceeded).\n\nVui lòng vào Cài đặt (🔑) để nhập API Key mới.");
                 try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+            } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+                alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
+                localStorage.removeItem('preferred_gemini_model');
+                localStorage.removeItem('preferred_gemini_version');
             } else {
                 alert(`Có lỗi xảy ra: ${msg || 'Lỗi không xác định'}. Thầy Cô vui lòng thử lại nhé!`);
             }

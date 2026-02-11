@@ -344,7 +344,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // Tự động xóa cấu hình model cũ bị lỗi (gemini-2.0-flash-exp) để tránh lỗi 404
     const savedModel = localStorage.getItem('preferred_gemini_model');
-    if (savedModel === 'gemini-2.0-flash-exp' || savedModel === 'gemini-1.5-flash-002') {
+    if (savedModel && (savedModel.includes('exp') || savedModel.includes('001') || savedModel.includes('002'))) {
       localStorage.removeItem('preferred_gemini_model');
       localStorage.removeItem('preferred_gemini_version');
     }
@@ -587,6 +587,10 @@ const App: React.FC = () => {
       if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota') || errorMessage.includes('resource_exhausted')) {
         errorMessage = "Hết lượt sử dụng miễn phí (Quota Exceeded). Vui lòng vào Cài đặt (🔑) để nhập API Key mới.";
         setShowApiKeySettings(true);
+      } else if (errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found')) {
+        errorMessage = "Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.";
+        localStorage.removeItem('preferred_gemini_model');
+        localStorage.removeItem('preferred_gemini_version');
       }
 
       setMessages(prev => prev.map(msg => msg.id === assistantId ? {
