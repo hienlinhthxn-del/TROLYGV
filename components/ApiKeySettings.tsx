@@ -82,7 +82,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
                 'gemini-2.0-flash-lite',
                 'gemini-1.5-flash',
                 'gemini-1.5-pro',
-                'gemini-pro'
+                'gemini-1.5-flash-8b'
             ];
 
             const versionsToTry: ('v1beta' | 'v1')[] = ['v1', 'v1beta'];
