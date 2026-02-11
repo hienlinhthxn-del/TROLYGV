@@ -19,7 +19,7 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         if (isOpen) {
             // Tự động làm sạch model cũ khi mở cài đặt để đảm bảo nút Kiểm tra hoạt động đúng
             const savedModel = localStorage.getItem('preferred_gemini_model');
-            if (savedModel && (savedModel.includes('exp') || savedModel.includes('001') || savedModel.includes('002'))) {
+            if (savedModel && (savedModel.includes('exp') || savedModel.includes('001') || savedModel.includes('002') || savedModel === 'gemini-1.0-pro')) {
                 localStorage.removeItem('preferred_gemini_model');
                 localStorage.removeItem('preferred_gemini_version');
             }
@@ -78,14 +78,15 @@ const ApiKeySettings: React.FC<ApiKeySettingsProps> = ({ isOpen, onClose }) => {
         try {
             // Danh sách model đa dạng để thử, từ mới nhất đến ổn định nhất
             const modelsToTry = [
-                'gemini-1.5-flash',
                 'gemini-2.0-flash',
+                'gemini-2.0-flash-lite',
+                'gemini-1.5-flash',
                 'gemini-1.5-flash-8b',
                 'gemini-1.5-pro',
-                'gemini-1.0-pro'
+                'gemini-pro'
             ];
 
-            const versionsToTry: ('v1beta' | 'v1')[] = ['v1beta', 'v1'];
+            const versionsToTry: ('v1beta' | 'v1')[] = ['v1', 'v1beta'];
             let success = false;
             let lastError = '';
             let workingModel = '';
