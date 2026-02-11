@@ -220,16 +220,7 @@ class GeminiService {
     }
 
     try {
-      // Revert to standard generation to avoid hangs with strict JSON mode
-      // Simplify logic to rely on robust parsing instead of API enforcement
-      const finalPrompt = prompt + "\n\nRETURN VALID JSON ONLY. NO MARKDOWN.";
-
-      const requestParts: any[] = [{ text: finalPrompt }];
-      if (fileParts && fileParts.length > 0) {
-        fileParts.forEach(p => requestParts.push(p));
-      }
-
-      const result = await this.retryWithBackoff(() => this.model!.generateContent(requestParts), 3, 2000);
+      const result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
       return this.parseJSONSafely(result.response.text());
     } catch (error: any) {
       return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
@@ -369,8 +360,6 @@ class GeminiService {
 
         if (response.ok) {
           const blob = await response.blob();
-          // Pollinations có thể trả về video/mp4 hoặc image/jpeg (cho gif)
-          if (blob.size < 1000) throw new Error("Image too small/invalid"); // Skip tiny invalid images
           if (blob.type.startsWith('image/')) {
             return new Promise((resolve, reject) => {
               const reader = new FileReader();
