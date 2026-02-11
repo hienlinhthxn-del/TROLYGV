@@ -220,7 +220,38 @@ class GeminiService {
     }
 
     try {
-      const result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
+      const generationConfig: any = {
+        maxOutputTokens: 8192,
+      };
+
+      let finalPrompt = prompt;
+      const selectedVersion = this.currentVersion;
+      if (selectedVersion === 'v1beta') {
+        generationConfig.responseMimeType = "application/json";
+      } else {
+        finalPrompt += "\n\nRETURN ONLY VALID JSON. NO MARKDOWN. NO COMMENTS.";
+      }
+
+      // Create a specific model instance for this request to apply generationConfig
+      const jsonModel = this.genAI!.getGenerativeModel({
+        model: this.currentModelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+        generationConfig
+      }, { apiVersion: selectedVersion });
+
+      // Use the jsonModel instead of this.model
+      // Re-construct parts with modified prompt if needed
+      const requestParts: any[] = [{ text: finalPrompt }];
+      if (fileParts && fileParts.length > 0) {
+        fileParts.forEach(p => requestParts.push(p));
+      }
+
+      const result = await this.retryWithBackoff(() => jsonModel.generateContent(requestParts), 3, 3000);
       return this.parseJSONSafely(result.response.text());
     } catch (error: any) {
       return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
@@ -228,9 +259,31 @@ class GeminiService {
   }
 
   public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts: FilePart[] = []): Promise<any> {
-    const prompt = `Soạn phiếu bài tập chi tiết môn ${subject}, chủ đề "${topic}".
-    Cấu hình: ${JSON.stringify(config)}.
-    Trả về JSON cấu trúc: { "title": "", "sections": [ { "title": "", "content": "" } ] }`;
+    const prompt = `Bạn là trợ lý giáo dục chuyên nghiệp.
+    Nhiệm vụ: Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1, chủ đề "${topic}".
+    Cấu hình câu hỏi: ${JSON.stringify(config)}.
+    
+    YÊU CẦU QUAN TRỌNG:
+    1. Trả về DUY NHẤT một JSON hợp lệ.
+    2. Không thêm markdown (\`\`\`json).
+    3. Nội dung phù hợp lứa tuổi lớp 1 (ngắn gọn, dễ hiểu, vui tươi).
+    4. "imagePrompt": Mô tả ngắn gọn để AI vẽ hình minh họa (nếu cần).
+    
+    CẤU TRÚC JSON TRẢ VỀ (Bắt buộc):
+    {
+      "title": "Tên phiếu bài tập (ngắn gọn, hấp dẫn)",
+      "subject": "${subject}",
+      "questions": [
+        {
+          "id": "1",
+          "type": "mcq | tf | fill | match | essay | arrange",
+          "question": "Nội dung câu hỏi...",
+          "imagePrompt": "Tranh vẽ con mèo đang cười...",
+          "options": ["Đáp án A", "Đáp án B", "Đáp án C"] (nếu có),
+          "answer": "Đáp án đúng"
+        }
+      ]
+    }`;
     return this.generateExamQuestionsStructured(prompt, fileParts);
   }
 
