@@ -27,6 +27,7 @@ class GeminiService {
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
 
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
+  private totalRetryCount: number = 0; // Bộ đếm retry toàn cục để ngăn vòng lặp vô hạn
 
   constructor() {
     // Defer initialization to run only on the client-side (in the browser)
@@ -657,6 +658,13 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     const status = error.status || 0;
     console.warn("AI Encountered Error:", msg, "Status:", status);
 
+    // NGĂN VÒNG LẶP VÔ HẠN: Kiểm tra tổng số lần retry
+    this.totalRetryCount++;
+    if (this.totalRetryCount > 10) {
+      this.totalRetryCount = 0;
+      throw new Error("AI trả về định dạng không chuẩn sau nhiều lần thử. Thầy/Cô vui lòng thử lại sau nhé!");
+    }
+
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
 
@@ -684,6 +692,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length) {
         this.modelCycleCount = 0;
+        this.totalRetryCount = 0;
         throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
       }
 
@@ -720,6 +729,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
         this.modelCycleCount = 0;
+        this.totalRetryCount = 0;
         if (isNetworkIssue) {
           throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
         }
@@ -737,8 +747,10 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       return retryFn();
     }
 
+    // Reset counters và throw error cho các lỗi khác
     this.retryAttempt = 0;
     this.versionRetryCount = 0;
+    this.totalRetryCount = 0;
     throw error;
   }
 }
