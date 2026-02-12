@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerativeModel, ChatSession } from "@google/generative-ai";
+import { generateWithAI } from '../aiClient';
 
 // This type is used by other components like ExamCreator
 export interface FilePart {
@@ -146,9 +147,7 @@ class GeminiService {
   private async ensureInitialized() {
     if (!this.genAI || !this.model) {
       this.initialize();
-      if (!this.genAI || !this.model) {
-        throw new Error("Chưa cấu hình API Key. Vui lòng vào Cài đặt (🔑) để nhập API Key của bạn.");
-      }
+      // Không throw lỗi ở đây nữa để cho phép fallback sang Server API
     }
   }
 
@@ -161,6 +160,11 @@ class GeminiService {
 
   public async generateText(prompt: string): Promise<string> {
     await this.ensureInitialized();
+
+    if (!this.model) {
+      return this.fallbackToOtherProviders(prompt, false);
+    }
+
     try {
       const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 3, 1000);
       return result.response.text();
@@ -229,6 +233,12 @@ class GeminiService {
 
   public async generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
     await this.ensureInitialized();
+
+    if (!this.model) {
+      const text = await this.fallbackToOtherProviders(prompt, true);
+      return this.parseJSONSafely(text);
+    }
+
     this.totalRetryCount = 0; // Reset counter cho mỗi request mới
 
     // Thêm hướng dẫn JSON rõ ràng vào prompt
@@ -332,7 +342,12 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
-    throw new Error("AI Service unavailable.");
+    try {
+      const result = await generateWithAI({ prompt, provider: 'gemini', model: this.currentModelName });
+      return result.text;
+    } catch (error: any) {
+      throw new Error(`Lỗi kết nối AI Server: ${error.message}. Vui lòng kiểm tra API Key trong Cài đặt.`);
+    }
   }
 
   public async generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise<any> {
@@ -360,6 +375,11 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       }
     ]
     LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
+
+    if (!this.model) {
+      const text = await this.fallbackToOtherProviders(prompt, true);
+      return this.parseJSONSafely(text);
+    }
 
     try {
       const generationConfig: any = {
