@@ -26,6 +26,14 @@ class GeminiService {
 
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
 
+  private static isPreferredModelFamily(modelName: string): boolean {
+    return modelName.startsWith('gemini-');
+  }
+
+  private static supportsJsonResponseMimeType(modelName: string): boolean {
+    return /^(gemini-(2\.0-(flash|flash-lite)|1\.5-(flash|pro)))$/.test(modelName);
+  }
+
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
   private totalRetryCount: number = 0; // Bộ đếm retry toàn cục để ngăn vòng lặp vô hạn
 
@@ -94,7 +102,8 @@ class GeminiService {
       const listedModels = (data.models || [])
         .filter((m: any) => m?.supportedGenerationMethods?.includes('generateContent'))
         .map((m: any) => (m?.name || '').replace('models/', ''))
-        .filter((name: string) => Boolean(name));
+        .filter((name: string) => Boolean(name))
+        .filter((name: string) => GeminiService.isPreferredModelFamily(name));
 
       if (!listedModels.length) return;
 
@@ -102,6 +111,11 @@ class GeminiService {
       const others = listedModels.filter((m: string) => !prioritized.includes(m));
       this.availableModels = [...prioritized, ...others];
       console.log('AI available models:', this.availableModels);
+
+      const preferredModel = localStorage.getItem('preferred_gemini_model');
+      if (preferredModel && !this.availableModels.includes(preferredModel)) {
+        localStorage.removeItem('preferred_gemini_model');
+      }
     } catch (e) {
       // Không chặn luồng chính nếu API list model lỗi
       console.warn('Model discovery failed:', e);
@@ -354,7 +368,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       // Luôn ưu tiên v1beta nếu model là flash, nếu hien tai la v1 thi khong dung JSON mode
       let finalPrompt = prompt;
       const selectedVersion = this.currentVersion;
-      if (selectedVersion === 'v1beta') {
+      if (selectedVersion === 'v1beta' && GeminiService.supportsJsonResponseMimeType(this.currentModelName)) {
         generationConfig.responseMimeType = "application/json";
       } else {
         finalPrompt += "\n\nRETURN ONLY VALID JSON ARRAY. NO MARKDOWN.";
