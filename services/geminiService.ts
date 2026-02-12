@@ -442,7 +442,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
   public parseJSONSafely(text: string): any {
     // 1. Dọn dẹp sơ bộ: xóa markdown blocks
-    let cleaned = text.trim();
+    let cleaned = text.replace(/^\uFEFF/, '').trim();
 
     // Xử lý Smart Quotes (dấu ngoặc kép cong do lỗi font/bộ gõ)
     cleaned = cleaned.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
@@ -581,6 +581,23 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       return s;
     };
 
+    // 5.1. Sửa key không có ngoặc kép: {questions:[...]} => {"questions":[...]}
+    const fixUnquotedKeys = (str: string): string => {
+      return str.replace(/([\{,]\s*)([A-Za-z_$][\w$\- ]*)(\s*:)/g, (_, prefix, key, suffix) => {
+        const normalizedKey = String(key).trim().replace(/\s+/g, ' ');
+        if (/^(true|false|null)$/i.test(normalizedKey)) return `${prefix}${normalizedKey}${suffix}`;
+        return `${prefix}"${normalizedKey}"${suffix}`;
+      });
+    };
+
+    // 5.2. Chuẩn hóa literal kiểu Python thường bị AI trả về: True/False/None
+    const fixNonJsonLiterals = (str: string): string => {
+      return str
+        .replace(/\bNone\b/g, 'null')
+        .replace(/\bTrue\b/g, 'true')
+        .replace(/\bFalse\b/g, 'false');
+    };
+
     // 6. Hàm sửa lỗi thiếu dấu phẩy (Missing Commas) - Thường gặp khi list quá dài
     const fixMissingCommas = (str: string): string => {
       let s = str.replace(/}\s*[\r\n]+\s*{/g, '},{'); // Giữa các object
@@ -616,28 +633,34 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
                 const commaFix = fixMissingCommas(rescued);
                 return JSON.parse(fixCommonErrors(commaFix));
               } catch (e5) {
-                // Cấp cứu 6: Nếu object ngoài cùng lỗi, thử tìm mảng bên trong (thường là questions)
-                const arrayMatch = rescued.match(/\[\s*\{[\s\S]*\}\s*\]/);
-                if (arrayMatch) {
-                  try {
-                    return JSON.parse(fixCommonErrors(arrayMatch[0]));
-                  } catch (e6) { }
-                }
+                try {
+                  // Cấp cứu 6: Sửa object literal gần giống JS/Python
+                  const literalFix = fixNonJsonLiterals(fixUnquotedKeys(fixSingleQuotes(rescued)));
+                  return JSON.parse(fixCommonErrors(literalFix));
+                } catch (e6) {
+                  // Cấp cứu 7: Nếu object ngoài cùng lỗi, thử tìm mảng bên trong (thường là questions)
+                  const arrayMatch = rescued.match(/\[\s*\{[\s\S]*\}\s*\]/);
+                  if (arrayMatch) {
+                    try {
+                      return JSON.parse(fixCommonErrors(arrayMatch[0]));
+                    } catch (e7) { }
+                  }
 
-                // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
-                const startBrace = currentText.indexOf('{');
-                const startBracket = currentText.indexOf('[');
-                let startIdx = -1;
-                if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
-                else if (startBrace !== -1) startIdx = startBrace;
-                else if (startBracket !== -1) startIdx = startBracket;
+                  // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
+                  const startBrace = currentText.indexOf('{');
+                  const startBracket = currentText.indexOf('[');
+                  let startIdx = -1;
+                  if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
+                  else if (startBrace !== -1) startIdx = startBrace;
+                  else if (startBracket !== -1) startIdx = startBracket;
 
-                if (startIdx !== -1) {
-                  // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
-                  currentText = currentText.substring(startIdx + 1);
-                  continue;
-                } else {
-                  break;
+                  if (startIdx !== -1) {
+                    // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
+                    currentText = currentText.substring(startIdx + 1);
+                    continue;
+                  } else {
+                    break;
+                  }
                 }
               }
             }
