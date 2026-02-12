@@ -216,13 +216,64 @@ class GeminiService {
   public async generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
     await this.ensureInitialized();
     this.totalRetryCount = 0; // Reset counter cho mỗi request mới
-    const parts: any[] = [{ text: prompt }];
+
+    // Thêm hướng dẫn JSON rõ ràng vào prompt
+    const enhancedPrompt = `${prompt}
+
+QUAN TRỌNG - YÊU CẦU ĐỊNH DẠNG:
+- Trả về DUY NHẤT một JSON object hợp lệ
+- KHÔNG thêm markdown, code blocks, hay giải thích
+- KHÔNG thêm text nào ngoài JSON
+- Đảm bảo tất cả dấu ngoặc kép được đóng đúng
+- Đảm bảo tất cả dấu ngoặc {} và [] được đóng đúng
+
+CẤU TRÚC JSON BẮT BUỘC:
+{
+  "questions": [
+    {
+      "type": "Trắc nghiệm" hoặc "Tự luận",
+      "level": "Nhận biết" hoặc "Thông hiểu" hoặc "Vận dụng" hoặc "Vận dụng cao",
+      "content": "Nội dung câu hỏi",
+      "image": "",
+      "options": [
+        {"text": "Đáp án A", "image": ""},
+        {"text": "Đáp án B", "image": ""}
+      ],
+      "answer": "Đáp án đúng",
+      "explanation": "Giải thích"
+    }
+  ],
+  "readingPassage": "Văn bản đọc hiểu (nếu có)"
+}`;
+
+    const parts: any[] = [{ text: enhancedPrompt }];
     if (fileParts && fileParts.length > 0) {
       fileParts.forEach(p => parts.push(p));
     }
 
     try {
-      const result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
+      // Sử dụng JSON mode nếu đang dùng v1beta
+      let result;
+      if (this.currentVersion === 'v1beta') {
+        const jsonModel = this.genAI!.getGenerativeModel({
+          model: this.currentModelName,
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: 8192,
+          }
+        }, { apiVersion: 'v1beta' });
+
+        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 3, 2000);
+      } else {
+        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
+      }
+
       return this.parseJSONSafely(result.response.text());
     } catch (error: any) {
       return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
@@ -670,7 +721,25 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     }
 
     console.error("JSON Rescue Failed Final.", { original: text });
-    throw new Error(`AI trả về định dạng không chuẩn. Thầy/Cô vui lòng bấm 'Tạo lại' nhé.`);
+
+    // FALLBACK: Trả về object mặc định thay vì throw error
+    console.warn("Returning default empty structure due to JSON parse failure");
+
+    // Thử phát hiện xem có phải là mảng hay object
+    const trimmed = text.trim();
+    if (trimmed.startsWith('[')) {
+      // Nếu AI cố gắng trả về mảng, trả về mảng rỗng
+      return [];
+    }
+
+    // Mặc định trả về object với questions rỗng
+    return {
+      questions: [],
+      readingPassage: "",
+      title: "Lỗi tạo nội dung",
+      subject: "",
+      error: "AI trả về định dạng không chuẩn. Vui lòng thử lại."
+    };
   }
 
   private retryAttempt: number = 0;

@@ -270,8 +270,20 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     try {
       const result = await geminiService.generateExamQuestionsStructured(prompt);
 
+      // Kiểm tra xem result có lỗi không
+      if (result && result.error) {
+        alert(`⚠️ ${result.error}\n\nVui lòng thử lại hoặc điều chỉnh yêu cầu.`);
+        return;
+      }
+
       if (!result || !result.questions || !Array.isArray(result.questions)) {
-        throw new Error("AI không trả về đúng định dạng câu hỏi.");
+        alert("⚠️ AI không trả về đúng định dạng câu hỏi.\n\nVui lòng thử lại. Nếu lỗi vẫn tiếp diễn, hãy thử:\n1. Giảm số lượng câu hỏi\n2. Đơn giản hóa chủ đề\n3. Kiểm tra kết nối mạng");
+        return;
+      }
+
+      if (result.questions.length === 0) {
+        alert("⚠️ AI không tạo được câu hỏi nào.\n\nGợi ý:\n1. Thử lại với chủ đề cụ thể hơn\n2. Giảm số lượng câu hỏi\n3. Kiểm tra ma trận đề có hợp lý không");
+        return;
       }
 
       const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => {
@@ -295,10 +307,23 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           explanation: q.explanation || '',
         };
       });
-      setQuestions(formatted.filter(q => q.content.trim() !== '' || q.image.trim() !== ''));
+
+      const validQuestions = formatted.filter(q => q.content.trim() !== '' || q.image.trim() !== '');
+
+      if (validQuestions.length === 0) {
+        alert("⚠️ Không có câu hỏi hợp lệ nào được tạo.\n\nVui lòng thử lại với yêu cầu khác.");
+        return;
+      }
+
+      setQuestions(validQuestions);
       setReadingPassage(result.readingPassage || '');
       if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${stats.total * 3} phút`);
       setViewMode('config');
+
+      // Hiển thị thông báo thành công
+      if (validQuestions.length < stats.total) {
+        alert(`✅ Đã tạo ${validQuestions.length}/${stats.total} câu hỏi.\n\nMột số câu không hợp lệ đã được lọc bỏ.`);
+      }
     } catch (error: any) {
       console.error("Exam Generation Error:", error);
       const msg = error.message || 'Lỗi không xác định';

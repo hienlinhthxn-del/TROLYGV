@@ -119,6 +119,19 @@ const WorksheetCreator: React.FC = () => {
             const fileParts = sampleImage ? [{ inlineData: { data: sampleImage.split(',')[1], mimeType: 'image/png' } }] : undefined;
             const content = await generateWorksheetContentDetailed(topic, subject, config, fileParts);
             if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
+
+            // Kiểm tra xem content có lỗi không
+            if (content && content.error) {
+                alert(`⚠️ ${content.error}\n\nVui lòng thử lại hoặc điều chỉnh yêu cầu.`);
+                return;
+            }
+
+            // Kiểm tra xem có câu hỏi không
+            if (!content || !content.questions || !Array.isArray(content.questions) || content.questions.length === 0) {
+                alert("⚠️ AI không tạo được câu hỏi nào.\n\nGợi ý:\n1. Thử lại với chủ đề cụ thể hơn\n2. Giảm số lượng câu hỏi\n3. Kiểm tra kết nối mạng");
+                return;
+            }
+
             setWorksheet(content);
             setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
             await generateImages(content);
