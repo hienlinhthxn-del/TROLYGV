@@ -71,6 +71,10 @@ class GeminiService {
 
   private initialize() {
     if (this.genAI) return; // Already initialized
+
+    // Đặt model mặc định để dùng cho fallback nếu không có Key
+    this.currentModelName = 'gemini-2.0-flash';
+
     const key = this.getApiKey();
     if (key) {
       try {
@@ -87,7 +91,7 @@ class GeminiService {
       }
     } else {
       this.setStatus("LỖI: Chưa cấu hình API Key");
-      console.warn("AI Assistant: No valid API Key found.");
+      console.warn("AI Assistant: No valid API Key found. Switching to Server Fallback.");
     }
   }
 
@@ -235,8 +239,13 @@ class GeminiService {
     await this.ensureInitialized();
 
     if (!this.model) {
-      const text = await this.fallbackToOtherProviders(prompt, true);
-      return this.parseJSONSafely(text);
+      try {
+        const text = await this.fallbackToOtherProviders(prompt, true);
+        return this.parseJSONSafely(text);
+      } catch (e: any) {
+        console.error("Fallback failed:", e);
+        return { error: e.message || "Lỗi kết nối AI Server" };
+      }
     }
 
     this.totalRetryCount = 0; // Reset counter cho mỗi request mới
@@ -342,10 +351,12 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
+    console.log("🚀 [Fallback] Calling Server API...");
     try {
-      const result = await generateWithAI({ prompt, provider: 'gemini', model: this.currentModelName });
+      const result = await generateWithAI({ prompt, provider: 'gemini', model: this.currentModelName || 'gemini-2.0-flash' });
       return result.text;
     } catch (error: any) {
+      console.error("❌ [Fallback] Error:", error);
       throw new Error(`Lỗi kết nối AI Server: ${error.message}. Vui lòng kiểm tra API Key trong Cài đặt.`);
     }
   }
@@ -377,8 +388,12 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
 
     if (!this.model) {
-      const text = await this.fallbackToOtherProviders(prompt, true);
-      return this.parseJSONSafely(text);
+      try {
+        const text = await this.fallbackToOtherProviders(prompt, true);
+        return this.parseJSONSafely(text);
+      } catch (e: any) {
+        return { error: e.message || "Lỗi kết nối AI Server" };
+      }
     }
 
     try {
