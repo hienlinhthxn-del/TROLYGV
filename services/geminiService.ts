@@ -26,9 +26,17 @@ class GeminiService {
   ];
 
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
+  private rateLimitedModelsUntil: Map<string, number> = new Map();
+  private static readonly RATE_LIMIT_COOLDOWN_MS = 60_000;
+  private static readonly MAX_AUTO_SWITCH_MODELS = 8;
 
   private static isPreferredModelFamily(modelName: string): boolean {
     return modelName.startsWith('gemini-');
+  }
+
+  private static isTextGenerationModel(modelName: string): boolean {
+    const excludedTokens = ['image', 'tts', 'robotics', 'computer-use', 'embedding'];
+    return !excludedTokens.some(token => modelName.includes(token));
   }
 
   private static supportsJsonResponseMimeType(modelName: string): boolean {
@@ -114,12 +122,15 @@ class GeminiService {
         .filter((m: any) => m?.supportedGenerationMethods?.includes('generateContent'))
         .map((m: any) => (m?.name || '').replace('models/', ''))
         .filter((name: string) => Boolean(name))
-        .filter((name: string) => GeminiService.isPreferredModelFamily(name));
+        .filter((name: string) => GeminiService.isPreferredModelFamily(name))
+        .filter((name: string) => GeminiService.isTextGenerationModel(name));
 
       if (!listedModels.length) return;
 
       const prioritized = GeminiService.MODEL_CANDIDATES.filter(m => listedModels.includes(m));
-      const others = listedModels.filter((m: string) => !prioritized.includes(m));
+      const others = listedModels
+        .filter((m: string) => !prioritized.includes(m))
+        .slice(0, Math.max(0, GeminiService.MAX_AUTO_SWITCH_MODELS - prioritized.length));
       this.availableModels = [...prioritized, ...others];
       console.log('AI available models:', this.availableModels);
 
@@ -152,6 +163,29 @@ class GeminiService {
 
     this.setStatus(`AI Sẵn sàng (${modelName})`);
     localStorage.setItem('preferred_gemini_model', modelName);
+  }
+
+  private markCurrentModelRateLimited(): void {
+    if (!this.currentModelName) return;
+    this.rateLimitedModelsUntil.set(this.currentModelName, Date.now() + GeminiService.RATE_LIMIT_COOLDOWN_MS);
+  }
+
+  private getNextModelSkippingRateLimited(): string | null {
+    if (!this.availableModels.length) return null;
+    const now = Date.now();
+    const currentIdx = this.availableModels.indexOf(this.currentModelName);
+    const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
+
+    for (let offset = 1; offset <= this.availableModels.length; offset++) {
+      const idx = (safeCurrentIdx + offset) % this.availableModels.length;
+      const candidate = this.availableModels[idx];
+      const cooldownUntil = this.rateLimitedModelsUntil.get(candidate) || 0;
+      if (cooldownUntil <= now) {
+        return candidate;
+      }
+    }
+
+    return null;
   }
 
   private async ensureInitialized() {
@@ -287,6 +321,8 @@ class GeminiService {
     }
 
     this.totalRetryCount = 0; // Reset counter cho mỗi request mới
+    this.modelCycleCount = 0;
+    this.versionRetryCount = 0;
 
     // Thêm hướng dẫn JSON rõ ràng vào prompt
     const enhancedPrompt = `${prompt}
@@ -965,13 +1001,10 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       // Nếu gặp lỗi Quota (429), chuyển model NGAY LẬP TỨC (Fail-Fast Strategy)
       // Không cần chờ đợi vì Free Tier của Google thường khóa cả phút.
+      this.markCurrentModelRateLimited();
 
       this.retryAttempt = 0;
       this.versionRetryCount = 0;
-      const currentIdx = this.availableModels.indexOf(this.currentModelName);
-      const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
-      const nextIdx = (safeCurrentIdx + 1) % this.availableModels.length;
-
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
         this.modelCycleCount = 0;
@@ -982,7 +1015,15 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
         throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
       }
 
-      const nextModel = this.availableModels[nextIdx];
+      const nextModel = this.getNextModelSkippingRateLimited();
+      if (!nextModel) {
+        const soonestReadyMs = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
+        const waitSeconds = Math.max(5, Math.ceil(soonestReadyMs / 1000));
+        this.modelCycleCount = 0;
+        this.totalRetryCount = 0;
+        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${waitSeconds} giây rồi thử lại.`);
+      }
+
       this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
       console.warn(`[Auto-Switch] ${this.currentModelName} (429) -> ${nextModel}`);
 
