@@ -44,6 +44,9 @@ const App: React.FC = () => {
   const [cloudDocs, setCloudDocs] = useState<CloudDocument[]>([]);
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
 
+  // Guard: if the app hard-crashes during render/effects, show a friendly fallback instead of blank screen.
+  const [fatalError, setFatalError] = useState<string | null>(null);
+
   // State để kiểm tra link chia sẻ ngay khi vào app
   const [isCheckingLink, setIsCheckingLink] = useState(() => {
     return new URLSearchParams(window.location.search).has('exam') || !!localStorage.getItem('shared_exam_data');
@@ -106,6 +109,70 @@ const App: React.FC = () => {
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   }, [view]);
+
+  useEffect(() => {
+    // Capture unexpected runtime errors to avoid a blank page.
+    const onError = (event: ErrorEvent) => {
+      const msg = event?.error?.message || event?.message || 'Unknown error';
+      console.error('[App] Fatal error:', event?.error || event);
+      setFatalError(msg);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason: any = (event as any)?.reason;
+      const msg = reason?.message || String(reason || 'Unhandled rejection');
+      console.error('[App] Unhandled rejection:', reason);
+      setFatalError(msg);
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
+
+  if (fatalError) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="w-full max-w-2xl rounded-3xl border border-rose-200 bg-white shadow-xl p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+              <i className="fas fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <div className="text-sm font-black text-slate-900 uppercase tracking-widest">Ứng dụng bị lỗi</div>
+              <div className="text-xs text-slate-500 font-semibold mt-1">Không hiển thị trắng trang nữa; lỗi được ghi bên dưới.</div>
+            </div>
+          </div>
+
+          <pre className="mt-4 text-xs bg-slate-900 text-slate-100 rounded-2xl p-4 overflow-auto">{fatalError}</pre>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs uppercase tracking-widest"
+              onClick={() => window.location.reload()}
+            >
+              Tải lại
+            </button>
+            <button
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-widest"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('google_api_key');
+                  localStorage.removeItem('manually_entered_api_key');
+                  localStorage.removeItem('preferred_gemini_model');
+                  localStorage.removeItem('preferred_gemini_version');
+                } catch {}
+                window.location.reload();
+              }}
+            >
+              Xoá cấu hình AI & tải lại
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const handler = setTimeout(() => {
