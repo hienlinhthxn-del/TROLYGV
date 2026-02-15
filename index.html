@@ -7,8 +7,9 @@
     <title>EduAssist AI - Trợ lý Giáo viên 4.0</title>
 
     <!-- Libraries -->
-    <!-- NOTE: External Tailwind CDN injects CSS at runtime and can break Vite production build.
-         Tailwind is bundled via the app build instead; keep Font Awesome CDN. -->
+    <!-- Tailwind utilities are required by the React UI.
+         Keep CDN fallback enabled so the app remains usable even when bundled CSS is missing. -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>

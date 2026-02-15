@@ -1,4 +1,4 @@
-import { geminiService } from "../../services/geminiService";
+import { geminiService } from "@/services/geminiService";
 
 export interface QuizQuestion {
     question_text: string;
