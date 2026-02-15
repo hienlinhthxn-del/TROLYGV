@@ -1372,7 +1372,7 @@ Chi tiết: ${errorMessage}
         finalCode = await blobToBase64(blob);
       }
 
-      let url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
+      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
       // 2. Nếu Link quá dài (> 4000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
       if (url.length > 4000) {
@@ -1387,7 +1387,7 @@ Chi tiết: ${errorMessage}
         } else {
           finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
         }
-        url = `${window.location.origin}${window.location.pathname}?exam = ${finalCode} `;
+        url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
         if (url.length > 8000) {
           alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
@@ -1907,49 +1907,49 @@ Chi tiết: ${errorMessage}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-file-signature"></i>
           <span>Giáo án 2345</span>
         </button>
         <button
           onClick={() => { setActiveTab('games'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-gamepad"></i>
           <span>Trò chơi</span>
         </button>
         <button
           onClick={() => { setActiveTab('images'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'images' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-image"></i>
           <span>Minh họa AI</span>
         </button>
         <button
           onClick={() => { setActiveTab('tts'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tts' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-volume-up"></i>
           <span>Giọng đọc</span>
         </button>
         <button
           onClick={() => { setActiveTab('video'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'video' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-film"></i>
           <span>Tạo Video</span>
         </button>
         <button
           onClick={() => { setActiveTab('assistant'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'assistant' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-user-robot"></i>
           <span>Trợ lý Chat</span>
         </button>
         <button
           onClick={() => { setActiveTab('pdf_tools'); setResult(null); setAudioUrl(null); }}
-          className={`flex items - center justify - center space - x - 2 py - 3 rounded - xl text - [10px] font - black uppercase tracking - widest transition - all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'} `}
+          className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pdf_tools' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           <i className="fas fa-toolbox"></i>
           <span>Công cụ PDF</span>
@@ -1974,14 +1974,14 @@ Chi tiết: ${errorMessage}
                 <button
                   key={persona.id}
                   onClick={() => setActiveAssistant(persona)}
-                  className={`w - full p - 4 rounded - 2xl border text - left transition - all flex items - start space - x - 4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'} `}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start space-x-4 ${activeAssistant?.id === persona.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-indigo-200'}`}
                 >
-                  <div className={`w - 10 h - 10 rounded - xl flex - shrink - 0 flex items - center justify - center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'} `}>
+                  <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${activeAssistant?.id === persona.id ? 'bg-white/20' : 'bg-white'}`}>
                     <i className={`fas ${persona.icon} ${activeAssistant?.id === persona.id ? 'text-white' : 'text-indigo-600'} `}></i>
                   </div>
                   <div>
                     <p className="font-black text-sm">{persona.name}</p>
-                    <p className={`text - xs mt - 1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'} `}>{persona.description}</p>
+                    <p className={`text-xs mt-1 ${activeAssistant?.id === persona.id ? 'text-indigo-200' : 'text-slate-500'}`}>{persona.description}</p>
                   </div>
                 </button>
               ))}
@@ -2007,7 +2007,7 @@ Chi tiết: ${errorMessage}
                             <img src={`data:${att.mimeType}; base64, ${att.data} `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
-                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text - xl mb - 1`}></i>
+                              <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
                               <span className="text-[8px] text-slate-500 truncate w-full text-center">{att.name}</span>
                             </div>
                           )}
@@ -2037,7 +2037,7 @@ Chi tiết: ${errorMessage}
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w - 12 h - 12 flex items - center justify - center rounded - 2xl transition - all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'} `}
+                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                     >
                       <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'} `}></i>
                     </button>
@@ -2064,9 +2064,9 @@ Chi tiết: ${errorMessage}
                     <div className="mb-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Loại trò chơi</label>
                       <div className="grid grid-cols-3 gap-2 mt-1 bg-slate-100 p-1 rounded-xl">
-                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Soạn Ý tưởng</button>
-                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Tạo Ô chữ</button>
-                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py - 2 rounded - lg text - [9px] font - bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Quiz Thi đua</button>
+                        <button onClick={() => { setGameType('idea'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'idea' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Soạn Ý tưởng</button>
+                        <button onClick={() => { setGameType('crossword'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'crossword' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Tạo Ô chữ</button>
+                        <button onClick={() => { setGameType('quiz'); setResult(null); }} className={`py-2 rounded-lg text-[9px] font-bold uppercase ${gameType === 'quiz' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Quiz Thi đua</button>
                       </div>
                       {gameType === 'quiz' && (
                         <button onClick={() => setShowCropper(true)} className="w-full mt-2 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center">
@@ -2076,8 +2076,8 @@ Chi tiết: ${errorMessage}
                       {gameType === 'quiz' && (
                         <div className="mt-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                            <button onClick={() => setQuizMode('topic')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ Chủ đề</button>
-                            <button onClick={() => setQuizMode('file')} className={`flex - 1 py - 1.5 rounded - lg text - [10px] font - bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} `}>Từ File Ảnh/PDF</button>
+                            <button onClick={() => setQuizMode('topic')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'topic' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ Chủ đề</button>
+                            <button onClick={() => setQuizMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase ${quizMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Từ File Ảnh/PDF</button>
                           </div>
 
                           {quizMode === 'topic' ? (
@@ -2088,7 +2088,7 @@ Chi tiết: ${errorMessage}
                                   <button
                                     key={num}
                                     onClick={() => setQuizCount(num)}
-                                    className={`flex - 1 py - 2 rounded - xl text - [10px] font - bold border transition - all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'} `}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
                                   >
                                     {num} câu
                                   </button>
@@ -2119,7 +2119,7 @@ Chi tiết: ${errorMessage}
                     <div className="flex justify-end mb-2 space-x-2">
                       <button
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
-                        className={`text - [10px] font - bold uppercase tracking - widest px - 3 py - 1.5 rounded - lg transition - colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'} `}
+                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
                       >
                         <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr - 1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
@@ -2301,13 +2301,13 @@ Chi tiết: ${errorMessage}
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={() => setVoiceName('Kore')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
                     >
                       <i className="fas fa-mars mr-2"></i>Giọng Nam
                     </button>
                     <button
                       onClick={() => setVoiceName('Puck')}
-                      className={`py - 2.5 rounded - xl text - [10px] font - black uppercase tracking - widest border transition - all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'} `}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
                     >
                       <i className="fas fa-venus mr-2"></i>Giọng Nữ
                     </button>
