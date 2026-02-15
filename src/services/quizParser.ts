@@ -1,8 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// Khởi tạo Gemini
-// Lưu ý: Trong React/Vite dùng import.meta.env thay vì process.env
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY || "");
+import { geminiService } from "./geminiService";
 
 export interface QuizQuestion {
     question_text: string;
@@ -16,8 +12,6 @@ export interface QuizQuestion {
  * Input: Base64 string của file PDF (không phải Buffer)
  */
 export async function parseExamPdf(base64Data: string): Promise<QuizQuestion[]> {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
     const prompt = `
     Bạn là chuyên gia số hóa đề thi. Hãy phân tích file PDF đề thi đính kèm (Trạng Nguyên Tiếng Việt, Toán Violympic, v.v.).
     File này chứa khoảng 30 câu hỏi, bao gồm cả hình ảnh và công thức toán học.
@@ -42,13 +36,13 @@ export async function parseExamPdf(base64Data: string): Promise<QuizQuestion[]> 
   `;
 
     try {
-        const result = await model.generateContent([
-            { inlineData: { data: base64Data, mimeType: "application/pdf" } },
-            prompt,
-        ]);
-        const responseText = result.response.text();
-        const cleanJson = responseText.replace(/```json|```/g, "").trim();
-        return JSON.parse(cleanJson);
+        // Sử dụng geminiService để tận dụng khả năng xử lý lỗi và API Key động
+        const result = await geminiService.generateExamQuestionsStructured(prompt, [{
+            inlineData: { data: base64Data, mimeType: "application/pdf" }
+        }]);
+
+        // geminiService đã trả về JSON object, ta chỉ cần map lại nếu cần
+        return result.questions || [];
     } catch (error) {
         console.error("Lỗi xử lý PDF bằng Gemini:", error);
         return [];
