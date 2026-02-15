@@ -714,8 +714,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         console.error("Lesson Plan Error:", error);
         alert(`Lỗi khi soạn giáo án: ${error.message || "Không thể kết nối"}`);
         if (error.message?.includes('404') || error.message?.includes('not found')) {
-             localStorage.removeItem('preferred_gemini_model');
-             localStorage.removeItem('preferred_gemini_version');
+          localStorage.removeItem('preferred_gemini_model');
+          localStorage.removeItem('preferred_gemini_version');
         }
       }
     } finally {
@@ -970,6 +970,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
           for (let i = 1; i <= maxPages; i++) {
             if (forceStopRef.current) throw new Error("Dừng xử lý PDF.");
+
+            // Yield to main thread to prevent UI freeze
+            await new Promise(resolve => setTimeout(resolve, 10));
+
             const page = await pdf.getPage(i);
             const viewport = page.getViewport({ scale });
             const canvas = document.createElement('canvas');
@@ -1254,9 +1258,9 @@ Chi tiết: ${errorMessage}
           alert(`⚠️ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\nVui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc nhập Key mới.`);
           try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
         } else if (errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found')) {
-           alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
-           localStorage.removeItem('preferred_gemini_model');
-           localStorage.removeItem('preferred_gemini_version');
+          alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
+          localStorage.removeItem('preferred_gemini_model');
+          localStorage.removeItem('preferred_gemini_version');
         } else {
           alert(`Lỗi bóc tách đề: ${errorMessage} `);
         }
@@ -1793,6 +1797,9 @@ Chi tiết: ${errorMessage}
       }
 
       for (let i = start; i <= end; i++) {
+        // Yield to main thread
+        await new Promise(resolve => setTimeout(resolve, 10));
+
         const page = await pdfToRender.getPage(i);
         const viewport = page.getViewport({ scale: 1.5 }); // Scale 1.5 cho chất lượng tốt
 
@@ -1855,6 +1862,9 @@ Chi tiết: ${errorMessage}
       const end = Math.min(pdf.numPages, splitRange.end);
 
       for (let i = start; i <= end; i++) {
+        // Yield to main thread
+        await new Promise(resolve => setTimeout(resolve, 10));
+
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2.0 });
         const canvas = document.createElement('canvas');

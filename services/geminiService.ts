@@ -38,6 +38,12 @@ class GeminiService {
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
   private totalRetryCount: number = 0; // Bộ đếm retry toàn cục để ngăn vòng lặp vô hạn
 
+  // Rate Limiter - Ngăn chặn lỗi 429 (Too Many Requests)
+  private lastRequestTime: number = 0;
+  private readonly MIN_REQUEST_INTERVAL_MS = 1000; // Tối thiểu 1 giây giữa các request
+  private requestQueue: Array<() => Promise<any>> = [];
+  private isProcessingQueue: boolean = false;
+
   constructor() {
     // Defer initialization to run only on the client-side (in the browser)
     // to prevent crashes during server-side build processes.
@@ -170,7 +176,8 @@ class GeminiService {
     }
 
     try {
-      const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 3, 1000);
+      // Tăng số lần retry và delay ban đầu để xử lý tốt hơn lỗi 429
+      const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 5, 2000);
       return result.response.text();
     } catch (error: any) {
       return this.handleError(error, () => this.generateText(prompt));
@@ -201,16 +208,47 @@ class GeminiService {
 
     if (parts.length === 0) return;
 
-    try {
-      const result = await this.chat!.sendMessageStream(parts);
-      for await (const chunk of result.stream) {
-        if (signal?.aborted) break;
-        yield { text: chunk.text() };
+    // Retry logic cho stream với xử lý lỗi 429
+    const maxRetries = 3;
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Áp dụng rate limiting
+        await this.waitForRateLimit();
+
+        const result = await this.chat!.sendMessageStream(parts);
+        for await (const chunk of result.stream) {
+          if (signal?.aborted) break;
+          yield { text: chunk.text() };
+        }
+        return; // Thành công, thoát khỏi hàm
+      } catch (error: any) {
+        lastError = error;
+        const is429Error = error.message?.includes("429") || error.status === 429;
+        const is503Error = error.message?.includes("503") || error.status === 503;
+        
+        // Nếu là lỗi rate limit và còn retry
+        if ((is429Error || is503Error) && attempt < maxRetries) {
+          const waitTime = Math.min(5000 * Math.pow(2, attempt), 30000);
+          console.warn(`⚠️ Stream rate limit (attempt ${attempt + 1}/${maxRetries + 1}). Waiting ${waitTime}ms...`);
+          await new Promise(r => setTimeout(r, waitTime));
+          
+          // Reset chat session để tránh lỗi state
+          this.initChat("Bạn là trợ lý giáo viên.");
+          continue;
+        }
+        
+        // Nếu không phải lỗi rate limit hoặc hết retry
+        console.error("Stream error:", error);
+        throw error;
       }
-    } catch (error: any) {
-      console.error("Stream error:", error);
-      throw error;
     }
+
+    // Nếu vẫn lỗi sau tất cả retry
+    throw new Error(lastError?.message?.includes("429")
+      ? "⚠️ API đang quá tải. Vui lòng đợi 30 giây rồi thử lại."
+      : lastError?.message || "Lỗi kết nối AI");
   }
 
   public async generateCrossword(topic: string): Promise<any> {
@@ -302,9 +340,10 @@ CẤU TRÚC JSON BẮT BUỘC:
           }
         }, { apiVersion: 'v1beta' });
 
-        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 3, 2000);
+        // Tăng retry và delay cho exam generation (thường là request lớn)
+        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
       } else {
-        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 3, 2000);
+        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 3000);
       }
 
       return this.parseJSONSafely(result.response.text());
@@ -339,15 +378,56 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     return this.generateExamQuestionsStructured(prompt, fileParts);
   }
 
-  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number, delay: number): Promise<T> {
-    try {
-      return await fn();
-    } catch (error: any) {
-      if (retries <= 0) throw error;
-      if (error.message?.includes("429")) delay *= 2;
-      await new Promise(r => setTimeout(r, delay));
-      return this.retryWithBackoff(fn, retries - 1, delay);
+  // Rate Limiter: Đảm bảo khoảng cách tối thiểu giữa các request
+  private async waitForRateLimit(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL_MS) {
+      const waitTime = this.MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
     }
+    
+    this.lastRequestTime = Date.now();
+  }
+
+  // Cải thiện retry với exponential backoff và xử lý đặc biệt cho lỗi 429
+  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number, delay: number): Promise<T> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // Áp dụng rate limiting trước mỗi request
+        await this.waitForRateLimit();
+        return await fn();
+      } catch (error: any) {
+        const is429Error = error.message?.includes("429") || error.status === 429;
+        const is503Error = error.message?.includes("503") || error.status === 503;
+        const isRateLimitError = is429Error || is503Error;
+        
+        // Nếu hết retry hoặc không phải lỗi rate limit, throw ngay
+        if (attempt >= retries) {
+          if (isRateLimitError) {
+            throw new Error("⚠️ API đang quá tải. Vui lòng đợi 30 giây rồi thử lại.");
+          }
+          throw error;
+        }
+        
+        // Tính toán thời gian chờ với exponential backoff
+        let waitTime = delay * Math.pow(2, attempt);
+        
+        // Đối với lỗi 429, tăng thời gian chờ lên đáng kể
+        if (isRateLimitError) {
+          waitTime = Math.max(waitTime, 5000); // Tối thiểu 5 giây
+          console.warn(`⚠️ Rate limit hit (attempt ${attempt + 1}/${retries + 1}). Waiting ${waitTime}ms...`);
+        }
+        
+        // Giới hạn thời gian chờ tối đa 30 giây
+        waitTime = Math.min(waitTime, 30000);
+        
+        await new Promise(r => setTimeout(r, waitTime));
+      }
+    }
+    
+    throw new Error("Retry failed after all attempts");
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
@@ -683,8 +763,9 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
     // 5.1. Sửa key không có ngoặc kép: {questions:[...]} => {"questions":[...]}
     const fixUnquotedKeys = (str: string): string => {
-      return str.replace(/([\{,]\s*)([A-Za-z_$][\w$\- ]*)(\s*:)/g, (_, prefix, key, suffix) => {
-        const normalizedKey = String(key).trim().replace(/\s+/g, ' ');
+      // FIX: Bỏ dấu cách trong regex để tránh lỗi ReDoS (Treo App) khi chuỗi quá dài
+      return str.replace(/([\{,]\s*)([A-Za-z_$][\w$\-]*)(\s*:)/g, (_, prefix, key, suffix) => {
+        const normalizedKey = String(key).trim();
         if (/^(true|false|null)$/i.test(normalizedKey)) return `${prefix}${normalizedKey}${suffix}`;
         return `${prefix}"${normalizedKey}"${suffix}`;
       });

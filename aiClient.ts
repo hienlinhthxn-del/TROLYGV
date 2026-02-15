@@ -1,23 +1,40 @@
-export type AIProvider = 'gemini' | 'openai';
+// Minimal AI client wrapper used by services/geminiService.ts
+// Provides a single entry-point to call your Vercel Serverless Function.
 
-export async function generateWithAI({
-    prompt, provider = 'gemini', system, model, fallback = true
-}: {
-    prompt: string;
-    provider?: AIProvider;
-    system?: string;
-    model?: string;
-    fallback?: boolean;
-}) {
-    const r = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, provider, system, model, fallback }),
-    });
-    const data = await r.json();
-    if (!r.ok) {
-        const reason = data?.primary || data?.secondary || data?.detail || data?.error || 'AI error';
-        throw new Error(`Lỗi AI (${data?.status ?? r.status}): ${reason}`);
-    }
-    return data as { text: string; provider: AIProvider; note?: string };
+export type GenerateWithAIRequest = {
+  prompt: string;
+  files?: Array<{ data: string; mimeType: string }>;
+  model?: string;
+  stream?: boolean;
+};
+
+export type GenerateWithAIResponse = {
+  text?: string;
+  // Allow additional fields without breaking callers
+  [key: string]: unknown;
+};
+
+export async function generateWithAI(payload: GenerateWithAIRequest, signal?: AbortSignal): Promise<GenerateWithAIResponse> {
+  const res = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!res.ok) {
+    const msg = contentType.includes('application/json')
+      ? JSON.stringify(await res.json())
+      : await res.text();
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+
+  if (contentType.includes('application/json')) {
+    return (await res.json()) as GenerateWithAIResponse;
+  }
+
+  // Fallback: plain text
+  return { text: await res.text() };
 }
+
