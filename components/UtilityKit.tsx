@@ -1,8 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { geminiService, FilePart } from '../services/geminiService';
-import { readContentFromFile } from '../fileReader';
-import { downloadLessonPlanAsDocx } from '../docxHelper';
 import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
@@ -653,6 +651,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           return;
         }
 
+        const { readContentFromFile } = await import('../fileReader');
         const templateText = await readContentFromFile(templateFile);
         const planText = await readContentFromFile(planFile);
 
@@ -2428,7 +2427,10 @@ Chi tiết: ${errorMessage}
                         </select>
                       </div>
                       <button
-                        onClick={() => downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing })}
+                        onClick={async () => {
+                          const { downloadLessonPlanAsDocx } = await import('../docxHelper');
+                          downloadLessonPlanAsDocx(result, topic ? `Giao_an_${topic.replace(/\s+/g, '_')}.docx` : "Giao_an_AI.docx", { font: docxFont, fontSize: docxFontSize, alignment: docxAlignment, lineSpacing: docxLineSpacing });
+                        }}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
                       >
                         <i className="fas fa-file-word mr-2"></i>Tải về (.docx)
