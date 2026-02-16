@@ -28,7 +28,7 @@ class GeminiService {
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
   private rateLimitedModelsUntil: Map<string, number> = new Map();
   private static readonly RATE_LIMIT_COOLDOWN_MS = 60_000;
-  private static readonly MAX_AUTO_SWITCH_MODELS = 8;
+  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 2;
 
   private static isPreferredModelFamily(modelName: string): boolean {
     return modelName.startsWith('gemini-');
@@ -128,10 +128,9 @@ class GeminiService {
       if (!listedModels.length) return;
 
       const prioritized = GeminiService.MODEL_CANDIDATES.filter(m => listedModels.includes(m));
-      const others = listedModels
-        .filter((m: string) => !prioritized.includes(m))
-        .slice(0, Math.max(0, GeminiService.MAX_AUTO_SWITCH_MODELS - prioritized.length));
-      this.availableModels = [...prioritized, ...others];
+      // Chỉ giữ nhóm model ổn định đã whitelist sẵn để tránh quét hàng loạt model mới
+      // (ví dụ 2.5/001) gây spam request và dễ chạm 429 liên tiếp.
+      this.availableModels = prioritized.length ? prioritized : [...GeminiService.MODEL_CANDIDATES];
       console.log('AI available models:', this.availableModels);
 
       const preferredModel = localStorage.getItem('preferred_gemini_model');
@@ -206,6 +205,7 @@ class GeminiService {
     this.totalRetryCount = 0;
     this.modelCycleCount = 0;
     this.versionRetryCount = 0;
+    this.rateLimitSwitchCount = 0;
   }
 
   public async generateText(prompt: string): Promise<string> {
@@ -949,6 +949,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   private retryAttempt: number = 0;
   private versionRetryCount: number = 0;
   private modelCycleCount: number = 0;
+  private rateLimitSwitchCount: number = 0;
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = (error.message || "").toLowerCase();
@@ -1022,10 +1023,23 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       this.retryAttempt = 0;
       this.versionRetryCount = 0;
+      this.rateLimitSwitchCount++;
+
+      if (this.rateLimitSwitchCount > GeminiService.MAX_RATE_LIMIT_SWITCHES_PER_REQUEST) {
+        this.rateLimitSwitchCount = 0;
+        this.modelCycleCount = 0;
+        this.totalRetryCount = 0;
+        if (isNetworkIssue) {
+          throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
+        }
+        throw new Error("⚠️ API Gemini đang giới hạn tạm thời (429). Hệ thống đã thử đổi model nhưng vẫn quá tải. Vui lòng đợi 60 giây rồi thử lại để tránh bị chặn thêm.");
+      }
+
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
         this.modelCycleCount = 0;
         this.totalRetryCount = 0;
+        this.rateLimitSwitchCount = 0;
         if (isNetworkIssue) {
           throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
         }
