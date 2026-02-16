@@ -465,38 +465,18 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
   // Cải thiện retry với exponential backoff và xử lý đặc biệt cho lỗi 429
   private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number, delay: number): Promise<T> {
-    let lastError: any = null;
-    const safeRetries = Math.max(1, retries);
-
-    for (let attempt = 0; attempt <= safeRetries; attempt++) {
-      try {
-        await this.waitForRateLimit();
-        return await fn();
-      } catch (error: any) {
-        lastError = error;
-        const isRateLimitError = this.isRateLimitError(error);
-
-        if (!isRateLimitError) {
-          throw error;
-        }
-
-        // Khi gặp 429/503, chỉ retry ngắn 1 lần rồi chuyển sang handleError để đổi model.
-        if (attempt >= 1) {
-          throw this.createRateLimitError(error);
-        }
-
-        const retryAfterHeader = Number(error?.response?.headers?.['retry-after'] || 0);
-        const waitTime = Math.min(Math.max(retryAfterHeader * 1000 || delay, 1200), 4000);
-        console.warn(`⚠️ Rate limit hit (attempt ${attempt + 1}/2). Waiting ${waitTime}ms before model switch...`);
-        await new Promise(r => setTimeout(r, waitTime));
+    // FIX: Chiến lược Fail-Fast cho lỗi 429/Quota.
+    // Thay vì retry tại đây (gây treo ứng dụng vì chờ đợi), ta throw ngay để handleError chuyển sang Model khác.
+    try {
+      await this.waitForRateLimit();
+      return await fn();
+    } catch (error: any) {
+      if (this.isRateLimitError(error)) {
+        console.warn("⚠️ Rate limit (429) detected. Switching model immediately...");
+        throw this.createRateLimitError(error);
       }
+      throw error;
     }
-
-    if (this.isRateLimitError(lastError)) {
-      throw this.createRateLimitError(lastError);
-    }
-
-    throw lastError || new Error('Retry failed after all attempts');
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
