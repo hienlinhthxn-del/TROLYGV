@@ -28,7 +28,7 @@ class GeminiService {
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
   private rateLimitedModelsUntil: Map<string, number> = new Map();
   private static readonly RATE_LIMIT_COOLDOWN_MS = 60_000;
-  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 2;
+  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 10;
 
   private static isPreferredModelFamily(modelName: string): boolean {
     return modelName.startsWith('gemini-');
@@ -44,17 +44,19 @@ class GeminiService {
   }
 
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
-  private totalRetryCount: number = 0; // Bộ đếm retry toàn cục để ngăn vòng lặp vô hạn
+  private totalRetryCount: number = 0;
+  private retryAttempt: number = 0;
+  private versionRetryCount: number = 0;
+  private modelCycleCount: number = 0;
+  private rateLimitSwitchCount: number = 0;
 
   // Rate Limiter - Ngăn chặn lỗi 429 (Too Many Requests)
   private lastRequestTime: number = 0;
-  private readonly MIN_REQUEST_INTERVAL_MS = 1000; // Tối thiểu 1 giây giữa các request
+  private readonly MIN_REQUEST_INTERVAL_MS = 1000;
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessingQueue: boolean = false;
 
   constructor() {
-    // Defer initialization to run only on the client-side (in the browser)
-    // to prevent crashes during server-side build processes.
     if (typeof window !== 'undefined') {
       this.initialize();
     }
@@ -275,11 +277,16 @@ class GeminiService {
 
         // Nếu là lỗi rate limit và còn retry
         if ((is429Error || is503Error) && attempt < maxRetries) {
-          const waitTime = Math.min(5000 * Math.pow(2, attempt), 30000);
-          console.warn(`⚠️ Stream rate limit (attempt ${attempt + 1}/${maxRetries + 1}). Waiting ${waitTime}ms...`);
-          await new Promise(r => setTimeout(r, waitTime));
+          const waitTime = Math.min(5000 * Math.pow(2, attempt), 20000);
+          console.warn(`⚠️ Stream rate limit (attempt ${attempt + 1}/${maxRetries + 1}). Waiting ${waitTime}ms and switching model...`);
 
-          // Reset chat session để tránh lỗi state
+          this.markCurrentModelRateLimited();
+          const nextModel = this.getNextModelSkippingRateLimited();
+          if (nextModel) {
+            this.setupModel(nextModel, 'v1beta');
+          }
+
+          await new Promise(r => setTimeout(r, waitTime));
           this.initChat("Bạn là trợ lý giáo viên.");
           continue;
         }
@@ -464,19 +471,26 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   // Cải thiện retry với exponential backoff và xử lý đặc biệt cho lỗi 429
-  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number, delay: number): Promise<T> {
-    // FIX: Chiến lược Fail-Fast cho lỗi 429/Quota.
-    // Thay vì retry tại đây (gây treo ứng dụng vì chờ đợi), ta throw ngay để handleError chuyển sang Model khác.
-    try {
-      await this.waitForRateLimit();
-      return await fn();
-    } catch (error: any) {
-      if (this.isRateLimitError(error)) {
-        console.warn("⚠️ Rate limit (429) detected. Switching model immediately...");
-        throw this.createRateLimitError(error);
+  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number = 3, initialDelay: number = 1000): Promise<T> {
+    let lastError: any;
+    for (let i = 0; i < retries; i++) {
+      try {
+        await this.waitForRateLimit();
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        if (this.isRateLimitError(error)) {
+          // Fail-fast on rate limit to trigger model switching in handleError
+          throw this.createRateLimitError(error);
+        }
+        if (i < retries - 1) {
+          const waitTime = initialDelay * Math.pow(2, i);
+          console.warn(`⚠️ AI Request failed (attempt ${i + 1}/${retries}). Retrying in ${waitTime}ms...`, error.message);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
       }
-      throw error;
     }
+    throw lastError;
   }
 
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
@@ -926,10 +940,6 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     };
   }
 
-  private retryAttempt: number = 0;
-  private versionRetryCount: number = 0;
-  private modelCycleCount: number = 0;
-  private rateLimitSwitchCount: number = 0;
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = (error.message || "").toLowerCase();
