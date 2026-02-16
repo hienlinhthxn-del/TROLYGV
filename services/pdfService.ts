@@ -60,11 +60,11 @@ export const convertPdfToImages = async (base64: string, maxPagesLimit = 30): Pr
     const pdf = await loadingTask.promise;
     const images: PdfImage[] = [];
     const maxPages = Math.min(pdf.numPages, maxPagesLimit);
-    let scale = 2.0;
-    let quality = 0.9;
-    if (pdf.numPages > 2) { scale = 1.5; quality = 0.8; }
-    if (pdf.numPages > 10) { scale = 1.2; quality = 0.7; }
-    if (pdf.numPages > 20) { scale = 1.0; quality = 0.6; }
+    let scale = 1.5;
+    let quality = 0.8;
+    if (pdf.numPages > 2) { scale = 1.2; quality = 0.7; }
+    if (pdf.numPages > 5) { scale = 1.0; quality = 0.6; }
+    if (pdf.numPages > 10) { scale = 0.9; quality = 0.5; }
 
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
@@ -106,7 +106,7 @@ export const ocrImages = async (dataUrls: string[], lang = 'vie+eng'): Promise<s
     for (let i = 0; i < dataUrls.length; i++) {
       const url = dataUrls[i];
       try {
-        const res: any = await Tesseract.recognize(url, lang, { logger: () => {} });
+        const res: any = await Tesseract.recognize(url, lang, { logger: () => { } });
         const text = (res && (res.data?.text || res.text)) ? (res.data?.text || res.text) : '';
         results.push(text.trim());
       } catch (err) {

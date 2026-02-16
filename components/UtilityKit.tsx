@@ -963,15 +963,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const imageParts: any[] = [];
           const pageImages: string[] = [];
 
-          const maxPages = Math.min(pdf.numPages, 20);
-          let scale = 1.2;
-          let quality = 0.7;
+          const maxPages = Math.min(pdf.numPages, 10); // Giảm xuống 10 trang để tránh lỗi 429/Payload Too Large
+          let scale = 1.0; // Giảm độ nét xuống 1.0 (đủ để AI đọc)
+          let quality = 0.6; // Giảm chất lượng ảnh xuống 0.6 để nhẹ hơn
 
           for (let i = 1; i <= maxPages; i++) {
             if (forceStopRef.current) throw new Error("Dừng xử lý PDF.");
 
-            // Yield to main thread to prevent UI freeze
-            await new Promise(resolve => setTimeout(resolve, 10));
+            // Yield to main thread more frequently
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             const page = await pdf.getPage(i);
             const viewport = page.getViewport({ scale });
@@ -980,6 +980,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             await page.render({ canvasContext: context!, viewport: viewport }).promise;
+
+            // Sử dụng jpeg để nén tốt hơn png
             const imgData = canvas.toDataURL('image/jpeg', quality);
             pageImages.push(imgData);
             imageParts.push({
@@ -988,6 +990,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
                 mimeType: 'image/jpeg'
               }
             });
+
+            // Giải phóng bộ nhớ canvas
+            canvas.width = 0;
+            canvas.height = 0;
           }
           return { imageParts, pageImages };
         } catch (e: any) {
@@ -1238,7 +1244,7 @@ Chi tiết: ${errorMessage}
       }
       // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
       else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
-        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage} \n\nNguyên nhân có thể do file có định dạng phức tạp.\n\nThầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không ? `)) {
+        if (window.confirm(`⚠️ Lỗi xử lý PDF: ${errorMessage}\n\nLưu ý: Nếu file PDF dài, AI có thể bị quá tải (429).\n\n✅ GIẢI PHÁP: Thầy/Cô hãy dùng công cụ "Cắt PDF" để lấy khoảng 1 đến 3 trang quan trọng nhất rồi thử lại.`)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
