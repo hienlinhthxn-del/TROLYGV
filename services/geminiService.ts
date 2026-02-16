@@ -18,10 +18,10 @@ class GeminiService {
 
   // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found"
   private static readonly MODEL_CANDIDATES = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+    'gemini-1.5-flash',      // Ổn định nhất và Quota cao nhất cho xử lý file/ảnh
+    'gemini-2.0-flash',      // Mạnh mẽ hơn nhưng dễ bị limit hơn
+    'gemini-2.0-flash-lite', // Thường xuyên bị 429
+    'gemini-1.5-pro',       // Thông minh nhưng Quota rất thấp
     'gemini-pro',
   ];
 
@@ -1050,8 +1050,8 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       this.setupModel(nextModel, 'v1beta');
 
-      // Thêm một chút delay nhỏ để tránh spam
-      await new Promise(r => setTimeout(r, 1000));
+      // Thêm một chút delay lớn hơn (3s) để hệ thống AI "làm nguội" sau khi bị 429
+      await new Promise(r => setTimeout(r, 3000));
       return retryFn();
     }
 
