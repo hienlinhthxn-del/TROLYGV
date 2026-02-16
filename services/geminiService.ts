@@ -202,7 +202,18 @@ class GeminiService {
     return 'Env/Default';
   }
 
+  private resetRetryCounters() {
+    this.totalRetryCount = 0;
+    this.modelCycleCount = 0;
+    this.versionRetryCount = 0;
+  }
+
   public async generateText(prompt: string): Promise<string> {
+    this.resetRetryCounters();
+    return this._generateText(prompt);
+  }
+
+  private async _generateText(prompt: string): Promise<string> {
     await this.ensureInitialized();
 
     if (!this.model) {
@@ -214,7 +225,7 @@ class GeminiService {
       const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 5, 2000);
       return result.response.text();
     } catch (error: any) {
-      return this.handleError(error, () => this.generateText(prompt));
+      return this.handleError(error, () => this._generateText(prompt));
     }
   }
 
@@ -308,6 +319,11 @@ class GeminiService {
   }
 
   public async generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
+    this.resetRetryCounters();
+    return this._generateExamQuestionsStructured(prompt, fileParts);
+  }
+
+  private async _generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
     await this.ensureInitialized();
 
     if (!this.model) {
@@ -319,10 +335,6 @@ class GeminiService {
         return { error: e.message || "Lỗi kết nối AI Server" };
       }
     }
-
-    this.totalRetryCount = 0; // Reset counter cho mỗi request mới
-    this.modelCycleCount = 0;
-    this.versionRetryCount = 0;
 
     // Thêm hướng dẫn JSON rõ ràng vào prompt
     const enhancedPrompt = `${prompt}
@@ -384,7 +396,7 @@ CẤU TRÚC JSON BẮT BUỘC:
 
       return this.parseJSONSafely(result.response.text());
     } catch (error: any) {
-      return this.handleError(error, () => this.generateExamQuestionsStructured(prompt, fileParts));
+      return this.handleError(error, () => this._generateExamQuestionsStructured(prompt, fileParts));
     }
   }
 
@@ -499,6 +511,11 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   public async generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise<any> {
+    this.resetRetryCounters();
+    return this._generateQuiz(topic, count, additionalPrompt);
+  }
+
+  private async _generateQuiz(topic: string, count: number = 5, additionalPrompt: string = ''): Promise<any> {
     await this.ensureInitialized();
     this.setStatus("Đang soạn câu hỏi Quiz...");
 
@@ -563,7 +580,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     } catch (error: any) {
       console.error("Lỗi tạo Quiz:", error);
       try {
-        return await this.handleError(error, () => this.generateQuiz(topic, count, additionalPrompt));
+        return await this.handleError(error, () => this._generateQuiz(topic, count, additionalPrompt));
       } catch (finalError) {
         const text = await this.fallbackToOtherProviders(prompt, true);
         return this.parseJSONSafely(text);
