@@ -53,7 +53,7 @@ class GeminiService {
 
   // Rate Limiter - Ngăn chặn lỗi 429 (Too Many Requests)
   private lastRequestTime: number = 0;
-  private readonly MIN_REQUEST_INTERVAL_MS = 1000;
+  private readonly MIN_REQUEST_INTERVAL_MS = 500;
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessingQueue: boolean = false;
 
@@ -494,15 +494,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
         const is429 = this.isRateLimitError(error);
         if (is429) {
-          // Đối với lỗi 429, thử chờ lâu hơn (5-10s) ngay tại đây một lần trước khi bỏ cuộc
-          // Điều này giúp tránh việc chuyển model quá nhanh khi lỗi chỉ là tức thời
-          if (i < 1) { // Chỉ tự retry 429 tại đây 1 lần
-            const retryWait = 5000 + Math.random() * 2000;
-            console.warn(`[429] ⚠️ Rate limit hit. Waiting ${Math.round(retryWait)}ms before internal retry...`);
-            await new Promise(r => setTimeout(r, retryWait));
-            continue; // Thử lại chính request này
-          }
-          // Nếu vẫn bị 429 sau khi đã chờ, hoặc đây không phải lần đầu, throw để handleError đổi model
+          // Fail fast on 429 to trigger model switching in handleError immediately
           throw this.createRateLimitError(error);
         }
 
@@ -519,11 +511,12 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
     console.log("🚀 [Fallback] Calling Server API...");
     try {
-      const result = await generateWithAI({ prompt, provider: 'gemini', model: this.currentModelName || 'gemini-2.0-flash' });
+      // Dùng model ổn định nhất của server
+      const result = await generateWithAI({ prompt, provider: 'gemini', model: 'gemini-1.5-flash' });
       return result.text || '';
     } catch (error: any) {
-      console.error("❌ [Fallback] Error:", error);
-      throw new Error(`Lỗi kết nối AI Server: ${error.message}. Vui lòng kiểm tra API Key trong Cài đặt.`);
+      console.error("❌ [Fallback] Server also failed:", error);
+      throw new Error(`⚠️ HẾT HẠN MỨC (429): Toàn bộ kênh trực tiếp và dự phòng đều đang quá tải. \n\n👉 GIẢI PHÁP: Thầy/Cô vui lòng đợi 1 phút rồi thử lại, hoặc dùng một API Key khác.`);
     }
   }
 
@@ -895,16 +888,19 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       const nextModel = this.getNextModelSkippingRateLimited();
 
-      // Nếu đã thử xoay vòng quá nhiều lần (ví dụ 3 vòng danh sách) mà vẫn lỗi 429
-      if (this.modelCycleCount >= this.availableModels.length * 2) {
+      // Nếu đã thử xoay vòng qua toàn bộ model (1 vòng) mà vẫn lỗi 429
+      if (this.modelCycleCount >= this.availableModels.length) {
         if (originalPrompt) {
-          console.warn("🚨 [GeminiService] All models exhausted. Attempting rescue via Server Fallback...");
+          console.warn("🚨 [GeminiService] Local models exhausted. Attempting rescue via Server Fallback...");
           (window as any).ai_status = "Đang cứu hộ qua Server...";
           try {
             const text = await this.fallbackToOtherProviders(originalPrompt, true);
-            // Kiểm tra xem có cần trả về JSON không dựa trên hàm gọi
             const currentFnStr = retryFn.toString();
-            const needsJson = currentFnStr.includes('Structured') || currentFnStr.includes('Quiz') || currentFnStr.includes('Worksheet');
+            // Nhận diện các hàm cần định dạng JSON
+            const needsJson = currentFnStr.includes('Structured') ||
+              currentFnStr.includes('Quiz') ||
+              currentFnStr.includes('Worksheet') ||
+              currentFnStr.includes('Exam');
 
             return needsJson ? this.parseJSONSafely(text) : text;
           } catch (serverErr) {
@@ -913,7 +909,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
         }
 
         this.resetRetryCounters();
-        throw new Error("⚠️ HẾT HẠN MỨC (429): Google đang chặn toàn bộ Key của Thầy/Cô. \n\n👉 GIẢI PHÁP: Thầy/Cô hãy tạm dừng khoảng 1 phút hoặc thử một API Key khác nhé!");
+        throw new Error("⚠️ TẤT CẢ KÊNH ĐỀU BẬN (429): Google đang tạm khóa các model của Thầy/Cô. \n\n👉 GIẢI PHÁP: Thầy/Cô hãy đợi khoảng 1 phút hoặc thử một API Key từ tài khoản Google khác nhé.");
       }
 
       if (nextModel) {
