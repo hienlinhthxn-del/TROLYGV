@@ -173,6 +173,14 @@ class GeminiService {
   private markCurrentModelRateLimited(): void {
     if (!this.currentModelName) return;
     this.rateLimitedModelsUntil.set(this.currentModelName, Date.now() + GeminiService.RATE_LIMIT_COOLDOWN_MS);
+    (window as any).ai_status = `⚠️ ${this.currentModelName} 429`;
+  }
+
+  private resetRateLimits(): void {
+    console.log("♻️ [GeminiService] Clearing all rate limit cooldowns...");
+    this.rateLimitedModelsUntil.clear();
+    this.rateLimitSwitchCount = 0;
+    this.modelCycleCount = 0;
   }
 
   private getNextModelSkippingRateLimited(): string | null {
@@ -202,9 +210,10 @@ class GeminiService {
       this.genAI = null;
       this.model = null;
       this.chat = null;
-      this.rateLimitedModelsUntil.clear();
+      this.resetRateLimits();
       this.lastUsedKey = currentKey;
       this.initialize();
+      (window as any).ai_status = "Đã cập nhật Key mới";
     }
 
     if (!this.genAI || !this.model) {
@@ -239,11 +248,13 @@ class GeminiService {
     }
 
     try {
+      (window as any).ai_status = `Đang gọi AI (${this.currentModelName})...`;
       // Tăng số lần retry và delay ban đầu để xử lý tốt hơn lỗi 429
       const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 5, 2000);
+      (window as any).ai_status = "Thành công";
       return result.response.text();
     } catch (error: any) {
-      return this.handleError(error, () => this._generateText(prompt));
+      return this.handleError(error, () => this._generateText(prompt), prompt);
     }
   }
 
@@ -419,7 +430,7 @@ CẤU TRÚC JSON BẮT BUỘC:
 
       return this.parseJSONSafely(result.response.text());
     } catch (error: any) {
-      return this.handleError(error, () => this._generateExamQuestionsStructured(prompt, fileParts));
+      return this.handleError(error, () => this._generateExamQuestionsStructured(prompt, fileParts), prompt);
     }
   }
 
@@ -845,10 +856,11 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     return { questions: [], readingPassage: "", title: "Lỗi tạo nội dung", subject: "", error: "AI trả về định dạng không chuẩn. Vui lòng thử lại." };
   }
 
-  private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
+  private async handleError(error: any, retryFn: () => Promise<any>, originalPrompt?: string): Promise<any> {
     const msg = (error.message || "").toLowerCase();
     const status = error.status || 0;
     console.warn("AI Encountered Error:", msg, "Status:", status);
+    (window as any).ai_status = `Lỗi: ${status || 'Request'}`;
 
     this.totalRetryCount++;
     if (this.totalRetryCount > 10) {
@@ -906,6 +918,19 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       const nextModel = this.getNextModelSkippingRateLimited();
       if (!nextModel) {
+        if (originalPrompt) {
+          console.warn("⚠️ All direct AI models exhausted. Attempting Server Fallback...");
+          (window as any).ai_status = "Đang dùng kênh dự phòng Server...";
+          try {
+            const text = await this.fallbackToOtherProviders(originalPrompt, true);
+            return typeof retryFn.name === 'string' && retryFn.name.includes('Structured')
+              ? this.parseJSONSafely(text)
+              : text;
+          } catch (fallbackErr) {
+            console.error("Fallback also failed:", fallbackErr);
+          }
+        }
+
         const soonest = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
         const wait = Math.max(5, Math.ceil(soonest / 1000));
         this.resetRetryCounters();

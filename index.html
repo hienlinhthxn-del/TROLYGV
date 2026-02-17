@@ -84,13 +84,22 @@
         window.addEventListener('load', () => {
             const debugDiv = document.createElement('div');
             debugDiv.id = 'ai-debug-panel';
-            debugDiv.style.cssText = 'position:fixed; bottom:10px; right:10px; background:rgba(0,0,0,0.8); color:#0f0; padding:10px; border-radius:10px; font-size:10px; z-index:9999; font-family:monospace; pointer-events:none; max-width:300px;';
+            debugDiv.style.cssText = 'position:fixed; bottom:10px; right:120px; background:rgba(0,0,0,0.85); color:#0f0; padding:12px; border-radius:12px; font-size:11px; z-index:9999; font-family:monospace; pointer-events:none; border: 1px solid #0f0; line-height:1.4;';
             document.body.appendChild(debugDiv);
 
             setInterval(() => {
-                const key = window.process?.env?.VITE_GEMINI_API_KEY || "Chưa thấy (Check .env)";
+                const manualKey = localStorage.getItem('manually_entered_api_key');
+                const legacyKey = localStorage.getItem('google_api_key');
+                const activeKey = manualKey || legacyKey || "Chưa thiết lập";
+                const source = manualKey ? "🔑 CÁ NHÂN" : (legacyKey ? "💾 LEGACY" : "🌐 MẶC ĐỊNH");
                 const status = window.ai_status || "Chưa gửi yêu cầu";
-                debugDiv.innerHTML = `[DEBUG MODE]<br>API Key: ${key.substring(0, 8)}...<br>Status: ${status}`;
+
+                debugDiv.innerHTML = `
+                    <div style="color:#fff; font-weight:bold; margin-bottom:4px; border-bottom:1px solid #333;">[DEBUG MODE]</div>
+                    Key: ${activeKey.substring(0, 10)}...<br>
+                    Nguồn: <span style="color:#fbbf24">${source}</span><br>
+                    Status: <span style="color:#60a5fa">${status}</span>
+                `;
             }, 1000);
         });
     </script>
