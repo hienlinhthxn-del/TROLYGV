@@ -16,19 +16,21 @@ class GeminiService {
   private currentModelName: string = '';
   private onStatusChange: ((status: string) => void) | null = null;
 
-  // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found"
+  // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found" và "Rate Limit"
   private static readonly MODEL_CANDIDATES = [
-    'gemini-1.5-flash',      // Ổn định nhất và Quota cao nhất cho xử lý file/ảnh
-    'gemini-2.0-flash',      // Mạnh mẽ hơn nhưng dễ bị limit hơn
-    'gemini-2.0-flash-lite', // Thường xuyên bị 429
-    'gemini-1.5-pro',       // Thông minh nhưng Quota rất thấp
+    'gemini-1.5-flash',      // Ổn định nhất và Quota cao nhất
+    'gemini-2.0-flash',      // Mạnh mẽ
+    'gemini-1.5-flash-8b',   // Rất nhanh, thường có quota riêng
+    'gemini-2.0-flash-lite', // Hiệu quả cao
+    'gemini-2.0-flash-exp',  // Bản thử nghiệm (nếu có)
+    'gemini-1.5-pro',        // Thông minh nhưng Quota rất thấp
     'gemini-pro',
   ];
 
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
   private rateLimitedModelsUntil: Map<string, number> = new Map();
-  private static readonly RATE_LIMIT_COOLDOWN_MS = 60_000;
-  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 10;
+  private static readonly RATE_LIMIT_COOLDOWN_MS = 45_000; // Giảm xuống 45s (thường quota reset theo phút)
+  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 15; // Tăng thêm số lần đổi model
 
   private static isPreferredModelFamily(modelName: string): boolean {
     return modelName.startsWith('gemini-');
@@ -479,13 +481,24 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
         return await fn();
       } catch (error: any) {
         lastError = error;
-        if (this.isRateLimitError(error)) {
-          // Fail-fast on rate limit to trigger model switching in handleError
+
+        const is429 = this.isRateLimitError(error);
+        if (is429) {
+          // Đối với lỗi 429, thử chờ lâu hơn (5-10s) ngay tại đây một lần trước khi bỏ cuộc
+          // Điều này giúp tránh việc chuyển model quá nhanh khi lỗi chỉ là tức thời
+          if (i < 1) { // Chỉ tự retry 429 tại đây 1 lần
+            const retryWait = 5000 + Math.random() * 2000;
+            console.warn(`[429] ⚠️ Rate limit hit. Waiting ${Math.round(retryWait)}ms before internal retry...`);
+            await new Promise(r => setTimeout(r, retryWait));
+            continue; // Thử lại chính request này
+          }
+          // Nếu vẫn bị 429 sau khi đã chờ, hoặc đây không phải lần đầu, throw để handleError đổi model
           throw this.createRateLimitError(error);
         }
+
         if (i < retries - 1) {
-          const waitTime = initialDelay * Math.pow(2, i);
-          console.warn(`⚠️ AI Request failed (attempt ${i + 1}/${retries}). Retrying in ${waitTime}ms...`, error.message);
+          const waitTime = initialDelay * Math.pow(2, i) + (Math.random() * 500);
+          console.warn(`⚠️ AI Request failed (attempt ${i + 1}/${retries}). Retrying in ${Math.round(waitTime)}ms...`, error.message);
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
@@ -871,10 +884,10 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       }
 
       this.modelCycleCount++;
-      if (this.modelCycleCount >= this.availableModels.length * 2) {
+      if (this.modelCycleCount >= this.availableModels.length * 3) { // Cho phép xoay vòng nhiều hơn 
         this.resetRetryCounters();
         if (isNetwork) throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.");
+        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI dự phòng (Flash, Pro, Lite) nhưng đều đang quá tải. \n\n👉 LÝ DO: AI của Google giới hạn số lượng yêu cầu mỗi phút cho bản Miễn phí. \n\n👉 GIẢI PHÁP: Thầy/Cô hãy đợi khoảng 1 phút hoặc thử dùng một API Key khác trong phần Cài đặt nhé.");
       }
 
       const nextModel = this.getNextModelSkippingRateLimited();
@@ -882,12 +895,13 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
         const soonest = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
         const wait = Math.max(5, Math.ceil(soonest / 1000));
         this.resetRetryCounters();
-        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${wait} giây rồi thử lại.`);
+        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${wait} giây rồi thử lại. \n\nMẹo: Thử đổi API Key khác nếu Thầy/Cô có nhiều tài khoản Google.`);
       }
 
       this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
       this.setupModel(nextModel, 'v1beta');
-      await new Promise(r => setTimeout(r, 3000));
+      // Tăng thời gian chờ lên 5s để quota kịp reset
+      await new Promise(r => setTimeout(r, 5000));
       return retryFn();
     }
 
