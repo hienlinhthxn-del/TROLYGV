@@ -1220,56 +1220,74 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       console.error("Quiz Upload Error:", error);
 
       const errorMessage = error.message || "Lỗi không xác định";
+      const normalizedError = errorMessage.toLowerCase();
       const isPayloadError = /payload|size|large/i.test(errorMessage);
       const isNetworkError = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(errorMessage);
+      const isQuotaError = /429|quota|resource_exhausted|rate limit|hết lượt|quá tải|bận/i.test(errorMessage);
+      const isPdfInput = pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf';
 
-      // Kịch bản 1: Lỗi do mất kết nối / chặn mạng tới Google AI
+      // Kịch bản 1: Lỗi mạng
       if (isNetworkError) {
-        alert(`⚠️ Không kết nối được tới Google AI(Failed to fetch).
+        alert(`⚠️ Không kết nối được tới Google AI (Failed to fetch).
 
 Chi tiết: ${errorMessage}
 
 ✅ Cách xử lý nhanh:
 - Kiểm tra Internet, VPN, proxy hoặc tường lửa mạng trường học
-  - Tắt extension chặn quảng cáo / chặn script nếu có
-    - Thử tải lại trang và tạo lại quiz sau 1 - 2 phút`);
+- Tắt extension chặn quảng cáo / chặn script nếu có
+- Thử tải lại trang và tạo lại quiz sau 1 - 2 phút`);
       }
-      // Kịch bản 2: Lỗi do dung lượng quá lớn
+      // Kịch bản 2: Lỗi quota/rate-limit
+      else if (isQuotaError) {
+        const hasKey = !!localStorage.getItem('manually_entered_api_key');
+        if (hasKey) {
+          alert(`⚠️ LỖI GIỚI HẠN (429):\n\n${errorMessage}\n\nGoogle giới hạn số lượng yêu cầu miễn phí theo phút/ngày.\n\n👉 GIẢI PHÁP:\n1. Chờ theo thời gian thông báo ở trên rồi thử lại.\n2. Nếu vẫn lỗi sau nhiều lần, hãy thử dùng một API Key khác.`);
+        } else {
+          alert(`⚠️ Hệ thống AI đang quá tải (429 - hết lượt miễn phí chung).\n\nNội dung lỗi: ${errorMessage}\n\n👉 GIẢI PHÁP TỐT NHẤT: Thầy/Cô vào Cài đặt (🔑) và nhập API Key cá nhân để không bị giới hạn chung với người khác.`);
+          try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
+        }
+      }
+      // Kịch bản 3: Lỗi do dung lượng quá lớn
       else if (isPayloadError) {
-        if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.\n\nNguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.\n\n✅ KHUYẾN NGHỊ: Thầy / Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file(thử với 1 - 2 trang) và tải lại.\n\nChuyển đến công cụ "Cắt PDF" ngay ? `)) {
+        if (window.confirm(`⚠️ Lỗi: Đề thi quá lớn để AI xử lý.
+
+Nguyên nhân thường do file PDF có quá nhiều trang hoặc hình ảnh chất lượng quá cao.
+
+✅ KHUYẾN NGHỊ: Thầy / Cô hãy dùng công cụ "Cắt PDF" để chia nhỏ file (thử với 1 - 2 trang) và tải lại.
+
+Chuyển đến công cụ "Cắt PDF" ngay ? `)) {
           setActiveTab('pdf_tools');
           setResult(null);
           setPendingAttachments([]);
         }
       }
-      // Kịch bản 3: Lỗi chung khi tải file PDF (không phải do dung lượng)
-      else if (pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf')) || quizFile?.type === 'application/pdf') {
-        if (window.confirm(`⚠️ Lỗi xử lý PDF: ${errorMessage}\n\nLưu ý: Nếu file PDF dài, AI có thể bị quá tải (429).\n\n✅ GIẢI PHÁP: Thầy/Cô hãy dùng công cụ "Cắt PDF" để lấy khoảng 1 đến 3 trang quan trọng nhất rồi thử lại.`)) {
+      // Kịch bản 4: Lỗi chung khi tải file PDF
+      else if (isPdfInput || pendingAttachments.some(f => f.mimeType?.includes('pdf') || f.name.toLowerCase().endsWith('.pdf'))) {
+        if (window.confirm(`⚠️ Gặp sự cố khi xử lý file PDF: ${errorMessage} 
+
+Lưu ý: Nếu file PDF dài, AI có thể bị quá tải (429).
+
+Thầy / Cô có muốn chuyển sang công cụ "Cắt PDF" để thử lại với một phần của file không ? `)) {
           setActiveTab('pdf_tools');
           setResult(null);
-          setPendingAttachments([]); // Xóa file đang treo để người dùng chọn lại file gốc
+          setPendingAttachments([]);
         }
       } else {
-        // Kịch bản 4: Lỗi chung khác
-        if (errorMessage.includes("hết lượt") || errorMessage.includes("quota") || errorMessage.includes("bận") || errorMessage.includes("429")) {
-          const hasKey = !!localStorage.getItem('manually_entered_api_key');
-          if (hasKey) {
-            alert(`⚠️ API Key cá nhân của Thầy/Cô đã hết hạn mức sử dụng (Quota Exceeded).\n\nGoogle giới hạn số lượng yêu cầu miễn phí mỗi phút/ngày.\n\n👉 GIẢI PHÁP:\n1. Chờ vài phút rồi thử lại.\n2. Tạo một API Key mới từ tài khoản Google khác và cập nhật trong Cài đặt.`);
-          } else {
-            alert(`⚠️ Hệ thống AI đang quá tải (Hết lượt miễn phí chung).\n\n👉 GIẢI PHÁP TỐT NHẤT: Thầy/Cô hãy vào Cài đặt (biểu tượng chìa khóa 🔑) và nhập API Key cá nhân (Miễn phí) để không bị giới hạn chung với người khác.`);
-            try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
-          }
-        } else if (errorMessage.includes("API key not valid") || errorMessage.includes("key invalid") || errorMessage.includes("400")) {
-          alert(`⚠️ API Key không hợp lệ hoặc đã bị vô hiệu hóa.\n\nVui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc nhập Key mới.`);
+        // Kịch bản 5: Lỗi chung khác
+        if (normalizedError.includes("api key not valid") || normalizedError.includes("key invalid") || normalizedError.includes("400")) {
+          alert(`⚠️ API Key không hợp lệ hoặc đã bị vô hiệu hóa.
+
+Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc nhập Key mới.`);
           try { window.dispatchEvent(new Event('openApiSettings')); } catch { }
-        } else if (errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found')) {
+        } else if (errorMessage.includes('404') || normalizedError.includes('not found')) {
           alert("⚠️ Mô hình AI hiện tại không khả dụng (404). Hệ thống đã tự động đặt lại cấu hình. Vui lòng thử lại.");
           localStorage.removeItem('preferred_gemini_model');
           localStorage.removeItem('preferred_gemini_version');
         } else {
-          alert(`Lỗi bóc tách đề: ${errorMessage} `);
+          alert(`⚠️ Lỗi tạo Quiz: ${errorMessage}`);
         }
       }
+
     } finally {
       setIsProcessing(false);
     }

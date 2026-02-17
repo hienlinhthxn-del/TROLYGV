@@ -89,7 +89,7 @@ class GeminiService {
     if (this.genAI) return; // Already initialized
 
     // Đặt model mặc định để dùng cho fallback nếu không có Key
-    this.currentModelName = 'gemini-2.0-flash';
+    this.currentModelName = 'gemini-1.5-flash';
 
     const key = this.getApiKey();
     if (key) {
@@ -497,7 +497,7 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     console.log("🚀 [Fallback] Calling Server API...");
     try {
       const result = await generateWithAI({ prompt, provider: 'gemini', model: this.currentModelName || 'gemini-2.0-flash' });
-      return result.text;
+      return result.text || '';
     } catch (error: any) {
       console.error("❌ [Fallback] Error:", error);
       throw new Error(`Lỗi kết nối AI Server: ${error.message}. Vui lòng kiểm tra API Key trong Cài đặt.`);
@@ -590,17 +590,15 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   public async generateImage(prompt: string): Promise<string> {
-    // Sử dụng Pollinations.ai (đã ổn định hơn) hoặc dịch vụ tương đương
     const enhancedPrompt = `${prompt}, simple cute drawing for kids, educational illustration, high quality, white background`;
 
-    // Thử lại tối đa 3 lần nếu lỗi kết nối
     for (let i = 0; i < 3; i++) {
       const seed = Math.floor(Math.random() * 1000000);
       const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per image
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
 
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
@@ -629,24 +627,21 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
   }
 
   public async generateVideo(prompt: string): Promise<string> {
-    // Sử dụng Pollinations.ai cho ảnh video
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
 
     for (let i = 0; i < 3; i++) {
-      // Thêm tham số ngẫu nhiên để tránh cache
       const seed = Math.floor(Math.random() * 1000000);
       const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
           const blob = await response.blob();
-          // Pollinations có thể trả về video/mp4 hoặc image/jpeg (cho gif)
           if (blob.type.startsWith('video/') || blob.type.startsWith('image/')) {
             return new Promise((resolve, reject) => {
               const reader = new FileReader();
@@ -656,23 +651,22 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
             });
           }
         }
-        // Nếu phản hồi không OK, hoặc blob không phải là video/ảnh, nó sẽ rơi xuống logic thử lại.
         console.warn(`Video gen attempt ${i + 1} failed with status: ${response.status}`);
-        if (i === 2) { // Lần thử cuối cùng thất bại với lỗi từ máy chủ
+        if (i === 2) {
           throw new Error(`Máy chủ tạo video đang quá tải (Lỗi ${response.status}). Thầy/Cô vui lòng thử lại sau giây lát.`);
         }
       } catch (error: any) {
         if (error.name === 'AbortError') console.warn("Video generation timeout reached.");
         console.warn(`Lỗi tạo video lần ${i + 1}:`, error);
-        if (i === 2) { // Lần thử cuối cùng thất bại do lỗi mạng
+        if (i === 2) {
           throw new Error("Không thể kết nối đến dịch vụ tạo video. Vui lòng kiểm tra kết nối mạng.");
         }
       }
-      // Đợi một chút trước khi thử lại
       await new Promise(r => setTimeout(r, 2000));
     }
     throw new Error("Không thể tạo video sau nhiều lần thử. Dịch vụ có thể đang bảo trì.");
   }
+
   public async generateSuggestions(history: any[], personaName: string) {
     await this.ensureInitialized();
     if (!this.genAI) return ["Hãy kể cho tôi nghe thêm về chủ đề này", "Tôi nên bắt đầu từ đâu?", "Bạn có thể ví dụ không?"];
@@ -684,18 +678,12 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     }
   }
 
-  // --- TIỆN ÍCH ---
-
   /* --- XỬ LÝ JSON AN TOÀN --- */
 
   public parseJSONSafely(text: string): any {
-    // 1. Dọn dẹp sơ bộ: xóa markdown blocks
     let cleaned = text.replace(/^\uFEFF/, '').trim();
-
-    // Xử lý Smart Quotes (dấu ngoặc kép cong do lỗi font/bộ gõ)
     cleaned = cleaned.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
 
-    // Regex bắt nội dung trong code block, ưu tiên ```json
     const jsonBlockMatch = cleaned.match(/```(?:json)\s*([\s\S]*?)```/i);
     if (jsonBlockMatch) {
       cleaned = jsonBlockMatch[1].trim();
@@ -706,33 +694,22 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       }
     }
 
-    // Xử lý trường hợp JSON bị bao bởi ngoặc đơn (JSONP style)
     if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
       cleaned = cleaned.slice(1, -1).trim();
     }
 
-    // 2. Hàm cứu hộ JSON bị cắt ngang (Truncated)
     const rescueTruncated = (str: string): string => {
       let r = str.trim();
-
-      // Tìm điểm bắt đầu của JSON (Object hoặc Array)
       const startBrace = r.indexOf('{');
       const startBracket = r.indexOf('[');
       let startIdx = -1;
 
-      if (startBrace !== -1 && startBracket !== -1) {
-        startIdx = Math.min(startBrace, startBracket);
-      } else if (startBrace !== -1) {
-        startIdx = startBrace;
-      } else if (startBracket !== -1) {
-        startIdx = startBracket;
-      }
+      if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
+      else if (startBrace !== -1) startIdx = startBrace;
+      else if (startBracket !== -1) startIdx = startBracket;
 
-      if (startIdx !== -1) {
-        r = r.substring(startIdx);
-      } else {
-        return ""; // Không tìm thấy JSON
-      }
+      if (startIdx !== -1) r = r.substring(startIdx);
+      else return "";
 
       let braces = 0;
       let brackets = 0;
@@ -741,97 +718,53 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
       for (let i = 0; i < r.length; i++) {
         const char = r[i];
-
         if (inString) {
           if (char === '\\') {
             output += char;
-            if (i + 1 < r.length) {
-              output += r[i + 1];
-              i++;
-            }
+            if (i + 1 < r.length) { output += r[i + 1]; i++; }
             continue;
           }
-          if (char === '"') {
-            inString = false;
-          }
+          if (char === '"') inString = false;
           output += char;
           continue;
         }
-
-        // Not in string
-        if (char === '"') {
-          inString = true;
-          output += char;
-          continue;
-        }
-
+        if (char === '"') { inString = true; output += char; continue; }
         if (char === '{') braces++;
         else if (char === '}') braces--;
         else if (char === '[') brackets++;
         else if (char === ']') brackets--;
-
         output += char;
-
-        // Nếu đã đóng hết ngoặc và có nội dung, dừng lại (bỏ qua phần rác phía sau)
-        if (braces === 0 && brackets === 0 && (char === '}' || char === ']')) {
-          return output;
-        }
+        if (braces === 0 && brackets === 0 && (char === '}' || char === ']')) return output;
       }
-
-      // Nếu chạy hết chuỗi mà vẫn chưa đóng ngoặc (JSON bị cắt cụt)
       let final = output.trim();
-
-      // Xử lý lỗi cắt cụt giữa chừng
       if (final.endsWith('\\')) final = final.slice(0, -1);
       if (final.endsWith(',')) final = final.slice(0, -1);
-
-      // Nếu đang trong chuỗi, đóng chuỗi
       if (inString) final += '"';
-
-      // Đóng các ngoặc còn thiếu
       while (brackets > 0) { final += ']'; brackets--; }
       while (braces > 0) { final += '}'; braces--; }
-
       return final;
     };
 
-    // 3. Hàm sửa lỗi ký tự điều khiển và trailing commas
     const fixCommonErrors = (str: string): string => {
       let s = str;
-
-      // Xóa comments (//... hoặc /*...*/) nhưng bảo vệ chuỗi
-      s = s.replace(/("(?:\\[\s\S]|[^"\\])*")|(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, (match, group1) => {
-        return group1 ? match : "";
-      });
-
-      // Xóa trailing commas (dấu phẩy thừa trước dấu đóng ngoặc)
+      s = s.replace(/("(?:\\[\s\S]|[^"\\])*")|(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, (match, group1) => group1 ? match : "");
       s = s.replace(/,\s*([\]}])/g, '$1');
-
-      // Sửa ký tự điều khiển
       s = s.replace(/[\u0000-\u001F]+/g, (match) => {
         const charCodes: Record<number, string> = { 10: "\\n", 13: "\\r", 9: "\\t" };
         let res = "";
-        for (let i = 0; i < match.length; i++) {
-          res += charCodes[match.charCodeAt(i)] || "";
-        }
+        for (let i = 0; i < match.length; i++) res += charCodes[match.charCodeAt(i)] || "";
         return res;
       });
-
       return s;
     };
 
-    // 5. Hàm sửa lỗi single quotes (Fallback)
     const fixSingleQuotes = (str: string): string => {
-      // Thay thế 'key': thành "key":
       let s = str.replace(/'((?:\\.|[^'])*)'\s*:/g, '"$1":');
-      // Thay thế : 'value' thành : "value"
       s = s.replace(/:\s*'((?:\\.|[^'])*)'/g, ': "$1"');
       return s;
     };
 
-    // 5.1. Sửa key không có ngoặc kép: {questions:[...]} => {"questions":[...]}
     const fixUnquotedKeys = (str: string): string => {
-      // FIX: Bỏ dấu cách trong regex để tránh lỗi ReDoS (Treo App) khi chuỗi quá dài
       return str.replace(/([\{,]\s*)([A-Za-z_$][\w$\-]*)(\s*:)/g, (_, prefix, key, suffix) => {
         const normalizedKey = String(key).trim();
         if (/^(true|false|null)$/i.test(normalizedKey)) return `${prefix}${normalizedKey}${suffix}`;
@@ -839,77 +772,39 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
       });
     };
 
-    // 5.2. Chuẩn hóa literal kiểu Python thường bị AI trả về: True/False/None
     const fixNonJsonLiterals = (str: string): string => {
-      return str
-        .replace(/\bNone\b/g, 'null')
-        .replace(/\bTrue\b/g, 'true')
-        .replace(/\bFalse\b/g, 'false');
+      return str.replace(/\bNone\b/g, 'null').replace(/\bTrue\b/g, 'true').replace(/\bFalse\b/g, 'false');
     };
 
-    // 6. Hàm sửa lỗi thiếu dấu phẩy (Missing Commas) - Thường gặp khi list quá dài
     const fixMissingCommas = (str: string): string => {
-      let s = str.replace(/}\s*[\r\n]+\s*{/g, '},{'); // Giữa các object
+      let s = str.replace(/}\s*[\r\n]+\s*{/g, '},{');
       s = s.replace(/}\s*{/g, '},{');
       return s;
     };
 
-    // 4. Chiến lược Parse
-    // CHIẾN THUẬT QUÉT ĐA TẦNG: Thử tìm JSON ở nhiều vị trí khác nhau
     let currentText = cleaned;
     const maxAttempts = 3;
-
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const rescued = rescueTruncated(currentText);
       if (!rescued) break;
-
-      try {
-        return JSON.parse(rescued);
-      } catch (e1) {
-        try {
-          return JSON.parse(fixCommonErrors(rescued));
-        } catch (e2) {
+      try { return JSON.parse(rescued); } catch (e1) {
+        try { return JSON.parse(fixCommonErrors(rescued)); } catch (e2) {
           try {
             const superFix = rescued.replace(/\\(?!["\\\/bfnrtu])/g, '\\\\');
             return JSON.parse(fixCommonErrors(superFix));
           } catch (e3) {
-            try {
-              const singleQuoteFix = fixSingleQuotes(rescued);
-              return JSON.parse(fixCommonErrors(singleQuoteFix));
-            } catch (e4) {
-              try {
-                // Cấp cứu 5: Sửa lỗi thiếu dấu phẩy
-                const commaFix = fixMissingCommas(rescued);
-                return JSON.parse(fixCommonErrors(commaFix));
-              } catch (e5) {
-                try {
-                  // Cấp cứu 6: Sửa object literal gần giống JS/Python
-                  const literalFix = fixNonJsonLiterals(fixUnquotedKeys(fixSingleQuotes(rescued)));
-                  return JSON.parse(fixCommonErrors(literalFix));
-                } catch (e6) {
-                  // Cấp cứu 7: Nếu object ngoài cùng lỗi, thử tìm mảng bên trong (thường là questions)
+            try { return JSON.parse(fixCommonErrors(fixSingleQuotes(rescued))); } catch (e4) {
+              try { return JSON.parse(fixCommonErrors(fixMissingCommas(rescued))); } catch (e5) {
+                try { return JSON.parse(fixCommonErrors(fixNonJsonLiterals(fixUnquotedKeys(fixSingleQuotes(rescued))))); } catch (e6) {
                   const arrayMatch = rescued.match(/\[\s*\{[\s\S]*\}\s*\]/);
-                  if (arrayMatch) {
-                    try {
-                      return JSON.parse(fixCommonErrors(arrayMatch[0]));
-                    } catch (e7) { }
-                  }
-
-                  // Nếu thất bại, thử tìm JSON ở vị trí tiếp theo trong chuỗi
+                  if (arrayMatch) { try { return JSON.parse(fixCommonErrors(arrayMatch[0])); } catch (e7) { } }
                   const startBrace = currentText.indexOf('{');
                   const startBracket = currentText.indexOf('[');
-                  let startIdx = -1;
-                  if (startBrace !== -1 && startBracket !== -1) startIdx = Math.min(startBrace, startBracket);
-                  else if (startBrace !== -1) startIdx = startBrace;
-                  else if (startBracket !== -1) startIdx = startBracket;
-
-                  if (startIdx !== -1) {
-                    // Bỏ qua ký tự bắt đầu hiện tại để tìm cái tiếp theo
-                    currentText = currentText.substring(startIdx + 1);
-                    continue;
-                  } else {
-                    break;
-                  }
+                  let nIdx = -1;
+                  if (startBrace !== -1 && startBracket !== -1) nIdx = Math.min(startBrace, startBracket);
+                  else if (startBrace !== -1) nIdx = startBrace;
+                  else if (startBracket !== -1) nIdx = startBracket;
+                  if (nIdx !== -1) { currentText = currentText.substring(nIdx + 1); continue; } else break;
                 }
               }
             }
@@ -919,34 +814,15 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     }
 
     console.error("JSON Rescue Failed Final.", { original: text });
-
-    // FALLBACK: Trả về object mặc định thay vì throw error
-    console.warn("Returning default empty structure due to JSON parse failure");
-
-    // Thử phát hiện xem có phải là mảng hay object
-    const trimmed = text.trim();
-    if (trimmed.startsWith('[')) {
-      // Nếu AI cố gắng trả về mảng, trả về mảng rỗng
-      return [];
-    }
-
-    // Mặc định trả về object với questions rỗng
-    return {
-      questions: [],
-      readingPassage: "",
-      title: "Lỗi tạo nội dung",
-      subject: "",
-      error: "AI trả về định dạng không chuẩn. Vui lòng thử lại."
-    };
+    if (text.trim().startsWith('[')) return [];
+    return { questions: [], readingPassage: "", title: "Lỗi tạo nội dung", subject: "", error: "AI trả về định dạng không chuẩn. Vui lòng thử lại." };
   }
-
 
   private async handleError(error: any, retryFn: () => Promise<any>): Promise<any> {
     const msg = (error.message || "").toLowerCase();
     const status = error.status || 0;
     console.warn("AI Encountered Error:", msg, "Status:", status);
 
-    // NGĂN VÒNG LẶP VÔ HẠN: Kiểm tra tổng số lần retry
     this.totalRetryCount++;
     if (this.totalRetryCount > 10) {
       this.totalRetryCount = 0;
@@ -955,110 +831,67 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
     // Xử lý lỗi 404, 400, 403 hoặc Model Not Found
     if (msg.includes("404") || msg.includes("not found") || msg.includes("400") || msg.includes("403") || msg.includes("permission") || msg.includes("key not valid") || msg.includes("payload")) {
-
-      // Nếu model hiện tại bị lỗi, xóa khỏi bộ nhớ đệm để lần sau không tự động chọn lại
       localStorage.removeItem('preferred_gemini_model');
-
       const isModelNotFound = msg.includes("404") || msg.includes("not found");
 
-      // Thử đổi version API (v1 <-> v1beta), nhưng bỏ qua nếu lỗi là do model không tồn tại (404).
       if (!isModelNotFound && this.versionRetryCount < 1) {
         this.versionRetryCount++;
-        const newVersion = this.currentVersion === 'v1beta' ? 'v1' : 'v1beta';
-        this.setStatus(`Thử kênh ${newVersion} cho ${this.currentModelName}...`);
-        console.warn(`Version switch: ${this.currentVersion} -> ${newVersion} for ${this.currentModelName}`);
-        this.setupModel(this.currentModelName, newVersion);
+        const nVersion = this.currentVersion === 'v1beta' ? 'v1' : 'v1beta';
+        this.setStatus(`Thử kênh ${nVersion} cho ${this.currentModelName}...`);
+        this.setupModel(this.currentModelName, nVersion);
         return retryFn();
       }
 
-      // Nếu đổi version vẫn lỗi, hoặc model không tồn tại, chuyển sang model tiếp theo.
       this.versionRetryCount = 0;
-      const currentIdx = this.availableModels.indexOf(this.currentModelName);
-      const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
-      const nextIdx = (safeCurrentIdx + 1) % this.availableModels.length;
+      const cIdx = this.availableModels.indexOf(this.currentModelName);
+      const nIdx = ((cIdx >= 0 ? cIdx : 0) + 1) % this.availableModels.length;
 
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length) {
-        this.modelCycleCount = 0;
-        this.totalRetryCount = 0;
+        this.resetRetryCounters();
         throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
       }
 
-      this.setStatus(`Thử đường truyền ${this.availableModels[nextIdx]}...`);
-      console.log(`Model switch: ${this.currentModelName} -> ${this.availableModels[nextIdx]}`);
-      this.setupModel(this.availableModels[nextIdx], 'v1beta');
+      this.setStatus(`Thử đường truyền ${this.availableModels[nIdx]}...`);
+      this.setupModel(this.availableModels[nIdx], 'v1beta');
       this.retryAttempt = 0;
       return retryFn();
     }
 
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota)
-    if (
-      msg.includes("429") ||
-      msg.includes("quota") ||
-      msg.includes("limit") ||
-      msg.includes("overloaded") ||
-      msg.includes("busy") ||
-      msg.includes("503") ||
-      msg.includes("500") ||
-      msg.includes("failed to fetch") ||
-      msg.includes("network") ||
-      msg.includes("quá tải") ||
-      msg.includes("rate_limit")
-    ) {
-      const isNetworkIssue = msg.includes("fetch") || msg.includes("network");
-
-      // Nếu gặp lỗi Quota (429), chuyển model NGAY LẬP TỨC (Fail-Fast Strategy)
-      // Không cần chờ đợi vì Free Tier của Google thường khóa cả phút.
+    if (this.isRateLimitError(error) || msg.includes("quá tải") || msg.includes("rate_limit")) {
+      const isNetwork = msg.includes("fetch") || msg.includes("network");
       this.markCurrentModelRateLimited();
-
-      this.retryAttempt = 0;
-      this.versionRetryCount = 0;
       this.rateLimitSwitchCount++;
 
       if (this.rateLimitSwitchCount > GeminiService.MAX_RATE_LIMIT_SWITCHES_PER_REQUEST) {
-        this.rateLimitSwitchCount = 0;
-        this.modelCycleCount = 0;
-        this.totalRetryCount = 0;
-        if (isNetworkIssue) {
-          throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-        }
+        this.resetRetryCounters();
+        if (isNetwork) throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
         throw new Error("⚠️ API Gemini đang giới hạn tạm thời (429). Hệ thống đã thử đổi model nhưng vẫn quá tải. Vui lòng đợi 60 giây rồi thử lại để tránh bị chặn thêm.");
       }
 
       this.modelCycleCount++;
-      if (this.modelCycleCount >= this.availableModels.length * 2) { // Cho phép lặp lại 2 vòng để chắc chắn
-        this.modelCycleCount = 0;
-        this.totalRetryCount = 0;
-        this.rateLimitSwitchCount = 0;
-        if (isNetworkIssue) {
-          throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-        }
-        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.\n\n👉 GIẢI PHÁP:\n1. Đợi khoảng 1-2 phút rồi thử lại.\n2. Nếu vẫn lỗi, hãy thử dùng một tài khoản Google khác để tạo API Key mới.");
+      if (this.modelCycleCount >= this.availableModels.length * 2) {
+        this.resetRetryCounters();
+        if (isNetwork) throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
+        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI nhưng đều không phản hồi. \n\n👉 LÝ DO: Có thể Key của Thầy/Cô là bản Miễn phí (Free) nên bị giới hạn tốc độ (RPM) hoặc giới hạn dung lượng hàng ngày.");
       }
 
       const nextModel = this.getNextModelSkippingRateLimited();
       if (!nextModel) {
-        const soonestReadyMs = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
-        const waitSeconds = Math.max(5, Math.ceil(soonestReadyMs / 1000));
-        this.modelCycleCount = 0;
-        this.totalRetryCount = 0;
-        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${waitSeconds} giây rồi thử lại.`);
+        const soonest = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
+        const wait = Math.max(5, Math.ceil(soonest / 1000));
+        this.resetRetryCounters();
+        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${wait} giây rồi thử lại.`);
       }
 
       this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
-      console.warn(`[Auto-Switch] ${this.currentModelName} (429) -> ${nextModel}`);
-
       this.setupModel(nextModel, 'v1beta');
-
-      // Thêm một chút delay lớn hơn (3s) để hệ thống AI "làm nguội" sau khi bị 429
       await new Promise(r => setTimeout(r, 3000));
       return retryFn();
     }
 
-    // Reset counters và throw error cho các lỗi khác
-    this.retryAttempt = 0;
-    this.versionRetryCount = 0;
-    this.totalRetryCount = 0;
+    this.resetRetryCounters();
     throw error;
   }
 }
