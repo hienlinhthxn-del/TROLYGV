@@ -14,6 +14,7 @@ class GeminiService {
   private model: GenerativeModel | null = null;
   private chat: ChatSession | null = null;
   private currentModelName: string = '';
+  private lastUsedKey: string | null = null;
   private onStatusChange: ((status: string) => void) | null = null;
 
   // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found" và "Rate Limit"
@@ -90,10 +91,9 @@ class GeminiService {
   private initialize() {
     if (this.genAI) return; // Already initialized
 
-    // Đặt model mặc định để dùng cho fallback nếu không có Key
-    this.currentModelName = 'gemini-1.5-flash';
-
     const key = this.getApiKey();
+    this.lastUsedKey = key;
+
     if (key) {
       try {
         this.genAI = new GoogleGenerativeAI(key);
@@ -101,7 +101,7 @@ class GeminiService {
         const preferredModel = localStorage.getItem('preferred_gemini_model');
         const startModel = (preferredModel && this.availableModels.includes(preferredModel)) ? preferredModel : this.availableModels[0];
         this.setupModel(startModel, 'v1beta');
-        console.log("AI Assistant: API Key detected and active.");
+        console.log("AI Assistant: API Key detected and active. Source:", this.getApiKeySource());
       } catch (e: any) {
         this.genAI = null;
         this.setStatus("LỖI: API Key không hợp lệ");
@@ -129,13 +129,15 @@ class GeminiService {
         .filter((name: string) => GeminiService.isPreferredModelFamily(name))
         .filter((name: string) => GeminiService.isTextGenerationModel(name));
 
-      if (!listedModels.length) return;
+      if (!listedModels.length) {
+        console.warn('No Gemini models found for this key. Key might be restricted.');
+        return;
+      }
 
       const prioritized = GeminiService.MODEL_CANDIDATES.filter(m => listedModels.includes(m));
-      // Chỉ giữ nhóm model ổn định đã whitelist sẵn để tránh quét hàng loạt model mới
-      // (ví dụ 2.5/001) gây spam request và dễ chạm 429 liên tiếp.
-      this.availableModels = prioritized.length ? prioritized : [...GeminiService.MODEL_CANDIDATES];
-      console.log('AI available models:', this.availableModels);
+      // Kết hợp cả danh sách whitelist và danh sách thực tế từ API để tăng độ bao phủ
+      this.availableModels = prioritized.length ? prioritized : listedModels.slice(0, 5);
+      console.log('AI available models updated:', this.availableModels, 'Found in API:', listedModels);
 
       const preferredModel = localStorage.getItem('preferred_gemini_model');
       if (preferredModel && !this.availableModels.includes(preferredModel)) {
@@ -192,9 +194,21 @@ class GeminiService {
   }
 
   private async ensureInitialized() {
+    const currentKey = this.getApiKey();
+
+    // Tự động nhận diện nếu Thầy/Cô đổi Key trong Cài đặt mà không cần F5
+    if (currentKey !== this.lastUsedKey) {
+      console.log("🔄 Detecting API Key change, re-initializing AI service...");
+      this.genAI = null;
+      this.model = null;
+      this.chat = null;
+      this.rateLimitedModelsUntil.clear();
+      this.lastUsedKey = currentKey;
+      this.initialize();
+    }
+
     if (!this.genAI || !this.model) {
       this.initialize();
-      // Không throw lỗi ở đây nữa để cho phép fallback sang Server API
     }
   }
 
