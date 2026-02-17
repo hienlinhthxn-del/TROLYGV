@@ -29,9 +29,7 @@ class GeminiService {
   ];
 
   private availableModels: string[] = [...GeminiService.MODEL_CANDIDATES];
-  private rateLimitedModelsUntil: Map<string, number> = new Map();
-  private static readonly RATE_LIMIT_COOLDOWN_MS = 45_000; // Giảm xuống 45s (thường quota reset theo phút)
-  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 15; // Tăng thêm số lần đổi model
+  private static readonly MAX_RATE_LIMIT_SWITCHES_PER_REQUEST = 20;
 
   private static isPreferredModelFamily(modelName: string): boolean {
     return modelName.startsWith('gemini-');
@@ -172,33 +170,20 @@ class GeminiService {
 
   private markCurrentModelRateLimited(): void {
     if (!this.currentModelName) return;
-    this.rateLimitedModelsUntil.set(this.currentModelName, Date.now() + GeminiService.RATE_LIMIT_COOLDOWN_MS);
-    (window as any).ai_status = `⚠️ ${this.currentModelName} 429`;
+    (window as any).ai_status = `⚠️ ${this.currentModelName} 429 (Đang chuyển...)`;
   }
 
   private resetRateLimits(): void {
-    console.log("♻️ [GeminiService] Clearing all rate limit cooldowns...");
-    this.rateLimitedModelsUntil.clear();
+    console.log("♻️ [GeminiService] Resetting AI switch counters...");
     this.rateLimitSwitchCount = 0;
     this.modelCycleCount = 0;
   }
 
   private getNextModelSkippingRateLimited(): string | null {
     if (!this.availableModels.length) return null;
-    const now = Date.now();
     const currentIdx = this.availableModels.indexOf(this.currentModelName);
-    const safeCurrentIdx = currentIdx >= 0 ? currentIdx : 0;
-
-    for (let offset = 1; offset <= this.availableModels.length; offset++) {
-      const idx = (safeCurrentIdx + offset) % this.availableModels.length;
-      const candidate = this.availableModels[idx];
-      const cooldownUntil = this.rateLimitedModelsUntil.get(candidate) || 0;
-      if (cooldownUntil <= now) {
-        return candidate;
-      }
-    }
-
-    return null;
+    const nextIdx = (currentIdx + 1) % this.availableModels.length;
+    return this.availableModels[nextIdx];
   }
 
   private async ensureInitialized() {
@@ -899,49 +884,47 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
 
     // Xử lý lỗi 429 (Giới hạn tốc độ/Quota)
     if (this.isRateLimitError(error) || msg.includes("quá tải") || msg.includes("rate_limit")) {
-      const isNetwork = msg.includes("fetch") || msg.includes("network");
       this.markCurrentModelRateLimited();
       this.rateLimitSwitchCount++;
-
-      if (this.rateLimitSwitchCount > GeminiService.MAX_RATE_LIMIT_SWITCHES_PER_REQUEST) {
-        this.resetRetryCounters();
-        if (isNetwork) throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-        throw new Error("⚠️ API Gemini đang giới hạn tạm thời (429). Hệ thống đã thử đổi model nhưng vẫn quá tải. Vui lòng đợi 60 giây rồi thử lại để tránh bị chặn thêm.");
-      }
-
       this.modelCycleCount++;
-      if (this.modelCycleCount >= this.availableModels.length * 3) { // Cho phép xoay vòng nhiều hơn 
-        this.resetRetryCounters();
-        if (isNetwork) throw new Error("Kết nối AI bị lỗi. Hãy kiểm tra Internet hoặc VPN.");
-        throw new Error("⚠️ HẾT HẠN MỨC (429): Đã thử tất cả các dòng AI dự phòng (Flash, Pro, Lite) nhưng đều đang quá tải. \n\n👉 LÝ DO: AI của Google giới hạn số lượng yêu cầu mỗi phút cho bản Miễn phí. \n\n👉 GIẢI PHÁP: Thầy/Cô hãy đợi khoảng 1 phút hoặc thử dùng một API Key khác trong phần Cài đặt nhé.");
+
+      // Ngăn chặn vòng lặp vô tận nếu có lỗi logic
+      if (this.rateLimitSwitchCount > 30) {
+        throw new Error("Hệ thống AI đang gặp sự cố kết nối liên tục. Vui lòng thử lại sau 1 phút.");
       }
 
       const nextModel = this.getNextModelSkippingRateLimited();
-      if (!nextModel) {
+
+      // Nếu đã thử xoay vòng quá nhiều lần (ví dụ 3 vòng danh sách) mà vẫn lỗi 429
+      if (this.modelCycleCount >= this.availableModels.length * 2) {
         if (originalPrompt) {
-          console.warn("⚠️ All direct AI models exhausted. Attempting Server Fallback...");
-          (window as any).ai_status = "Đang dùng kênh dự phòng Server...";
+          console.warn("🚨 [GeminiService] All models exhausted. Attempting rescue via Server Fallback...");
+          (window as any).ai_status = "Đang cứu hộ qua Server...";
           try {
             const text = await this.fallbackToOtherProviders(originalPrompt, true);
-            return typeof retryFn.name === 'string' && retryFn.name.includes('Structured')
-              ? this.parseJSONSafely(text)
-              : text;
-          } catch (fallbackErr) {
-            console.error("Fallback also failed:", fallbackErr);
+            // Kiểm tra xem có cần trả về JSON không dựa trên hàm gọi
+            const currentFnStr = retryFn.toString();
+            const needsJson = currentFnStr.includes('Structured') || currentFnStr.includes('Quiz') || currentFnStr.includes('Worksheet');
+
+            return needsJson ? this.parseJSONSafely(text) : text;
+          } catch (serverErr) {
+            console.error("Rescue failed:", serverErr);
           }
         }
 
-        const soonest = Math.min(...Array.from(this.rateLimitedModelsUntil.values())) - Date.now();
-        const wait = Math.max(5, Math.ceil(soonest / 1000));
         this.resetRetryCounters();
-        throw new Error(`⚠️ Toàn bộ kênh AI hiện đang bị giới hạn tạm thời (429). Vui lòng đợi khoảng ${wait} giây rồi thử lại. \n\nMẹo: Thử đổi API Key khác nếu Thầy/Cô có nhiều tài khoản Google.`);
+        throw new Error("⚠️ HẾT HẠN MỨC (429): Google đang chặn toàn bộ Key của Thầy/Cô. \n\n👉 GIẢI PHÁP: Thầy/Cô hãy tạm dừng khoảng 1 phút hoặc thử một API Key khác nhé!");
       }
 
-      this.setStatus(`Đường truyền ${this.currentModelName} quá tải (429), đang chuyển sang ${nextModel}...`);
-      this.setupModel(nextModel, 'v1beta');
-      // Tăng thời gian chờ lên 5s để quota kịp reset
-      await new Promise(r => setTimeout(r, 5000));
-      return retryFn();
+      if (nextModel) {
+        this.setStatus(`🔄 Đang chuyển sang ${nextModel}...`);
+        this.setupModel(nextModel, 'v1beta');
+
+        // Chờ nhẹ 1-2s để quota kịp nhả
+        const wait = 1000 + Math.random() * 1000;
+        await new Promise(r => setTimeout(r, wait));
+        return retryFn();
+      }
     }
 
     this.resetRetryCounters();
