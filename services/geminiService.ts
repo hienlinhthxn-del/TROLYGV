@@ -56,6 +56,7 @@ class GeminiService {
   private readonly MIN_REQUEST_INTERVAL_MS = 500;
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessingQueue: boolean = false;
+  private rateLimitedModels: Set<string> = new Set();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -121,25 +122,49 @@ class GeminiService {
 
       const data = await response.json();
       const listedModels = (data.models || [])
-        .filter((m: any) => m?.supportedGenerationMethods?.includes('generateContent'))
-        .map((m: any) => (m?.name || '').replace('models/', ''))
-        .filter((name: string) => Boolean(name))
-        .filter((name: string) => GeminiService.isPreferredModelFamily(name))
-        .filter((name: string) => GeminiService.isTextGenerationModel(name));
+        .filter((m: any) => {
+          const methods = m?.supportedGenerationMethods || [];
+          const name = m?.name || '';
+          const hasMethod = methods.includes('generateContent');
+          const isGemini = name.includes('models/gemini-');
+          const isText = !['image', 'tts', 'robotics', 'computer-use', 'embedding'].some(t => name.includes(t));
+
+          if (!hasMethod || !isGemini || !isText) {
+            console.debug(`[AI Discovery] Skipping model: ${name} (Method: ${hasMethod}, Gemini: ${isGemini}, Text: ${isText})`);
+            return false;
+          }
+          return true;
+        })
+        .map((m: any) => (m?.name || '').replace('models/', ''));
 
       if (!listedModels.length) {
-        console.warn('No Gemini models found for this key. Key might be restricted.');
+        console.warn('No Gemini models found for this key. API returned:', data.models?.length || 0, 'models');
         return;
       }
 
+      // Ưu tiên các model trong danh sách CANDIDATES nhưng vẫn lấy toàn bộ model từ API
       const prioritized = GeminiService.MODEL_CANDIDATES.filter(m => listedModels.includes(m));
-      // Kết hợp cả danh sách whitelist và danh sách thực tế từ API để tăng độ bao phủ
-      this.availableModels = prioritized.length ? prioritized : listedModels.slice(0, 5);
-      console.log('AI available models updated:', this.availableModels, 'Found in API:', listedModels);
+      const others = listedModels.filter(m => !GeminiService.MODEL_CANDIDATES.includes(m));
+
+      this.availableModels = [...new Set([...prioritized, ...others])];
+      console.log('🚀 [AI Discovery] Available models (Total:', this.availableModels.length, '):', this.availableModels);
 
       const preferredModel = localStorage.getItem('preferred_gemini_model');
       if (preferredModel && !this.availableModels.includes(preferredModel)) {
-        localStorage.removeItem('preferred_gemini_model');
+        this.setupModel(this.availableModels[0], 'v1beta');
+      }
+
+      // Tự động gỡ nhãn rate limit sau mỗi 5 phút
+      if (!(window as any)._ai_cleanup_set) {
+        setInterval(() => {
+          if (this.rateLimitedModels.size > 0) {
+            console.log('🧹 [AI Service] Periodic cleanup: Resetting rate limit flags...');
+            this.rateLimitedModels.clear();
+            this.rateLimitSwitchCount = 0;
+            this.modelCycleCount = 0;
+          }
+        }, 300000); // 5 phút
+        (window as any)._ai_cleanup_set = true;
       }
     } catch (e) {
       // Không chặn luồng chính nếu API list model lỗi
@@ -170,6 +195,7 @@ class GeminiService {
 
   private markCurrentModelRateLimited(): void {
     if (!this.currentModelName) return;
+    this.rateLimitedModels.add(this.currentModelName);
     (window as any).ai_status = `⚠️ ${this.currentModelName} 429 (Đang chuyển...)`;
   }
 
@@ -177,11 +203,23 @@ class GeminiService {
     console.log("♻️ [GeminiService] Resetting AI switch counters...");
     this.rateLimitSwitchCount = 0;
     this.modelCycleCount = 0;
+    this.rateLimitedModels.clear();
   }
 
   private getNextModelSkippingRateLimited(): string | null {
     if (!this.availableModels.length) return null;
+
     const currentIdx = this.availableModels.indexOf(this.currentModelName);
+    for (let i = 1; i <= this.availableModels.length; i++) {
+      const nextIdx = (currentIdx + i) % this.availableModels.length;
+      const modelName = this.availableModels[nextIdx];
+
+      if (!this.rateLimitedModels.has(modelName)) {
+        return modelName;
+      }
+    }
+
+    // Nếu tất cả đều bị rate limit, trả về cái tiếp theo dù sao đi nữa (last resort)
     const nextIdx = (currentIdx + 1) % this.availableModels.length;
     return this.availableModels[nextIdx];
   }
