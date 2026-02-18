@@ -2539,8 +2539,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       </div>
                       <div className="mt-8 flex flex-col items-center space-y-3">
                         <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px - 8 py - 4 rounded - 2xl text - [10px] font - black uppercase tracking - widest shadow - xl active: scale - 95 transition - all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'} `}>
-                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr - 2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
+                          <button onClick={handlePlayWithVoiceover} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
+                            <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
                           <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
                             <i className="fas fa-download mr-2"></i>Tải Ảnh nền
