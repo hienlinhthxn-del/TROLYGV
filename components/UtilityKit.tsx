@@ -210,7 +210,7 @@ const QuizPlayer: React.FC<{
   };
 
   useEffect(() => {
-    if (showScore || selectedOption) return;
+    if (showScore || selectedOption || isBatchEditing) return;
 
     if (timeLeft === 0) {
       handleAnswerClick('TIMEOUT', -1);
@@ -222,7 +222,7 @@ const QuizPlayer: React.FC<{
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, showScore, selectedOption]);
+  }, [timeLeft, showScore, selectedOption, isBatchEditing]);
 
   const restartQuiz = () => {
     setCurrentIndex(0);
