@@ -158,12 +158,11 @@ const QuizPlayer: React.FC<{
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [timeLeft, setTimeLeft] = useState(15);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<any>(null);
+  const [isBatchEditing, setIsBatchEditing] = useState(false);
 
   useEffect(() => {
     setTimeLeft(15);
-    setIsEditing(false); // Reset edit mode when changing question
+    setIsBatchEditing(false); // Reset edit mode when changing question
   }, [currentIndex]);
 
   const checkCorrectness = (q: any, opt: any, idx: number) => {
@@ -234,16 +233,8 @@ const QuizPlayer: React.FC<{
     setTimeLeft(15);
   };
 
-  const startEdit = () => {
-    setEditData(JSON.parse(JSON.stringify(data[currentIndex])));
-    setIsEditing(true);
-  };
-
-  const saveEdit = () => {
-    if (onUpdateQuestion && editData) {
-      onUpdateQuestion(currentIndex, editData);
-    }
-    setIsEditing(false);
+  const startBatchEdit = () => {
+    setIsBatchEditing(true);
   };
 
   if (showScore) {
@@ -259,54 +250,151 @@ const QuizPlayer: React.FC<{
     );
   }
 
-  if (isEditing && editData) {
+  if (isBatchEditing) {
     return (
-      <div className="flex flex-col h-full p-6 bg-white rounded-3xl animate-in fade-in">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest">Chỉnh sửa câu hỏi {currentIndex + 1}</h3>
-          <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-rose-500"><i className="fas fa-times text-xl"></i></button>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-5 pr-2">
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung câu hỏi</label>
-            <textarea
-              value={editData.question}
-              onChange={e => setEditData({ ...editData, question: e.target.value })}
-              className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-              rows={3}
-            />
+      <div className="flex flex-col h-full p-6 bg-slate-50 rounded-3xl animate-in fade-in">
+        <div className="flex items-center justify-between mb-6 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl"><i className="fas fa-list-check"></i></div>
+            <div>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Sửa toàn bộ câu hỏi</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{data.length} câu đã trích xuất</p>
+            </div>
           </div>
-          <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn</label>
-            {editData.options.map((opt: any, idx: number) => (
-              <div key={idx} className="flex items-center gap-2">
-                <span className="w-6 text-center font-black text-slate-400 text-xs">{String.fromCharCode(65 + idx)}</span>
-                <input
-                  value={typeof opt === 'string' ? opt : opt.text}
-                  onChange={e => {
-                    const newOpts = [...editData.options];
-                    if (typeof newOpts[idx] === 'string') newOpts[idx] = e.target.value;
-                    else newOpts[idx] = { ...newOpts[idx], text: e.target.value };
-                    setEditData({ ...editData, options: newOpts });
-                  }}
-                  className="flex-1 p-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
+          <button
+            onClick={() => setIsBatchEditing(false)}
+            className="px-6 py-2.5 rounded-2xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center"
+          >
+            <i className="fas fa-check-circle mr-2"></i> Hoàn tất & Quay lại
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-2">
+          {data.map((q, idx) => (
+            <div key={idx} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 flex items-center justify-center bg-indigo-600 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-100">
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Chi tiết câu hỏi</span>
+                </div>
+                {q.originalPageImage && (
+                  <button
+                    onClick={() => onCrop?.(q.originalPageImage, 'question', idx)}
+                    className="text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 px-4 py-2 rounded-xl hover:bg-indigo-100 transition-colors flex items-center"
+                  >
+                    <i className="fas fa-crop-simple mr-2"></i> {q.image ? 'Cắt lại ảnh' : 'Cắt ảnh từ đề'}
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đáp án đúng</label>
-            <input
-              value={editData.answer}
-              onChange={e => setEditData({ ...editData, answer: e.target.value })}
-              className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
-              placeholder="Nhập đáp án đúng (VD: A hoặc nội dung)"
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
-          <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all">Hủy bỏ</button>
-          <button onClick={saveEdit} className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 shadow-lg transition-all">Lưu thay đổi</button>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nội dung câu hỏi</label>
+                    <textarea
+                      value={q.question}
+                      onChange={e => onUpdateQuestion?.(idx, { ...q, question: e.target.value })}
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl mt-1 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none resize-none transition-all"
+                      rows={3}
+                      placeholder="Nhập câu hỏi..."
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Các lựa chọn & Hình ảnh (Nếu có)</label>
+                    {q.options.map((opt: any, oIdx: number) => (
+                      <div key={oIdx} className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black">{String.fromCharCode(65 + oIdx)}</span>
+                          <input
+                            value={typeof opt === 'string' ? opt : opt.text}
+                            onChange={e => {
+                              const newOpts = [...q.options];
+                              if (typeof newOpts[oIdx] === 'string') newOpts[oIdx] = e.target.value;
+                              else newOpts[oIdx] = { ...newOpts[oIdx], text: e.target.value };
+                              onUpdateQuestion?.(idx, { ...q, options: newOpts });
+                            }}
+                            className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                            placeholder={`Lựa chọn ${String.fromCharCode(65 + oIdx)}...`}
+                          />
+                          <button
+                            onClick={() => onCrop?.(q.originalPageImage, 'option', idx, oIdx)}
+                            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${opt.image ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                            title="Cắt ảnh cho lựa chọn này"
+                          >
+                            <i className="fas fa-image"></i>
+                          </button>
+                        </div>
+                        {opt.image && (
+                          <div className="ml-10 relative inline-block group/opt">
+                            <img src={opt.image} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm" />
+                            <button
+                              onClick={() => {
+                                const newOpts = [...q.options];
+                                if (typeof newOpts[oIdx] !== 'string') newOpts[oIdx] = { ...newOpts[oIdx], image: '' };
+                                onUpdateQuestion?.(idx, { ...q, options: newOpts });
+                              }}
+                              className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover/opt:opacity-100 transition-opacity"
+                            >
+                              <i className="fas fa-times text-[8px]"></i>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hình ảnh câu hỏi</label>
+                    <div className="mt-1 relative min-h-[160px] bg-slate-50 border-2 border-dashed border-slate-100 rounded-3xl flex items-center justify-center overflow-hidden">
+                      {q.image ? (
+                        <div className="relative group/img p-2">
+                          <img src={q.image} className="max-h-36 w-auto rounded-xl shadow-md" />
+                          <button
+                            onClick={() => onUpdateQuestion?.(idx, { ...q, image: '' })}
+                            className="absolute top-0 right-0 bg-rose-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover/img:opacity-100 transition-opacity"
+                          >
+                            <i className="fas fa-times text-[10px]"></i>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center p-4">
+                          <i className="fas fa-image-slash text-slate-200 text-3xl mb-2"></i>
+                          <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Chưa có ảnh minh họa</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Đáp đúng</label>
+                      <input
+                        value={q.answer}
+                        onChange={e => onUpdateQuestion?.(idx, { ...q, answer: e.target.value })}
+                        className="w-full p-3 bg-emerald-50 border border-emerald-100 rounded-2xl mt-1 text-sm font-black text-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
+                        placeholder="VD: A"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giải thích (Tùy chọn)</label>
+                      <textarea
+                        value={q.explanation}
+                        onChange={e => onUpdateQuestion?.(idx, { ...q, explanation: e.target.value })}
+                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl mt-1 text-xs font-semibold text-slate-600 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none resize-none transition-all"
+                        rows={2}
+                        placeholder="Nhập lời giải..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -337,8 +425,8 @@ const QuizPlayer: React.FC<{
         </div>
         <div className="flex items-center space-x-2">
           {onUpdateQuestion && (
-            <button onClick={startEdit} className="text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 px-3 py-1 rounded-full transition-colors border border-slate-200 flex items-center" title="Chỉnh sửa câu hỏi này">
-              <i className="fas fa-pen mr-1"></i>Sửa
+            <button onClick={startBatchEdit} className="text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 px-3 py-1 rounded-full transition-colors border border-slate-200 flex items-center" title="Sửa toàn bộ đề thi">
+              <i className="fas fa-list-check mr-1"></i>Sửa đề
             </button>
           )}
           {onShare && (

@@ -5,6 +5,7 @@ export type GenerateWithAIRequest = {
   prompt: string;
   files?: Array<{ data: string; mimeType: string }>;
   model?: string;
+  provider?: string;
   stream?: boolean;
 };
 
