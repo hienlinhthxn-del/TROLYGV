@@ -979,14 +979,24 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     if (!croppingContext || !result) return;
     const { type, qIdx, optIdx } = croppingContext;
 
-    const updatedResult = [...result];
-    if (type === 'question') {
-      updatedResult[qIdx].image = newImage;
-    } else if (type === 'option' && typeof optIdx === 'number') {
-      if (updatedResult[qIdx].options && updatedResult[qIdx].options[optIdx]) {
-        updatedResult[qIdx].options[optIdx].image = newImage;
+    const updatedResult = result.map((q: any, idx: number) => {
+      if (idx !== qIdx) return q;
+
+      if (type === 'question') {
+        return { ...q, image: newImage };
+      } else if (type === 'option' && typeof optIdx === 'number') {
+        const newOptions = (q.options || []).map((opt: any, oIdx: number) => {
+          if (oIdx !== optIdx) return opt;
+          // Nếu đáp án là string, chuyển thành object để chứa ảnh
+          if (typeof opt === 'string' || typeof opt === 'number') {
+            return { text: String(opt), image: newImage };
+          }
+          return { ...opt, image: newImage };
+        });
+        return { ...q, options: newOptions };
       }
-    }
+      return q;
+    });
 
     setResult(updatedResult);
     setCroppingContext(null);
@@ -994,9 +1004,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const handleUpdateQuestion = (index: number, updatedQuestion: any) => {
     if (!result) return;
-    const newResult = [...result];
-    newResult[index] = updatedQuestion;
-    setResult(newResult);
+    setResult(prev => {
+      if (!prev) return prev;
+      const newResult = [...prev];
+      newResult[index] = updatedQuestion;
+      return newResult;
+    });
   };
 
   const generateQuizFromUpload = async () => {
