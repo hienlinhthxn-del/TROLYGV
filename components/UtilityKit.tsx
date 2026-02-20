@@ -303,7 +303,10 @@ const QuizPlayer: React.FC<{
                   </div>
 
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Các lựa chọn & Hình ảnh (Nếu có)</label>
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn & Hình ảnh</label>
+                      <p className="text-[9px] text-slate-400 italic">Bấm biểu tượng <i className="fas fa-image mx-1"></i> để cắt ảnh cho từng đáp án</p>
+                    </div>
                     {q.options.map((opt: any, oIdx: number) => (
                       <div key={oIdx} className="space-y-2">
                         <div className="flex items-center gap-3">
@@ -312,22 +315,22 @@ const QuizPlayer: React.FC<{
                             value={typeof opt === 'string' ? opt : opt.text}
                             onChange={e => {
                               const newOpts = [...q.options];
-                              if (typeof newOpts[oIdx] === 'string') newOpts[oIdx] = e.target.value;
+                              if (typeof newOpts[oIdx] === 'string') newOpts[oIdx] = { text: e.target.value, image: '' };
                               else newOpts[oIdx] = { ...newOpts[oIdx], text: e.target.value };
                               onUpdateQuestion?.(idx, { ...q, options: newOpts });
                             }}
                             className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
-                            placeholder={`Lựa chọn ${String.fromCharCode(65 + oIdx)}...`}
+                            placeholder={`Lạp đáp án ${String.fromCharCode(65 + oIdx)}...`}
                           />
                           <button
                             onClick={() => onCrop?.(q.originalPageImage, 'option', idx, oIdx)}
-                            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${opt.image ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all shadow-sm ${(typeof opt !== 'string' && opt.image) ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50'}`}
                             title="Cắt ảnh cho lựa chọn này"
                           >
-                            <i className="fas fa-image"></i>
+                            <i className="fas fa-crop-simple"></i>
                           </button>
                         </div>
-                        {opt.image && (
+                        {typeof opt !== 'string' && opt.image && (
                           <div className="ml-10 relative inline-block group/opt">
                             <img src={opt.image} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm" />
                             <button
@@ -425,8 +428,8 @@ const QuizPlayer: React.FC<{
         </div>
         <div className="flex items-center space-x-2">
           {onUpdateQuestion && (
-            <button onClick={startBatchEdit} className="text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 px-3 py-1 rounded-full transition-colors border border-slate-200 flex items-center" title="Sửa toàn bộ đề thi">
-              <i className="fas fa-list-check mr-1"></i>Sửa đề
+            <button onClick={startBatchEdit} className="text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-all border border-indigo-200 flex items-center shadow-sm active:scale-95" title="Sửa toàn bộ đề thi">
+              <i className="fas fa-edit mr-2"></i>Sửa đề & Cắt ảnh
             </button>
           )}
           {onShare && (
