@@ -38,7 +38,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCrop
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (initialSrc) setSrc(initialSrc);
+    setSrc(initialSrc || null);
   }, [initialSrc]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,11 +323,15 @@ const QuizPlayer: React.FC<{
                             placeholder={`Lạp đáp án ${String.fromCharCode(65 + oIdx)}...`}
                           />
                           <button
-                            onClick={() => onCrop?.(q.originalPageImage, 'option', idx, oIdx)}
-                            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all shadow-sm ${(typeof opt !== 'string' && opt.image) ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50'}`}
-                            title="Cắt ảnh cho lựa chọn này"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const cropSource = q.originalPageImage || (typeof q.image === 'string' && q.image.startsWith('data:image') ? q.image : '');
+                              onCrop?.(cropSource, 'option', idx, oIdx);
+                            }}
+                            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all shadow-sm ${(typeof opt !== 'string' && opt.image) ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50'}`}
+                            title="Xác định hình ảnh cho đáp án này bằng cách cắt từ đề gốc hoặc tải lên"
                           >
-                            <i className="fas fa-crop-simple"></i>
+                            <i className="fas fa-crop"></i>
                           </button>
                         </div>
                         {typeof opt !== 'string' && opt.image && (
@@ -979,7 +983,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   };
 
   const handleCropComplete = (newImage: string) => {
-    if (!croppingContext || !result) return;
+    if (!croppingContext || !result) {
+      setShowCropper(false);
+      return;
+    }
     const { type, qIdx, optIdx } = croppingContext;
 
     const updatedResult = result.map((q: any, idx: number) => {
@@ -990,7 +997,6 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       } else if (type === 'option' && typeof optIdx === 'number') {
         const newOptions = (q.options || []).map((opt: any, oIdx: number) => {
           if (oIdx !== optIdx) return opt;
-          // Nếu đáp án là string, chuyển thành object để chứa ảnh
           if (typeof opt === 'string' || typeof opt === 'number') {
             return { text: String(opt), image: newImage };
           }
@@ -1002,6 +1008,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     });
 
     setResult(updatedResult);
+    setShowCropper(false);
     setCroppingContext(null);
   };
 
