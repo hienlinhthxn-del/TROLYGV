@@ -162,7 +162,7 @@ const App: React.FC = () => {
                   localStorage.removeItem('manually_entered_api_key');
                   localStorage.removeItem('preferred_gemini_model');
                   localStorage.removeItem('preferred_gemini_version');
-                } catch {}
+                } catch { }
                 window.location.reload();
               }}
             >
@@ -334,29 +334,54 @@ const App: React.FC = () => {
 
               if (data.q && Array.isArray(data.q)) {
                 // FORMAT RÚT GỌN (Minified)
-                inflatedQuestions = data.q.map((item: any, idx: number) => ({
-                  id: `share-${Date.now()}-${idx}`,
-                  type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận',
-                  content: item[1] || '',
-                  options: item[2] || [],
-                  answer: item[3] || '',
-                  explanation: item[4] || '',
-                  image: item[5] || '',
-                  level: 'Thông hiểu'
-                }));
+                inflatedQuestions = data.q.map((item: any, idx: number) => {
+                  const rawOptions = item[2] || [];
+                  const options = rawOptions.map((opt: any) => {
+                    // Nếu là array [text, image]
+                    if (Array.isArray(opt)) {
+                      return { text: opt[0] || '', image: opt[1] || '' };
+                    }
+                    // Nếu là object cũ {text, image}
+                    if (typeof opt === 'object' && opt !== null) {
+                      return { text: opt.text || opt.label || '', image: opt.image || '' };
+                    }
+                    // Nếu là string/number
+                    return { text: String(opt), image: '' };
+                  });
+
+                  return {
+                    id: `share-${Date.now()}-${idx}`,
+                    type: item[0] === 2 ? 'Tự luận' : 'Trắc nghiệm', // 2: Tự luận, 1: Trắc nghiệm
+                    content: item[1] || '',
+                    options: options,
+                    answer: item[3] || '',
+                    explanation: item[4] || '',
+                    image: item[5] || '',
+                    level: 'Thông hiểu'
+                  };
+                });
               } else {
                 // FORMAT ĐẦY ĐỦ (Legacy)
                 const sourceQuestions = data.q || data.questions || [];
-                inflatedQuestions = sourceQuestions.map((q: any, idx: number) => ({
-                  ...q,
-                  id: q.id || `share-old-${idx}`,
-                  type: q.type || (q[0] === 1 ? 'Trắc nghiệm' : 'Tự luận'),
-                  content: q.content || q[1] || '',
-                  options: q.options || q[2] || [],
-                  answer: q.answer || q[3] || '',
-                  explanation: q.explanation || q[4] || '',
-                  image: q.image || q[5] || ''
-                }));
+                inflatedQuestions = sourceQuestions.map((q: any, idx: number) => {
+                  const rawOptions = q.options || q[2] || [];
+                  const options = rawOptions.map((opt: any) => {
+                    if (Array.isArray(opt)) return { text: opt[0] || '', image: opt[1] || '' };
+                    if (typeof opt === 'object' && opt !== null) return { text: opt.text || opt.label || '', image: opt.image || '' };
+                    return { text: String(opt), image: '' };
+                  });
+
+                  return {
+                    ...q,
+                    id: q.id || `share-old-${idx}`,
+                    type: q.type || (q[0] === 2 ? 'Tự luận' : 'Trắc nghiệm'),
+                    content: q.content || q[1] || '',
+                    options: options,
+                    answer: q.answer || q[3] || '',
+                    explanation: q.explanation || q[4] || '',
+                    image: q.image || q[5] || ''
+                  };
+                });
               }
 
               setPracticeData({

@@ -414,7 +414,7 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
             {renderQuestionImage(currentQuestion.image)}
 
-            {currentQuestion.type === 'Trắc nghiệm' ? (
+            {currentQuestion.type === 'Trắc nghiệm' && currentQuestion.options && currentQuestion.options.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 relative z-10">
                 {currentQuestion.options?.map((opt, i) => {
                   const label = ['A', 'B', 'C', 'D', 'E', 'F'][i];

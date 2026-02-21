@@ -547,7 +547,7 @@ const QuizPlayer: React.FC<{
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
-          {questionOptions.length > 0 ? (
+          {currentQuestion.type === 'Trắc nghiệm' && questionOptions.length > 0 ? (
             questionOptions.map((option: any, index: number) => {
               const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
               const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
@@ -1312,15 +1312,18 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             ?? q.luaChon
             ?? q.luachon
           );
-          let normalizedOptions = rawOptions.map((opt: any) => {
-            if (typeof opt === 'string' || typeof opt === 'number') {
-              return { text: String(opt), image: '' };
-            }
-            return { text: opt.text || opt.label || '', image: opt.image || '', bbox: opt.bbox };
-          });
-          if (normalizedOptions.length === 0) {
-            // Tự động chuyển thành Tự luận nếu không trích xuất được options
+          let normalizedOptions = rawOptions
+            .map((opt: any) => {
+              const text = (typeof opt === 'string' || typeof opt === 'number') ? String(opt) : (opt.text || opt.label || '');
+              const image = (typeof opt === 'object' && opt !== null) ? opt.image : '';
+              return { text: text.trim(), image };
+            })
+            .filter(opt => opt.text !== '' || (typeof opt.image === 'string' && opt.image.length > 0));
+
+          if (normalizedOptions.length < 2) {
+            // Tự động chuyển thành Tự luận nếu không có đủ phương án trắc nghiệm
             q.type = 'Tự luận';
+            normalizedOptions = [];
           }
           // Xử lý chỉ số trang trả về từ AI: page_index bắt đầu từ 0
           const pageIndexRaw = q.page_index ?? q.page ?? q.pageNumber;
@@ -1546,15 +1549,18 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
           const rawOptions = Array.isArray(q?.options) ? q.options : [];
           const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
-            if (typeof opt === 'string' || typeof opt === 'number') return opt;
-            const optionImageRaw = typeof opt?.image === 'string' ? opt.image.trim() : '';
+            const isSimple = typeof opt === 'string' || typeof opt === 'number';
+            const optionText = isSimple ? String(opt) : (opt?.text || '');
+            const optionImageRaw = isSimple ? '' : (typeof opt?.image === 'string' ? opt.image.trim() : '');
             const optionImageFinal = await normalizeSharedImage(optionImageRaw, stripImages);
             if (optionImageRaw && !optionImageFinal) droppedCount++;
-            return { ...opt, image: optionImageFinal };
+
+            // Format nén: [text, image] thay vì {text, image}
+            return [optionText, optionImageFinal];
           }));
 
           return ([
-            1,
+            q?.type === 'Tự luận' ? 2 : 1, // 1: Trắc nghiệm, 2: Tự luận
             q?.question || '',
             normalizedOptions,
             q?.answer || '',
@@ -1597,28 +1603,63 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-      // 2. Nếu Link vẫn quá dài (> 12000 ký tự), mới chấp nhận bỏ ảnh
-      if (url.length > 12000) {
-        payloadData = await generatePayload(true); // Force strip images
-        quizData = { s: subject, g: grade, q: payloadData.q };
-        json = JSON.stringify(quizData);
+      // 2. Nếu Link vẫn quá dài (> 15000 ký tự), thử bỏ bớt ảnh cho đến khi vừa
+      // Thay vì bỏ tất cả, ta sẽ thử giữ lại nhiều ảnh nhất có thể
+      if (url.length > 15000) {
+        let currentQuestions = [...payloadData.q];
+        let hasImageQuestions = currentQuestions
+          .map((q, idx) => ({ idx, hasImg: !!q[5] || (Array.isArray(q[2]) && q[2].some((o: any) => !!o[1])) }))
+          .filter(item => item.hasImg);
 
-        // @ts-ignore
-        if (window.CompressionStream) {
-          const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
-          finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
-        } else {
-          finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+        // Bỏ ảnh từng câu một (từ dưới lên) cho đến khi chiều dài link ổn
+        while (url.length > 15000 && hasImageQuestions.length > 0) {
+          const toStrip = hasImageQuestions.pop();
+          if (toStrip) {
+            const qIdx = toStrip.idx;
+            const q = currentQuestions[qIdx];
+            // Bỏ ảnh câu hỏi
+            q[5] = '';
+            // Bỏ ảnh các phương án
+            if (Array.isArray(q[2])) {
+              q[2] = q[2].map((o: any) => [o[0], '']);
+            }
+
+            quizData = { s: subject, g: grade, q: currentQuestions };
+            json = JSON.stringify(quizData);
+            // Re-encode
+            // @ts-ignore
+            if (window.CompressionStream) {
+              const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+              finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
+            } else {
+              finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+            }
+            url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+          }
         }
-        url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-        if (url.length > 16000) {
-          alert("❌ Nội dung đề thi quá dài để tạo Link. Thầy/Cô hãy chia nhỏ file đề hoặc dùng 'Copy Mã Đề'.");
+        // Nếu vẫn quá dài thì mới dùng bản không ảnh hoàn toàn
+        if (url.length > 15000) {
+          payloadData = await generatePayload(true);
+          quizData = { s: subject, g: grade, q: payloadData.q };
+          json = JSON.stringify(quizData);
+          // @ts-ignore
+          if (window.CompressionStream) {
+            const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+            finalCode = 'v2_' + await blobToBase64(await new Response(stream).blob());
+          } else {
+            finalCode = await blobToBase64(new Blob([json], { type: 'application/json' }));
+          }
+          url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+        }
+
+        if (url.length > 20000) {
+          alert("❌ Nội dung đề thi quá lớn. Thầy/Cô hãy chia nhỏ file đề hoặc dùng 'Copy Mã Đề'.");
           return;
         }
 
         await navigator.clipboard.writeText(url);
-        alert(`⚠️ Đề thi có nhiều ảnh, hệ thống đã nén tối đa nhưng Link vẫn quá dài. Hệ thống đã TỰ ĐỘNG BỎ ẢNH để Link hoạt động được trên Zalo/Messenger.\n\n✅ Đã sao chép Link(rút gọn)!\n\n💡 Mẹo: Để giữ ảnh sắc nét, Thầy/Cô hãy dùng nút "Copy Mã Đề" bên cạnh.`);
+        alert(`⚠️ Đề thi có nhiều ảnh, hệ thống đã TỰ ĐỘNG LƯỢC BỎ MỘT SỐ ẢNH để Link hoạt động được trên Zalo/Messenger.\n\n✅ Đã sao chép Link!\n\n💡 Mẹo: Để giữ đầy đủ ảnh sắc nét, Thầy/Cô hãy dùng nút "Copy Mã Đề" bên cạnh.`);
         return;
       }
 
@@ -1714,8 +1755,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     const controller = new AbortController();
     const { signal } = controller;
 
+    let fullContent = '';
     try {
-      let fullContent = '';
       const stream = geminiService.sendMessageStream(messageContent, currentAttachments, signal);
 
       const INACTIVITY_TIMEOUT_MS = 40000;
