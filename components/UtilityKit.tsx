@@ -1501,7 +1501,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 240; // Giảm kích thước tối đa (Thumbnail) để đảm bảo Link hoạt động
+            const maxWidth = 180; // Giảm thêm kích thước để vừa Link Zalo/Messenger
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1512,7 +1512,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
               return;
             }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.3)); // Nén chất lượng xuống 30%
+            resolve(canvas.toDataURL('image/jpeg', 0.15)); // Nén chất lượng xuống 15% (rất nhẹ)
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
@@ -1523,16 +1523,16 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     };
 
     const normalizeSharedImage = async (value: unknown, forceStrip: boolean): Promise<string> => {
-      if (forceStrip) return ''; // Nếu chế độ bắt buộc bỏ ảnh
+      if (forceStrip) return '';
       if (typeof value !== 'string') return '';
       const trimmed = value.trim();
       if (!trimmed) return '';
       if (!trimmed.startsWith('data:image')) {
-        return trimmed.length > 500 ? '' : trimmed; // URL quá dài cũng bỏ
+        return trimmed.length > 500 ? '' : trimmed;
       }
 
       const compressed = await compressDataImage(trimmed);
-      return compressed.length > 12000 ? '' : compressed; // Giới hạn chặt 12KB/ảnh
+      return compressed.length > 15000 ? '' : compressed; // Giới hạn 15KB/ảnh
     };
 
     try {
@@ -1565,12 +1565,10 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         return { q: normalizedQuestions, dropped: droppedCount };
       };
 
-      // 1. Thử tạo payload có ảnh (đã nén)
+      // 1. Thử tạo payload có ảnh (đã nén cực nhẹ)
       let payloadData = await generatePayload(false);
       let quizData = { s: subject, g: grade, q: payloadData.q };
       let json = JSON.stringify(quizData);
-
-      let finalCode = '';
 
       const blobToBase64 = (blob: Blob): Promise<string> => {
         return new Promise((resolve) => {
@@ -1583,6 +1581,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         });
       };
 
+      let finalCode = '';
       // @ts-ignore
       if (window.CompressionStream) {
         const stream = new Blob([json]).stream();
@@ -1598,9 +1597,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-      // 2. Nếu Link quá dài (> 10000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
-      // 10000 là mức an toàn cho Zalo/Messenger dù URL chuẩn có thể dài hơn
-      if (url.length > 10000) {
+      // 2. Nếu Link vẫn quá dài (> 12000 ký tự), mới chấp nhận bỏ ảnh
+      if (url.length > 12000) {
         payloadData = await generatePayload(true); // Force strip images
         quizData = { s: subject, g: grade, q: payloadData.q };
         json = JSON.stringify(quizData);
@@ -1614,13 +1612,13 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         }
         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-        if (url.length > 15000) {
-          alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
+        if (url.length > 16000) {
+          alert("❌ Nội dung đề thi quá dài để tạo Link. Thầy/Cô hãy chia nhỏ file đề hoặc dùng 'Copy Mã Đề'.");
           return;
         }
 
         await navigator.clipboard.writeText(url);
-        alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được trên Zalo/Messenger.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Để giữ hình ảnh, Thầy/Cô hãy chia nhỏ file đề hoặc dùng nút "Copy Mã Đề" bên cạnh.`);
+        alert(`⚠️ Đề thi có nhiều ảnh, hệ thống đã nén tối đa nhưng Link vẫn quá dài. Hệ thống đã TỰ ĐỘNG BỎ ẢNH để Link hoạt động được trên Zalo/Messenger.\n\n✅ Đã sao chép Link(rút gọn)!\n\n💡 Mẹo: Để giữ ảnh sắc nét, Thầy/Cô hãy dùng nút "Copy Mã Đề" bên cạnh.`);
         return;
       }
 
