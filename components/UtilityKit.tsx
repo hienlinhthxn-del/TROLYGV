@@ -547,80 +547,88 @@ const QuizPlayer: React.FC<{
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
-          {questionOptions.map((option: any, index: number) => {
-            const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
-            const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
-            const isSelected = selectedOption === option;
-            const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
+          {questionOptions.length > 0 ? (
+            questionOptions.map((option: any, index: number) => {
+              const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
+              const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
+              const isSelected = selectedOption === option;
+              const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
 
-            let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
-            if (isSelected) {
-              btnClass += isCorrectAnswer
-                ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                : "bg-rose-100 border-rose-500 text-rose-800";
-            } else if (selectedOption && isCorrectAnswer) {
-              btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
-            } else {
-              btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
-            }
+              let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
+              if (isSelected) {
+                btnClass += isCorrectAnswer
+                  ? "bg-emerald-100 border-emerald-500 text-emerald-800"
+                  : "bg-rose-100 border-rose-500 text-rose-800";
+              } else if (selectedOption && isCorrectAnswer) {
+                btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
+              } else {
+                btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
+              }
 
-            return (
-              <button
-                key={index}
-                onClick={() => handleAnswerClick(option, index)}
-                disabled={!!selectedOption}
-                className={btnClass}
-              >
-                <div className="flex items-center">
-                  <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
-                  <div className="flex-1">
-                    {optText.trim().startsWith('<svg') ? (
-                      <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
-                    ) : (
-                      <span className="text-[15px] font-bold">{optText}</span>
-                    )}
+              return (
+                <button
+                  key={index}
+                  onClick={() => handleAnswerClick(option, index)}
+                  disabled={!!selectedOption}
+                  className={btnClass}
+                >
+                  <div className="flex items-center">
+                    <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
+                    <div className="flex-1">
+                      {optText.trim().startsWith('<svg') ? (
+                        <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
+                      ) : (
+                        <span className="text-[15px] font-bold">{optText}</span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {optImg && (
-                  <div className="mt-3">
-                    {optImg.trim().startsWith('<svg') ? (
-                      <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
-                    ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
-                      <div className="relative inline-block group">
-                        <img src={optImg} alt="Option placeholder" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
-                          e.stopPropagation();
-                          setZoomedImage(optImg);
-                        }} onError={(e) => {
-                          // Fallback nếu không phải URL/base64
-                          e.currentTarget.style.display = 'none';
-                        }} />
-                        {onCrop && currentQuestion.originalPageImage && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onCrop(currentQuestion.originalPageImage, 'option', currentIndex, index); }}
-                            className="absolute top-1 right-1 bg-white/90 text-indigo-600 p-1.5 rounded-full shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 z-10"
-                            title="Cắt lại ảnh"
-                          >
-                            <i className="fas fa-crop-simple text-xs"></i>
-                          </button>
-                        )}
-                      </div>
-                    ) : null}
-                    {/* Hiển thị mô tả nếu không phải SVG hay Image */}
-                    {!optImg.trim().startsWith('<svg') && !/^(http|https|data:image)/i.test(optImg.trim()) && (
-                      <div className="text-[10px] italic text-slate-400 mt-1">{optImg}</div>
-                    )}
-                  </div>
-                )}
+                  {optImg && (
+                    <div className="mt-3">
+                      {optImg.trim().startsWith('<svg') ? (
+                        <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
+                      ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
+                        <div className="relative inline-block group">
+                          <img src={optImg} alt="Option" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
+                            e.stopPropagation();
+                            setZoomedImage(optImg);
+                          }} onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }} />
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
 
-                {isSelected && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                  {isSelected && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
+                    </span>
+                  )}
+                </button>
+              );
+            })
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nhập câu trả lời (Câu hỏi Tự luận)..."
+                  className="flex-1 p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAnswerClick('ESSAY_ANSWER', -1);
+                  }}
+                />
+                <button
+                  onClick={() => handleAnswerClick('ESSAY_ANSWER', -1)}
+                  className="px-6 py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg"
+                >
+                  Xác nhận
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Đây là câu hỏi Tự luận, học sinh sẽ nhập kết quả trực tiếp.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1205,7 +1213,19 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       3. TOÁN HỌC: Các phép tính, phân số, bảng số hãy cố gắng trình bày bằng văn bản/Latex. 
       4. KHÔNG tự ý biến văn bản thành hình ảnh để tránh làm nặng file đề.
       
-      JSON: {questions:[...]}`;
+       JSON Format: {
+        "questions": [
+          {
+            "type": "Trắc nghiệm" | "Tự luận",
+            "question": "Nội dung câu hỏi",
+            "options": [{"text": "...", "image": ""}],
+            "answer": "...",
+            "bbox": [ymin, xmin, ymax, xmax],
+            "page_index": 0
+          }
+        ]
+      }
+      Lưu ý: Nếu câu hỏi không có các lựa chọn A,B,C,D thì hãy để type là 'Tự luận'.`;
 
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
       let json;
@@ -1298,8 +1318,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
             }
             return { text: opt.text || opt.label || '', image: opt.image || '', bbox: opt.bbox };
           });
-          if (normalizedOptions.length === 0 && q.answer) {
-            normalizedOptions = [{ text: String(q.answer), image: '' }];
+          if (normalizedOptions.length === 0) {
+            // Tự động chuyển thành Tự luận nếu không trích xuất được options
+            q.type = 'Tự luận';
           }
           // Xử lý chỉ số trang trả về từ AI: page_index bắt đầu từ 0
           const pageIndexRaw = q.page_index ?? q.page ?? q.pageNumber;
@@ -1577,8 +1598,9 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
       let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-      // 2. Nếu Link quá dài (> 4000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
-      if (url.length > 4000) {
+      // 2. Nếu Link quá dài (> 10000 ký tự), tự động bỏ ảnh và tạo lại để đảm bảo hoạt động
+      // 10000 là mức an toàn cho Zalo/Messenger dù URL chuẩn có thể dài hơn
+      if (url.length > 10000) {
         payloadData = await generatePayload(true); // Force strip images
         quizData = { s: subject, g: grade, q: payloadData.q };
         json = JSON.stringify(quizData);
@@ -1592,13 +1614,13 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         }
         url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
 
-        if (url.length > 8000) {
+        if (url.length > 15000) {
           alert("❌ Nội dung đề thi quá dài để tạo Link. Vui lòng dùng tính năng 'Copy Mã Đề' (nút bên cạnh).");
           return;
         }
 
         await navigator.clipboard.writeText(url);
-        alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Nếu muốn giữ nguyên hình ảnh chất lượng cao, Thầy / Cô hãy dùng nút "Copy Mã Đề"(biểu tượng mã code) bên cạnh nút Chia sẻ.`);
+        alert(`⚠️ Link quá dài nên hệ thống đã TỰ ĐỘNG BỎ ẢNH để link hoạt động được trên Zalo/Messenger.\n\n✅ Đã sao chép Link(bản rút gọn)!\n\n💡 Mẹo: Để giữ hình ảnh, Thầy/Cô hãy chia nhỏ file đề hoặc dùng nút "Copy Mã Đề" bên cạnh.`);
         return;
       }
 

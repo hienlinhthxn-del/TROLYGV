@@ -442,13 +442,45 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
                 })}
               </div>
             ) : (
-              <div className="relative z-10">
-                <textarea
-                  value={answers[currentQuestion.id] || ''}
-                  onChange={(e) => handleTextChange(e.target.value)}
-                  placeholder="Nhập câu trả lời của em tại đây..."
-                  className="w-full h-48 bg-slate-50 border-2 border-slate-100 rounded-3xl p-6 text-[15px] font-medium text-slate-700 focus:bg-white focus:border-indigo-400 outline-none transition-all resize-none"
-                />
+              <div className="relative z-10 space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    value={answers[currentQuestion.id] || ''}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    placeholder="Nhập câu trả lời của em tại đây..."
+                    className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-[16px] font-bold text-slate-700 focus:bg-white focus:border-indigo-400 outline-none transition-all"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && answers[currentQuestion.id]?.trim()) {
+                        if (currentIdx < questions.length - 1) {
+                          setCurrentIdx(prev => prev + 1);
+                          scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                          handleSubmit();
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!answers[currentQuestion.id]?.trim()) {
+                        alert("Em hãy nhập câu trả lời nhé!");
+                        return;
+                      }
+                      if (currentIdx < questions.length - 1) {
+                        setCurrentIdx(prev => prev + 1);
+                        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      } else {
+                        // Nếu là câu cuối, có thể để người dùng bấm nộp bài ở header hoặc tự submit
+                        // Ở đây ta chỉ chuyển câu, nút nộp bài chính ở trên header
+                      }
+                    }}
+                    className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    Xác nhận
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1">Nhấn Enter hoặc bấm Xác nhận để tiếp tục</p>
               </div>
             )}
           </div>
