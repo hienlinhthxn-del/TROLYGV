@@ -1207,17 +1207,16 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       const prompt = `Trích xuất TOÀN BỘ câu hỏi từ đề thi. 
       
-      YÊU CẦU QUAN TRỌNG VỀ DUNG LƯỢNG:
-      1. ƯU TIÊN VĂN BẢN: Nếu câu hỏi hoặc đáp án có thể viết bằng chữ, hãy trích xuất 100% bằng chữ.
-      2. HÌNH ẢNH: Chỉ sử dụng trường 'bbox' [ymin, xmin, ymax, xmax] cho các nội dung KHÔNG THỂ viết bằng chữ (như hình vẽ con vật, sơ đồ mạch điện, biểu đồ phức tạp, hình học có ký hiệu đặc biệt).
-      3. TOÁN HỌC: Các phép tính, phân số, bảng số hãy cố gắng trình bày bằng văn bản/Latex. 
-      4. KHÔNG tự ý biến văn bản thành hình ảnh để tránh làm nặng file đề.
+      YÊU CẦU QUAN TRỌNG (BẮT BUỘC):
+      1. TRÍCH XUẤT 100%: Phải trích xuất đầy đủ tất cả câu hỏi trong đề.
+      2. TỰ ĐỘNG CẮT ẢNH (BẮT BUỘC): Với MỐI CÂU HỎI, bạn PHẢI cung cấp trường 'bbox' [ymin, xmin, ymax, xmax]. Đây là tọa độ bao quanh vùng không gian của câu hỏi đó trên trang giấy (bao gồm cả văn bản và hình minh họa nếu có). Hệ thống sẽ dùng bbox này để tự động cắt ảnh cho từng câu.
+      3. TOÁN HỌC: Trích xuất bằng văn bản/Latex nhưng vẫn phải có 'bbox' vùng câu hỏi.
       
        JSON Format: {
         "questions": [
           {
             "type": "Trắc nghiệm" | "Tự luận",
-            "question": "Nội dung câu hỏi",
+            "question": "Nội dung câu hỏi (văn bản)",
             "options": [{"text": "...", "image": ""}],
             "answer": "...",
             "bbox": [ymin, xmin, ymax, xmax],
@@ -1225,7 +1224,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           }
         ]
       }
-      Lưu ý: Nếu câu hỏi không có các lựa chọn A,B,C,D thì hãy để type là 'Tự luận'.`;
+      Lưu ý: Luôn trả về 'bbox' cho từng câu để hệ thống tự động cắt ảnh minh họa. Nếu không có bbox, hệ thống sẽ không hiển thị được hình ảnh câu hỏi.`;
 
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
       let json;
@@ -1621,7 +1620,11 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             q[5] = '';
             // Bỏ ảnh các phương án
             if (Array.isArray(q[2])) {
-              q[2] = q[2].map((o: any) => [o[0], '']);
+              q[2] = q[2].map((o: any) => {
+                if (Array.isArray(o)) return [o[0], ''];
+                if (typeof o === 'object' && o !== null) return { ...o, image: '' };
+                return o;
+              });
             }
 
             quizData = { s: subject, g: grade, q: currentQuestions };
