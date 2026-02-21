@@ -32,13 +32,20 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCrop
   const [croppedImage, setCroppedImage] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setSrc(initialSrc || null);
+    if (initialSrc) {
+      setSrc(initialSrc);
+      setIsLoading(true);
+    } else {
+      setSrc(null);
+      setIsLoading(false);
+    }
   }, [initialSrc]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,14 +109,47 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCrop
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           <div className="flex-1 bg-slate-50 p-4 flex items-center justify-center overflow-auto relative select-none" onMouseUp={handleMouseUp} onTouchEnd={handleMouseUp} onMouseLeave={handleMouseUp}>
             {!src ? (
-              <div className="text-center">
-                <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all"><i className="fas fa-upload mr-2"></i>Tải ảnh lên</button>
+              <div className="text-center animate-in zoom-in">
+                <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                  <i className="fas fa-image text-3xl"></i>
+                </div>
+                <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all flex items-center mx-auto">
+                  <i className="fas fa-upload mr-2"></i>Tải ảnh lên để cắt
+                </button>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
               </div>
             ) : (
-              <div ref={containerRef} className="relative inline-block shadow-lg" onMouseDown={handleMouseDown} onTouchStart={handleMouseDown} onMouseMove={handleMouseMove} onTouchMove={handleMouseMove}>
-                <img ref={imgRef} src={src} alt="Source" className="max-h-[60vh] max-w-full object-contain pointer-events-none" />
-                {selection && <div className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" style={{ left: selection.x, top: selection.y, width: selection.w, height: selection.h, pointerEvents: 'none' }}><div className="absolute inset-0 border border-dashed border-black/50"></div></div>}
+              <div className="relative flex flex-col items-center">
+                {isLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-50/50 backdrop-blur-[2px]">
+                    <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+                <div ref={containerRef} className="relative inline-block shadow-2xl border-4 border-white rounded-lg overflow-hidden group" onMouseDown={handleMouseDown} onTouchStart={handleMouseDown} onMouseMove={handleMouseMove} onTouchMove={handleMouseMove}>
+                  <img
+                    ref={imgRef}
+                    src={src}
+                    alt="Source"
+                    className="max-h-[65vh] max-w-full object-contain pointer-events-none transition-opacity duration-300"
+                    style={{ opacity: isLoading ? 0.3 : 1 }}
+                    onLoad={() => setIsLoading(false)}
+                    onError={() => { setIsLoading(false); alert("Không thể tải ảnh này!"); }}
+                  />
+                  {selection && (
+                    <div
+                      className="absolute border-2 border-indigo-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] z-20"
+                      style={{ left: selection.x, top: selection.y, width: selection.w, height: selection.h, pointerEvents: 'none' }}
+                    >
+                      <div className="absolute inset-0 border border-white/50 border-dashed"></div>
+                      {/* Corner handles visual only */}
+                      <div className="absolute -top-1 -left-1 w-2 h-2 bg-indigo-500 rounded-full"></div>
+                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full"></div>
+                      <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-indigo-500 rounded-full"></div>
+                      <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full"></div>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white px-4 py-1.5 rounded-full shadow-sm">Kéo chuột trên ảnh để chọn vùng</p>
               </div>
             )}
           </div>
@@ -128,7 +168,22 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ onClose, initialSrc, onCrop
                 <button onClick={() => { setCroppedImage(null); setSelection(null); }} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cắt lại</button>
               </div>
             ) : (
-              <div className="space-y-4"><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hướng dẫn</p><p className="text-xs text-slate-600">Kéo chuột trên ảnh để chọn vùng cần cắt.</p><button onClick={cropImage} disabled={!selection || selection.w < 5} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 disabled:opacity-50 transition-all"><i className="fas fa-crop-simple mr-2"></i>Cắt ảnh</button>{src && !initialSrc && <button onClick={() => { setSrc(null); setSelection(null); }} className="w-full py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-rose-50 transition-all">Chọn ảnh khác</button>}</div>
+              <div className="space-y-4">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hướng dẫn</p>
+                <p className="text-[11px] leading-relaxed text-slate-600 font-medium bg-slate-50 p-3 rounded-xl border border-slate-100">Dùng chuột hoặc ngón tay kéo thành hình chữ nhật trên ảnh để chọn vùng Thầy Cô muốn lấy.</p>
+                <button
+                  onClick={cropImage}
+                  disabled={!selection || selection.w < 5 || isLoading}
+                  className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:translate-y-0 transition-all"
+                >
+                  <i className="fas fa-crop-simple mr-2"></i>Cắt ảnh đã chọn
+                </button>
+                {src && (
+                  <button onClick={() => { setSrc(null); setSelection(null); setCroppedImage(null); }} className="w-full py-3 bg-white text-slate-500 border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">
+                    Chọn ảnh khác
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -305,7 +360,7 @@ const QuizPlayer: React.FC<{
                   <div className="space-y-4">
                     <div className="flex items-center justify-between ml-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Các lựa chọn & Hình ảnh</label>
-                      <p className="text-[9px] text-slate-400 italic">Bấm biểu tượng <i className="fas fa-image mx-1"></i> để cắt ảnh cho từng đáp án</p>
+                      <p className="text-[9px] text-slate-400 italic">Bấm biểu tượng <i className="fas fa-crop mx-1"></i> để cắt ảnh cho từng đáp án</p>
                     </div>
                     {q.options.map((opt: any, oIdx: number) => (
                       <div key={oIdx} className="space-y-2">
@@ -319,13 +374,16 @@ const QuizPlayer: React.FC<{
                               else newOpts[oIdx] = { ...newOpts[oIdx], text: e.target.value };
                               onUpdateQuestion?.(idx, { ...q, options: newOpts });
                             }}
-                            className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
-                            placeholder={`Lạp đáp án ${String.fromCharCode(65 + oIdx)}...`}
+                            className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all font-bold text-slate-700"
+                            placeholder={`Nhập đáp án ${String.fromCharCode(65 + oIdx)}...`}
                           />
                           <button
                             onClick={(e) => {
                               e.preventDefault();
-                              const cropSource = q.originalPageImage || (typeof q.image === 'string' && q.image.startsWith('data:image') ? q.image : '');
+                              // Ưu tiên: Ảnh đề gốc > Ảnh hiện tại của đáp án > Ảnh câu hỏi
+                              const optImg = (typeof opt !== 'string' && opt.image && opt.image.startsWith('data:image')) ? opt.image : '';
+                              const qImg = (typeof q.image === 'string' && q.image.startsWith('data:image')) ? q.image : '';
+                              const cropSource = q.originalPageImage || optImg || qImg;
                               onCrop?.(cropSource, 'option', idx, oIdx);
                             }}
                             className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all shadow-sm ${(typeof opt !== 'string' && opt.image) ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50'}`}
@@ -334,21 +392,23 @@ const QuizPlayer: React.FC<{
                             <i className="fas fa-crop"></i>
                           </button>
                         </div>
-                        {typeof opt !== 'string' && opt.image && (
-                          <div className="ml-10 relative inline-block group/opt">
-                            <img src={opt.image} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm" />
-                            <button
-                              onClick={() => {
-                                const newOpts = [...q.options];
-                                if (typeof newOpts[oIdx] !== 'string') newOpts[oIdx] = { ...newOpts[oIdx], image: '' };
-                                onUpdateQuestion?.(idx, { ...q, options: newOpts });
-                              }}
-                              className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover/opt:opacity-100 transition-opacity"
-                            >
-                              <i className="fas fa-times text-[8px]"></i>
-                            </button>
-                          </div>
-                        )}
+                        {
+                          typeof opt !== 'string' && opt.image && (
+                            <div className="ml-10 relative inline-block group/opt">
+                              <img src={opt.image} className="h-16 w-auto rounded-lg border-2 border-indigo-100 shadow-md bg-white" />
+                              <button
+                                onClick={() => {
+                                  const newOpts = [...q.options];
+                                  if (typeof newOpts[oIdx] !== 'string') newOpts[oIdx] = { ...newOpts[oIdx], image: '' };
+                                  onUpdateQuestion?.(idx, { ...q, options: newOpts });
+                                }}
+                                className="absolute -top-2 -right-2 bg-rose-500 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover/opt:opacity-100 transition-opacity"
+                              >
+                                <i className="fas fa-times text-[10px]"></i>
+                              </button>
+                            </div>
+                          )
+                        }
                       </div>
                     ))}
                   </div>
@@ -403,7 +463,7 @@ const QuizPlayer: React.FC<{
             </div>
           ))}
         </div>
-      </div>
+      </div >
     );
   }
 
@@ -957,7 +1017,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           return {
             id: q.id || `quiz-topic-${Date.now()}-${i}`,
             type: q.type || 'Trắc nghiệm',
-            question: q.content || q.question || '',
+            question: q.question?.replace(/\[IMAGE\]/g, '').trim() || q.content?.trim() || '',
             image: q.image || '',
             options: normalizedOptions,
             answer: q.answer || '',
@@ -1137,7 +1197,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
 
-      const prompt = `Trích xuất câu hỏi từ đề thi. bbox: [ymin, xmin, ymax, xmax] cho hình ảnh. JSON: {questions:[...]}`;
+      const prompt = `Trích xuất TOÀN BỘ câu hỏi từ đề thi. 
+      
+      YÊU CẦU QUAN TRỌNG VỀ DUNG LƯỢNG:
+      1. ƯU TIÊN VĂN BẢN: Nếu câu hỏi hoặc đáp án có thể viết bằng chữ, hãy trích xuất 100% bằng chữ.
+      2. HÌNH ẢNH: Chỉ sử dụng trường 'bbox' [ymin, xmin, ymax, xmax] cho các nội dung KHÔNG THỂ viết bằng chữ (như hình vẽ con vật, sơ đồ mạch điện, biểu đồ phức tạp, hình học có ký hiệu đặc biệt).
+      3. TOÁN HỌC: Các phép tính, phân số, bảng số hãy cố gắng trình bày bằng văn bản/Latex. 
+      4. KHÔNG tự ý biến văn bản thành hình ảnh để tránh làm nặng file đề.
+      
+      JSON: {questions:[...]}`;
 
       const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
       let json;

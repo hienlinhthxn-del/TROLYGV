@@ -633,16 +633,21 @@ Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyế
     CẤU TRÚC JSON:
     [
       {
-        "question": "Câu hỏi ở đây?",
+        "question": "Câu hỏi ở đây? CHỈ dùng [IMAGE] nếu thật sự cần hình minh họa.",
+        "image": "Chỉ điền mô tả ảnh nếu câu hỏi CẦN hình vẽ, đồ thị. Nếu chỉ có chữ thì ĐỂ TRỐNG.",
         "options": [
-          { "text": "Đáp án A", "image": "Mô tả hình/SVG nếu đáp án là hình" },
+          { "text": "Đáp án A", "image": "" },
           { "text": "Đáp án B", "image": "" },
           { "text": "Đáp án C", "image": "" },
           { "text": "Đáp án D", "image": "" }
-        ],
+        ]
       }
     ]
-    LƯU Ý: Trường 'options' phải là mảng các đối tượng {text, image}. 'image' của câu hỏi cũng rất quan trọng. Trả về DUY NHẤT JSON.`;
+    QUAN TRỌNG: 
+    - Ưu tiên tối đa việc sử dụng VĂN BẢN (Text) để mô tả câu hỏi và đáp án.
+    - CHỈ trả về giá trị cho trường 'image' nếu nội dung đó KHÔNG THỂ viết bằng chữ (ví dụ: hình học phức tạp, sơ đồ, tranh vẽ minh họa).
+    - Các công thức toán học, biểu thức hãy viết bằng văn bản hoặc mã Latex đơn giản thay vì yêu cầu ảnh.
+    - Trả về DUY NHẤT JSON.`;
 
     if (!this.model) {
       try {
