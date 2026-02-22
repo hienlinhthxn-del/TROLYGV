@@ -1005,7 +1005,27 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     const controller = new AbortController();
 
     try {
-      const quizContent = await geminiService.generateQuiz(topic, quizCount, additionalPrompt);
+      // Nâng cấp: Sử dụng generateExamQuestionsStructured để đảm bảo định dạng JSON chuẩn và chất lượng tốt hơn
+      const prompt = `Bạn là giáo viên giỏi. Hãy soạn bộ câu hỏi trắc nghiệm (Quiz) về chủ đề: "${topic}".
+      - Số lượng: ${quizCount} câu.
+      - Môn: ${subject}
+      - Lớp: ${grade}
+      ${additionalPrompt ? `- Yêu cầu thêm: ${additionalPrompt}` : ''}
+      
+      YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
+      {
+        "questions": [
+          {
+            "type": "Trắc nghiệm",
+            "question": "Nội dung câu hỏi...",
+            "options": [{"text": "A..."}, {"text": "B..."}],
+            "answer": "Đáp án đúng (VD: A)",
+            "explanation": "Giải thích chi tiết..."
+          }
+        ]
+      }`;
+
+      const quizContent = await geminiService.generateExamQuestionsStructured(prompt);
       if (forceStopRef.current) throw new Error("Đã dừng.");
 
       let rawQuestions = [];

@@ -117,7 +117,16 @@ const WorksheetCreator: React.FC = () => {
 
         try {
             const fileParts = sampleImage ? [{ inlineData: { data: sampleImage.split(',')[1], mimeType: 'image/png' } }] : undefined;
-            const content = await generateWorksheetContentDetailed(topic, subject, config, fileParts);
+
+            // Logic xử lý prompt: Nếu có ảnh, yêu cầu AI học theo cấu trúc ảnh nhưng tạo nội dung mới
+            let effectiveTopic = topic;
+            if (sampleImage) {
+                effectiveTopic = `HÃY TẠO PHIẾU BÀI TẬP MỚI DỰA TRÊN ẢNH MẪU.\n`;
+                if (topic.trim()) effectiveTopic += `Chủ đề yêu cầu: "${topic}".\n`;
+                effectiveTopic += `Yêu cầu quan trọng: Phân tích ảnh đính kèm để hiểu cấu trúc, dạng bài và độ khó. Sau đó tạo ra các câu hỏi MỚI HOÀN TOÀN (không chép lại nội dung cũ) có phong cách tương tự ảnh mẫu${topic.trim() ? ` và phù hợp với chủ đề "${topic}"` : ''}.`;
+            }
+
+            const content = await generateWorksheetContentDetailed(effectiveTopic, subject, config, fileParts);
             if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
 
             // Kiểm tra xem content có lỗi không
@@ -364,7 +373,7 @@ const WorksheetCreator: React.FC = () => {
                                 </select>
                             </div>
                             <div style={{ gridColumn: 'span 1 md:span 2' }}>
-                                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>💡 Chủ đề (hoặc dán ảnh mẫu):</label>
+                                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>💡 Chủ đề / Lời nhắc (Nếu có ảnh mẫu, AI sẽ tạo phiếu mới có cấu trúc tương tự):</label>
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="VD: So sánh số có 2 chữ số..." style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }} />
                                     <input type="file" id="sample-upload" hidden onChange={(e: any) => {
@@ -376,10 +385,10 @@ const WorksheetCreator: React.FC = () => {
                                         }
                                     }} />
                                     <button onClick={() => document.getElementById('sample-upload')?.click()} style={{ padding: '0 15px', background: sampleImage ? '#4CAF50' : '#2196F3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                                        {sampleImage ? '✅ Đã có ảnh' : '📸 Tải ảnh mẫu'}
+                                        {sampleImage ? '✅ Đã có ảnh mẫu' : '📸 Chọn ảnh mẫu'}
                                     </button>
                                 </div>
-                                {sampleImage && <div style={{ marginTop: '10px', fontSize: '11px', color: '#4CAF50' }}>AI sẽ dựa vào ảnh mẫu này để soạn phiếu tương tự. <button onClick={() => setSampleImage(null)} style={{ border: 'none', background: 'none', color: '#F44336', cursor: 'pointer', textDecoration: 'underline' }}>Xóa ảnh</button></div>}
+                                {sampleImage && <div style={{ marginTop: '10px', fontSize: '11px', color: '#4CAF50' }}>AI sẽ tạo phiếu mới có cấu trúc giống ảnh mẫu này. <button onClick={() => setSampleImage(null)} style={{ border: 'none', background: 'none', color: '#F44336', cursor: 'pointer', textDecoration: 'underline' }}>Xóa ảnh</button></div>}
                             </div>
                         </div>
 
