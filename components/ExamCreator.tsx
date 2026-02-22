@@ -44,6 +44,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [createdAssignmentId, setCreatedAssignmentId] = useState<string | null>(null);
   const [tempStrandName, setTempStrandName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [referenceFile, setReferenceFile] = useState<Attachment | null>(null);
+  const referenceFileInputRef = useRef<HTMLInputElement>(null);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -241,9 +243,27 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     setEditingStrand(null);
   };
 
+  const handleReferenceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Data = (reader.result as string).split(',')[1];
+      setReferenceFile({
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        name: file.name,
+        data: base64Data,
+        mimeType: file.type
+      });
+    };
+    reader.readAsDataURL(file);
+    if (referenceFileInputRef.current) referenceFileInputRef.current.value = '';
+  };
+
   const handleGenerate = async () => {
-    if (stats.total === 0) {
-      alert("Vui lòng thiết lập số lượng câu hỏi trong ma trận.");
+    if (stats.total === 0 && !referenceFile) {
+      alert("Vui lòng thiết lập số lượng câu hỏi trong ma trận HOẶC tải lên ảnh mẫu.");
       return;
     }
     setIsGenerating(true);
@@ -259,16 +279,40 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
 
     const prompt = `Bạn là chuyên gia khảo thí Việt Nam. Hãy soạn đề thi mới hoàn toàn:
     - Môn: ${config.subject}, Lớp: ${config.grade}
-    - Chủ đề: ${config.topic || 'Kiến thức tổng hợp'}
+    - Chủ đề/Nội dung: ${config.topic || 'Kiến thức tổng hợp'}
+    ${referenceFile ? '- LƯU Ý QUAN TRỌNG: Người dùng có cung cấp ảnh mẫu. Hãy tạo đề thi có CẤU TRÚC, DẠNG BÀI và ĐỘ KHÓ tương tự ảnh mẫu, nhưng nội dung câu hỏi phải MỚI HOÀN TOÀN.' : ''}
     - MA TRẬN YÊU CẦU:
-    ${matrixReq}
+    ${matrixReq || '(Tự cân đối số lượng câu hỏi hợp lý theo ảnh mẫu hoặc chủ đề)'}
     
     LƯU Ý RIÊNG CHO MÔN TIẾNG VIỆT/TIẾNG ANH:
     - Nếu có mạch "Đọc" hoặc "Đọc hiểu", bạn PHẢI tự sáng tác hoặc trích dẫn một văn bản (truyện ngắn, bài thơ, đoạn văn) phù hợp với lứa tuổi lớp ${config.grade} vào trường "readingPassage".
     - Các câu hỏi thuộc mạch "Đọc" phải khai thác nội dung từ văn bản này.`;
 
     try {
-      const result = await geminiService.generateExamQuestionsStructured(prompt);
+      const fileParts: FilePart[] = [];
+      if (referenceFile) {
+        if (referenceFile.mimeType === 'application/pdf' && referenceFile.data) {
+          try {
+            const images = await convertPdfToImages(referenceFile.data);
+            if (images.length > 0) {
+              images.forEach((img: any) => {
+                fileParts.push({ inlineData: img.inlineData });
+              });
+            } else {
+              fileParts.push({ inlineData: { data: referenceFile.data, mimeType: referenceFile.mimeType } });
+            }
+          } catch (e) {
+            console.warn("PDF convert failed, sending raw PDF", e);
+            fileParts.push({ inlineData: { data: referenceFile.data!, mimeType: referenceFile.mimeType! } });
+          }
+        } else if (referenceFile.data && referenceFile.mimeType) {
+          fileParts.push({
+            inlineData: { data: referenceFile.data, mimeType: referenceFile.mimeType }
+          });
+        }
+      }
+
+      const result = await geminiService.generateExamQuestionsStructured(prompt, fileParts);
 
       // Kiểm tra xem result có lỗi không
       if (result && result.error) {
@@ -985,6 +1029,32 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               </select>
             </div>
 
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chủ đề / Lời nhắc</label>
+              <textarea
+                value={config.topic}
+                onChange={e => setConfig({ ...config, topic: e.target.value })}
+                placeholder="Nhập chủ đề, nội dung chi tiết cần kiểm tra..."
+                className="w-full mt-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 h-24 resize-none"
+              />
+              <div className="mt-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ảnh mẫu (Tùy chọn)</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <button onClick={() => referenceFileInputRef.current?.click()} className="px-3 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-[10px] font-bold hover:bg-indigo-50 transition-all flex items-center">
+                    <i className="fas fa-image mr-2"></i>{referenceFile ? 'Đổi ảnh khác' : 'Chọn ảnh mẫu'}
+                  </button>
+                  {referenceFile && (
+                    <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
+                      <span className="text-[10px] text-indigo-700 font-bold truncate max-w-[100px]">{referenceFile.name}</span>
+                      <button onClick={() => setReferenceFile(null)} className="text-rose-500 hover:text-rose-700"><i className="fas fa-times"></i></button>
+                    </div>
+                  )}
+                  <input ref={referenceFileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleReferenceFileChange} />
+                </div>
+                <p className="text-[9px] text-slate-400 mt-1 italic">AI sẽ tạo đề mới có cấu trúc tương tự ảnh mẫu.</p>
+              </div>
+            </div>
+
             <div className="space-y-3 pt-2">
               {Object.entries(strandMatrix).map(([strand, levels]) => (
                 <div key={strand} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -1038,7 +1108,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               ))}
             </div>
 
-            <button onClick={handleGenerate} disabled={isGenerating || stats.total === 0} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50">
+            <button onClick={handleGenerate} disabled={isGenerating || (stats.total === 0 && !referenceFile)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50">
               {isGenerating ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-wand-magic-sparkles mr-2"></i>}
               {isGenerating ? 'AI đang soạn đề...' : 'Bắt đầu tạo đề AI'}
             </button>
