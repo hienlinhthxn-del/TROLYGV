@@ -503,29 +503,122 @@ CẤU TRÚC JSON BẮT BUỘC:
   }
 
   public async generateWorksheetContentDetailed(topic: string, subject: string, config: any, fileParts: FilePart[] = []): Promise<any> {
-    const prompt = `Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1, chủ đề "${topic}".
-Cấu hình: ${JSON.stringify(config)}.
+    await this.ensureInitialized();
 
-QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG thêm markdown hay giải thích.
+    const configDesc = Object.entries(config)
+      .filter(([, v]) => (v as number) > 0)
+      .map(([k, v]) => {
+        const labels: Record<string, string> = {
+          mcq: 'Trắc nghiệm', tf: 'Đúng/Sai', fill: 'Điền khuyết',
+          match: 'Nối cột', essay: 'Tự luận', arrange: 'Sắp xếp câu'
+        };
+        return `${v} câu ${labels[k] || k}`;
+      }).join(', ');
 
-Cấu trúc JSON:
+    const hasImage = fileParts && fileParts.length > 0;
+    const imageInstruction = hasImage
+      ? `Có ảnh mẫu đính kèm. Hãy phân tích cấu trúc, dạng bài, độ khó của ảnh để tạo phiếu mới TƯƠNG TỰ (không chép nội dung cũ).`
+      : '';
+
+    const prompt = `Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1.
+Chủ đề: "${topic || 'Tổng hợp kiến thức lớp 1'}".
+Cơ cấu câu hỏi: ${configDesc}.
+${imageInstruction}
+
+YÊU CẦU BẮT BUỘC:
+- Ngôn ngữ: tiếng Việt, phù hợp học sinh lớp 1 (đơn giản, dễ hiểu)
+- Trả về JSON THUẦN TÚY, KHÔNG markdown, KHÔNG giải thích thêm
+
+CẤU TRÚC JSON BẮT BUỘC (giữ nguyên tên field):
 {
-  "title": "Tên phiếu bài tập",
+  "title": "Phiếu Bài Tập ${subject} Lớp 1 - ${topic || 'Tổng hợp'}",
   "subject": "${subject}",
   "questions": [
     {
       "id": "1",
       "type": "mcq",
-      "question": "Nội dung câu hỏi",
-      "imagePrompt": "Mô tả hình minh họa",
-      "options": ["A", "B", "C", "D"],
-      "answer": "A"
+      "question": "Nội dung câu hỏi dạng chuỗi văn bản (string)",
+      "imagePrompt": "Mô tả ngắn hình minh họa bằng tiếng Anh cho câu này",
+      "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+      "answer": "Đáp án A"
     }
   ]
 }
 
-Loại câu hỏi: mcq (trắc nghiệm), tf (đúng/sai), fill (điền khuyết), match (nối), essay (tự luận), arrange (sắp xếp).`;
-    return this.generateExamQuestionsStructured(prompt, fileParts);
+QUY TẮC TỪNG LOẠI (field "type"):
+- "mcq": options là mảng 4 chuỗi ["A", "B", "C", "D"], answer là 1 trong các chuỗi đó
+- "tf": options là ["Đúng", "Sai"], answer là "Đúng" hoặc "Sai"
+- "fill": options là [] (mảng rỗng), answer là từ/cụm cần điền
+- "match": options là [] (mảng rỗng), question mô tả cặp nối, answer là gợi ý đáp án
+- "essay": options là [] (mảng rỗng), answer là đáp án tham khảo
+- "arrange": options là các từ bị xáo trộn ["từ3","từ1","từ2"...], answer là câu đúng
+
+QUAN TRỌNG:
+- "question" PHẢI là chuỗi string, KHÔNG phải object hay null
+- "options" PHẢI là mảng các chuỗi string [], KHÔNG phải mảng object
+- "answer" PHẢI là chuỗi string
+- "id" là số thứ tự dạng chuỗi "1", "2", "3"...
+- imagePrompt viết bằng tiếng Anh, mô tả hình ảnh đơn giản dành cho trẻ lớp 1
+
+CHỈ XUẤT JSON THUẦN TÚY.`;
+
+    if (!this.model) {
+      try {
+        const text = await this.fallbackToOtherProviders(prompt, true);
+        return this.parseJSONSafely(text);
+      } catch (e: any) {
+        return { error: e.message || 'Lỗi kết nối AI Server' };
+      }
+    }
+
+    const parts: any[] = [{ text: prompt }];
+    if (fileParts && fileParts.length > 0) {
+      fileParts.forEach(p => parts.push(p));
+    }
+
+    try {
+      let result;
+      if (this.currentVersion === 'v1beta' && GeminiService.supportsJsonResponseMimeType(this.currentModelName)) {
+        const jsonModel = this.genAI!.getGenerativeModel({
+          model: this.currentModelName,
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 8192,
+          }
+        }, { apiVersion: 'v1beta' });
+        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
+      } else {
+        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 3000);
+      }
+
+      const parsed = this.parseJSONSafely(result.response.text());
+
+      // Chuẩn hóa dữ liệu: đảm bảo question là string, options là string[]
+      if (parsed && Array.isArray(parsed.questions)) {
+        parsed.questions = parsed.questions.map((q: any, idx: number) => ({
+          id: q.id ?? String(idx + 1),
+          type: q.type ?? 'essay',
+          question: typeof q.question === 'string' ? q.question
+            : (typeof q.content === 'string' ? q.content : JSON.stringify(q.question ?? q.content ?? '')),
+          imagePrompt: q.imagePrompt ?? q.image ?? '',
+          imageUrl: q.imageUrl,
+          options: Array.isArray(q.options)
+            ? q.options.map((o: any) => typeof o === 'string' ? o : (o?.text ?? JSON.stringify(o)))
+            : [],
+          answer: typeof q.answer === 'string' ? q.answer : (q.answer?.text ?? String(q.answer ?? '')),
+        }));
+      }
+
+      return parsed;
+    } catch (error: any) {
+      return this.handleError(error, () => this.generateWorksheetContentDetailed(topic, subject, config, fileParts), prompt);
+    }
   }
 
   // Rate Limiter: Đảm bảo khoảng cách tối thiểu giữa các request
