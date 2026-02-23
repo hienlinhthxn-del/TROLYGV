@@ -859,22 +859,30 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
   }
 
   public async generateImage(prompt: string): Promise<string> {
-    const enhancedPrompt = `${prompt}, simple cute drawing for kids, educational illustration, high quality, white background`;
+    // Rút ngắn prompt để tránh URL quá dài
+    const shortPrompt = prompt.length > 80 ? prompt.substring(0, 80) : prompt;
+    const enhancedPrompt = `${shortPrompt}, cute cartoon for kids, white background`;
 
-    for (let i = 0; i < 3; i++) {
-      const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1024&height=1024`;
+    // --- Phương án 1: image.pollinations.ai (endpoint cũ) ---
+    const endpoints = [
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=flux`,
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=turbo`,
+      // Phương án 2: gen.pollinations.ai (endpoint mới, thử không key)
+      `https://gen.pollinations.ai/image/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=flux`,
+    ];
 
+    for (let i = 0; i < endpoints.length; i++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
 
-        const response = await fetch(url, { signal: controller.signal });
+        console.log(`[Image] Thử nguồn ${i + 1}/${endpoints.length}`);
+        const response = await fetch(endpoints[i], { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
           const blob = await response.blob();
-          if (blob.type.startsWith('image/')) {
+          if (blob.size > 1000 && blob.type.startsWith('image/')) {
             return new Promise((resolve, reject) => {
               const reader = new FileReader();
               reader.onloadend = () => resolve(reader.result as string);
@@ -882,19 +890,69 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
               reader.readAsDataURL(blob);
             });
           }
+          console.warn(`[Image] Blob không hợp lệ: size=${blob.size}, type=${blob.type}`);
+        } else {
+          console.warn(`[Image] HTTP ${response.status} từ nguồn ${i + 1}`);
         }
       } catch (error: any) {
-        if (error.name === 'AbortError') console.warn("Image generation timeout reached.");
-        console.warn(`Lỗi tạo ảnh lần ${i + 1}:`, error);
-        if (i === 2) {
-          throw new Error("Dịch vụ tạo ảnh đang bận. Thầy Cô có thể bấm 'Vẽ lại' từng câu sau nhé.");
-        }
-        await new Promise(r => setTimeout(r, 1000));
+        console.warn(`[Image] Lỗi nguồn ${i + 1}:`, error.name === 'AbortError' ? 'Timeout' : error.message);
+      }
+
+      if (i < endpoints.length - 1) {
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
-    throw new Error("Không thể tạo ảnh lúc này.");
-  }
 
+    // --- Phương án 3: AI Horde (stablehorde.net) - miễn phí, không cần key ---
+    try {
+      console.log('[Image] Thử AI Horde...');
+      const hordeRes = await fetch('https://stablehorde.net/api/v2/generate/async', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': '0000000000' },
+        body: JSON.stringify({
+          prompt: enhancedPrompt,
+          params: { width: 512, height: 512, steps: 20, n: 1 },
+          nsfw: false,
+          models: ['Deliberate']
+        })
+      });
+
+      if (hordeRes.ok) {
+        const hordeData = await hordeRes.json();
+        const hordeId = hordeData.id;
+        if (hordeId) {
+          // Polling chờ kết quả (tối đa 60s)
+          for (let poll = 0; poll < 20; poll++) {
+            await new Promise(r => setTimeout(r, 3000));
+            const statusRes = await fetch(`https://stablehorde.net/api/v2/generate/status/${hordeId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              if (statusData.done && statusData.generations && statusData.generations.length > 0) {
+                const imgUrl = statusData.generations[0].img;
+                if (imgUrl) {
+                  // Tải ảnh về dạng data URL
+                  const imgRes = await fetch(imgUrl);
+                  if (imgRes.ok) {
+                    const imgBlob = await imgRes.blob();
+                    return new Promise((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.onerror = reject;
+                      reader.readAsDataURL(imgBlob);
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (hordeErr: any) {
+      console.warn('[Image] AI Horde lỗi:', hordeErr.message);
+    }
+
+    throw new Error("Dịch vụ tạo ảnh đang bận. Thầy Cô bấm 'Vẽ lại' sau nhé.");
+  }
   public async generateVideo(prompt: string): Promise<string> {
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
 
