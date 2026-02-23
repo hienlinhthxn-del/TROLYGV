@@ -526,7 +526,7 @@ Cơ cấu câu hỏi: ${configDesc}.
 ${imageInstruction}
 
 YÊU CẦU BẮT BUỘC:
-- Ngôn ngữ: tiếng Việt, phù hợp học sinh lớp 1 (đơn giản, dễ hiểu)
+- Ngôn ngữ: tiếng Việt, phù hợp học sinh lớp 1 (đơn giản, dễ hiểu, ngắn gọn)
 - Trả về JSON THUẦN TÚY, KHÔNG markdown, KHÔNG giải thích thêm
 
 CẤU TRÚC JSON BẮT BUỘC (giữ nguyên tên field):
@@ -538,7 +538,7 @@ CẤU TRÚC JSON BẮT BUỘC (giữ nguyên tên field):
       "id": "1",
       "type": "mcq",
       "question": "Nội dung câu hỏi dạng chuỗi văn bản (string)",
-      "imagePrompt": "Mô tả ngắn hình minh họa bằng tiếng Anh cho câu này",
+      "imagePrompt": "cute illustration of [object/concept], simple drawing for grade 1 kids, colorful, white background",
       "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
       "answer": "Đáp án A"
     }
@@ -558,7 +558,13 @@ QUAN TRỌNG:
 - "options" PHẢI là mảng các chuỗi string [], KHÔNG phải mảng object
 - "answer" PHẢI là chuỗi string
 - "id" là số thứ tự dạng chuỗi "1", "2", "3"...
-- imagePrompt viết bằng tiếng Anh, mô tả hình ảnh đơn giản dành cho trẻ lớp 1
+- "imagePrompt" PHẢI có trong MỌI câu hỏi - là mô tả hình minh họa bằng tiếng Anh phù hợp nội dung câu, dành cho trẻ lớp 1
+  Ví dụ imagePrompt hay:
+  + Toán: "cute number 5 with apple fruits counting, cartoon style for kids"
+  + Tiếng Việt: "cute cartoon cat reading a book, colorful illustration"
+  + Tự nhiên: "bright sun shining over green trees and flowers, kids illustration"
+  + Đạo đức: "children sharing food and smiling, friendly cartoon"
+  + Tổng quát: "happy grade 1 student with backpack and pencils, cute cartoon"
 
 CHỈ XUẤT JSON THUẦN TÚY.`;
 

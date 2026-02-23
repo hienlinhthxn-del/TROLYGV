@@ -25,6 +25,8 @@ const WorksheetCreator: React.FC = () => {
     const [sampleImage, setSampleImage] = useState<string | null>(null);
     const [history, setHistory] = useState<Worksheet[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [autoGenerateImages, setAutoGenerateImages] = useState(true);
+    const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
 
     // Hạng mục cấu trúc câu hỏi chi tiết
     const [config, setConfig] = useState({
@@ -142,8 +144,13 @@ const WorksheetCreator: React.FC = () => {
             }
 
             setWorksheet(content);
-            setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
-            await generateImages(content);
+            if (autoGenerateImages) {
+                setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
+                await generateImages(content);
+            } else {
+                setProgress('Tạo câu hỏi hoàn tất! Nhấn "🎨 Vẽ tất cả ảnh" để tạo hình minh họa.');
+                setTimeout(() => setProgress(''), 5000);
+            }
         } catch (error: any) {
             console.error('Lỗi khi tạo phiếu học tập:', error);
             const msg = error.message || "";
@@ -164,33 +171,49 @@ const WorksheetCreator: React.FC = () => {
 
     const generateImages = async (ws: Worksheet) => {
         setIsGeneratingImages(true);
+        forceStopRef.current = false;
         const updatedQuestions = [...ws.questions];
+        // Chỉ tạo ảnh cho câu có imagePrompt hoặc question
+        const questionsWithPrompt = updatedQuestions.filter(q => q.imagePrompt || q.question);
+        setImageProgress({ current: 0, total: questionsWithPrompt.length });
 
         try {
+            let doneCount = 0;
             for (let i = 0; i < updatedQuestions.length; i++) {
-                if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
+                if (forceStopRef.current) {
+                    setProgress(`⏹️ Đã dừng! Đã vẽ ${doneCount}/${questionsWithPrompt.length} ảnh.`);
+                    break;
+                }
                 const q = updatedQuestions[i];
-                if (q.imagePrompt || q.question) {
-                    const promptToUse = q.imagePrompt || q.question;
-                    if (i > 0) {
-                        setProgress(`Đang chuẩn bị vẽ câu ${i + 1}...`);
-                        await new Promise(resolve => setTimeout(resolve, 800));
-                    }
-                    if (forceStopRef.current) throw new Error('Yêu cầu đã bị dừng.');
-                    setProgress(`🎨 Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length}...`);
-                    try {
-                        const imageUrl = await geminiService.generateImage(promptToUse);
-                        updatedQuestions[i].imageUrl = imageUrl;
-                        setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
-                    } catch (error) {
-                        console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
-                    }
+                // Ưu tiên dùng imagePrompt từ AI, fallback sang question
+                const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
+                if (!promptToUse) continue;
+
+                if (i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 600));
+                }
+                if (forceStopRef.current) break;
+
+                doneCount++;
+                setImageProgress({ current: doneCount, total: questionsWithPrompt.length });
+                setProgress(`🎨 Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length} (${doneCount}/${questionsWithPrompt.length})...`);
+
+                try {
+                    const imageUrl = await geminiService.generateImage(promptToUse);
+                    updatedQuestions[i].imageUrl = imageUrl;
+                    setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
+                } catch (error) {
+                    console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
+                    updatedQuestions[i].imageUrl = undefined;
                 }
             }
-            setProgress('Hoàn thành!');
+            if (!forceStopRef.current) {
+                setProgress(`✅ Hoàn thành! Đã vẽ ${doneCount} hình minh họa.`);
+            }
         } finally {
             setIsGeneratingImages(false);
-            setTimeout(() => setProgress(''), 5000);
+            setImageProgress({ current: 0, total: 0 });
+            setTimeout(() => setProgress(''), 6000);
         }
     };
 
@@ -411,15 +434,62 @@ const WorksheetCreator: React.FC = () => {
                             </div>
                         </div>
 
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'white', borderRadius: '10px', border: '1px solid #FFE082', marginBottom: '15px' }}>
+                            <span style={{ fontSize: '20px' }}>🎨</span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>Tự động tạo hình minh họa</div>
+                                <div style={{ fontSize: '12px', color: '#888' }}>AI vẽ ảnh minh họa cho mỗi câu hỏi sau khi soạn xong (mất thêm 1-2 phút)</div>
+                            </div>
+                            <button
+                                onClick={() => setAutoGenerateImages(!autoGenerateImages)}
+                                style={{
+                                    width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer',
+                                    background: autoGenerateImages ? '#4CAF50' : '#ccc',
+                                    position: 'relative', transition: 'background 0.3s'
+                                }}
+                            >
+                                <span style={{
+                                    position: 'absolute', top: '3px', width: '22px', height: '22px',
+                                    background: 'white', borderRadius: '50%', transition: 'left 0.3s',
+                                    left: autoGenerateImages ? '27px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                                }} />
+                            </button>
+                        </div>
+
                         <button onClick={handleGenerate} disabled={isGenerating} style={{ width: '100%', padding: '15px', background: '#FF6B9D', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,107,157,0.4)' }}>
                             {isGenerating ? '⏳ AI ĐANG LÀM VIỆC...' : '✨ BẮT ĐẦU SOẠN PHIẾU'}
                         </button>
                     </div>
                 )}
 
-                {progress && (
-                    <div style={{ margin: '20px 0', padding: '15px', background: '#E3F2FD', borderRadius: '12px', textAlign: 'center', color: '#1976D2', fontWeight: 'bold', border: '1px solid #BBDEFB' }}>
-                        {progress}
+                {(progress || isGeneratingImages) && (
+                    <div style={{ margin: '20px 0', padding: '15px 20px', background: '#E3F2FD', borderRadius: '12px', border: '1px solid #BBDEFB' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: imageProgress.total > 0 ? '10px' : '0' }}>
+                            <div style={{ color: '#1976D2', fontWeight: 'bold', fontSize: '14px' }}>{progress}</div>
+                            {isGeneratingImages && (
+                                <button
+                                    onClick={() => { forceStopRef.current = true; }}
+                                    style={{ padding: '5px 12px', background: '#FF5252', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '10px' }}
+                                >
+                                    ⏹️ Dừng
+                                </button>
+                            )}
+                        </div>
+                        {imageProgress.total > 0 && (
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#1565C0', marginBottom: '4px' }}>
+                                    <span>Tiến độ: {imageProgress.current}/{imageProgress.total} ảnh</span>
+                                    <span>{Math.round((imageProgress.current / imageProgress.total) * 100)}%</span>
+                                </div>
+                                <div style={{ height: '8px', background: '#BBDEFB', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        height: '100%', borderRadius: '4px', transition: 'width 0.5s ease',
+                                        background: 'linear-gradient(90deg, #1976D2, #42A5F5)',
+                                        width: `${Math.round((imageProgress.current / imageProgress.total) * 100)}%`
+                                    }} />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -432,11 +502,19 @@ const WorksheetCreator: React.FC = () => {
                                 onChange={(e) => setWorksheet({ ...worksheet, title: e.target.value })}
                                 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1976D2', border: 'none', background: 'transparent', flex: 1 }}
                             />
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => saveToHistory(worksheet)} style={{ padding: '8px 15px', background: '#FF9800', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>💾 Lưu Phiếu</button>
-                                <button onClick={handleExportJSON} style={{ padding: '8px 15px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📄 Xuất JSON</button>
-                                <button onClick={handleExportDOCX} style={{ padding: '8px 15px', background: '#3F51B5', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📝 Xuất DOCX</button>
-                                <button onClick={() => setWorksheet(null)} style={{ padding: '8px 15px', background: '#f0f0f0', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Quay lại</button>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                <button
+                                    onClick={() => { forceStopRef.current = false; generateImages(worksheet); }}
+                                    disabled={isGeneratingImages}
+                                    title="Tạo/vẽ lại toàn bộ hình minh họa cho phiếu"
+                                    style={{ padding: '8px 14px', background: isGeneratingImages ? '#ccc' : '#FF6B9D', color: 'white', border: 'none', borderRadius: '8px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+                                >
+                                    {isGeneratingImages ? '⏳ Đang vẽ...' : '🎨 Vẽ tất cả ảnh'}
+                                </button>
+                                <button onClick={() => saveToHistory(worksheet)} style={{ padding: '8px 14px', background: '#FF9800', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>💾 Lưu</button>
+                                <button onClick={handleExportDOCX} style={{ padding: '8px 14px', background: '#3F51B5', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>📝 DOCX</button>
+                                <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ padding: '8px 14px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>🖨️ PDF</button>
+                                <button onClick={() => setWorksheet(null)} style={{ padding: '8px 14px', background: '#f0f0f0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>← Quay lại</button>
                             </div>
                         </div>
 
@@ -492,8 +570,20 @@ const WorksheetCreator: React.FC = () => {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ height: '100px', background: '#eee', border: '2px dashed #ccc', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => handleRetryImage(index)}>
-                                            {isGeneratingImages ? '⏳ Đang vẽ...' : 'Chưa có ảnh (Nhấn để vẽ AI)'}
+                                        <div
+                                            style={{ minHeight: '90px', background: '#f5f5f5', border: '2px dashed #ddd', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: isGeneratingImages ? 'default' : 'pointer', padding: '12px' }}
+                                            onClick={() => !isGeneratingImages && handleRetryImage(index)}
+                                        >
+                                            <span style={{ fontSize: '26px' }}>{isGeneratingImages ? '⏳' : '🖼️'}</span>
+                                            <span style={{ fontSize: '12px', color: '#999', textAlign: 'center' }}>
+                                                {isGeneratingImages ? 'Đang vẽ minh họa...' : 'Nhấn để AI vẽ hình minh họa'}
+                                            </span>
+                                            {q.imagePrompt && !isGeneratingImages && (
+                                                <span style={{ fontSize: '10px', color: '#bbb', fontStyle: 'italic', textAlign: 'center', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                                    title={q.imagePrompt}>
+                                                    💡 {q.imagePrompt}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -524,14 +614,21 @@ const WorksheetCreator: React.FC = () => {
                             </div>
                         ))}
 
-                        <div style={{ position: 'sticky', bottom: '20px', zIndex: 100, display: 'flex', gap: '15px', padding: '15px', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderRadius: '20px', boxShadow: '0 -5px 25px rgba(0,0,0,0.15)', border: '2px solid #FF6B9D' }}>
-                            <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ flex: 2, padding: '15px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}>
+                        <div style={{ position: 'sticky', bottom: '20px', zIndex: 100, display: 'flex', gap: '10px', padding: '15px', background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: '20px', boxShadow: '0 -5px 25px rgba(0,0,0,0.15)', border: '2px solid #FF6B9D', flexWrap: 'wrap' }}>
+                            <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ flex: 2, minWidth: '140px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}>
                                 {isGeneratingImages ? '⏳ ĐANG VẼ ẢNH...' : '🖨️ XUẤT PDF & IN'}
+                            </button>
+                            <button
+                                onClick={() => { forceStopRef.current = false; generateImages(worksheet); }}
+                                disabled={isGeneratingImages}
+                                style={{ flex: 1, minWidth: '120px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#FF6B9D', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}
+                            >
+                                🎨 Vẽ lại ảnh
                             </button>
                             <button onClick={() => {
                                 const newQ: WorksheetQuestion = { id: Date.now().toString(), type: 'essay', question: 'Câu hỏi mới...' };
                                 setWorksheet({ ...worksheet, questions: [...worksheet.questions, newQ] });
-                            }} style={{ flex: 1, padding: '15px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>➕ Thêm câu</button>
+                            }} style={{ flex: 1, minWidth: '100px', padding: '15px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px' }}>➕ Thêm câu</button>
                         </div>
                     </div>
                 )}
