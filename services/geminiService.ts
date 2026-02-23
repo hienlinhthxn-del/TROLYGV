@@ -510,61 +510,114 @@ CẤU TRÚC JSON BẮT BUỘC:
       .map(([k, v]) => {
         const labels: Record<string, string> = {
           mcq: 'Trắc nghiệm', tf: 'Đúng/Sai', fill: 'Điền khuyết',
-          match: 'Nối cột', essay: 'Tự luận', arrange: 'Sắp xếp câu'
+          match: 'Nối cột', essay: 'Tự luận', arrange: 'Sắp xếp câu',
+          circle: 'Khoanh tròn', compare: 'So sánh (>,<,=)', reading: 'Đọc hiểu'
         };
         return `${v} câu ${labels[k] || k}`;
       }).join(', ');
 
     const hasImage = fileParts && fileParts.length > 0;
     const imageInstruction = hasImage
-      ? `Có ảnh mẫu đính kèm. Hãy phân tích cấu trúc, dạng bài, độ khó của ảnh để tạo phiếu mới TƯƠNG TỰ (không chép nội dung cũ).`
+      ? `\nCÓ ẢNH MẪU ĐÍNH KÈM - Hãy phân tích ảnh mẫu kỹ lưỡng:
+- Xác định các DẠNG BÀI có trong ảnh (khoanh tròn, so sánh, điền chỗ trống, đọc hiểu...)
+- Xác định ĐỘ KHÓ và PHONG CÁCH trình bày
+- Tạo phiếu MỚI HOÀN TOÀN nhưng CÓ CẤU TRÚC TƯƠNG TỰ ảnh mẫu
+- imagePrompt của mỗi câu mô tả hình ảnh BÀI TẬP (giống phong cách ảnh mẫu: nhân vật, đồ vật, số liệu cụ thể)`
       : '';
 
-    const prompt = `Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1.
+    const subjectHint = subject === 'Toán'
+      ? `\nGỢI Ý DẠNG BÀI TOÁN LỚP 1 (dùng thêm type phù hợp):
+- "circle": Khoanh vào số/hình lớn nhất/bé nhất (imagePrompt: "3 cartoon kids each holding a sign with number X, Y, Z, colorful, white background, circle the biggest/smallest")
+- "compare": So sánh hai số với >, <, = (imagePrompt: "two number boxes XX and YY with empty comparison box between them, grade 1 math worksheet style")
+- "arrange": Sắp xếp dãy số từ bé đến lớn hoặc ngược lại (imagePrompt: "cute train with 3-4 empty wagons waiting for numbers, colorful cartoon style")
+- "fill": Điền số còn thiếu trong dãy, phép tính (imagePrompt: "math equation with blank: X + Y = __, simple bold numbers, kids worksheet")`
+      : subject === 'Tiếng Việt'
+        ? `\nGỢI Ý DẠNG BÀI TIẾNG VIỆT LỚP 1:
+- "reading": Đọc đoạn văn ngắn rồi trả lời câu hỏi. Đặt nội dung đoạn văn vào field "readingPassage". Câu hỏi là trắc nghiệm 3 lựa chọn A/B/C.
+- "fill": Điền tiếng/chữ thích hợp vào chỗ trống (imagePrompt: "cute strawberry cartoon character next to blank line, Vietnamese worksheet style")
+- "circle": Khoanh vào chữ/tiếng đúng chính tả (imagePrompt: "Vietnamese word choice exercise: two options in boxes, circle the correct one")
+- "essay": Viết câu theo tranh (imagePrompt: "cute Vietnamese kid in a scene related to the topic, simple illustration")` : '';
+
+    const prompt = `Soạn phiếu bài tập môn ${subject} cho học sinh lớp 1, phong cách CHUYÊN NGHIỆP như sách bài tập thực tế.
 Chủ đề: "${topic || 'Tổng hợp kiến thức lớp 1'}".
-Cơ cấu câu hỏi: ${configDesc}.
+Cơ cấu: ${configDesc}.
 ${imageInstruction}
+${subjectHint}
 
-YÊU CẦU BẮT BUỘC:
-- Ngôn ngữ: tiếng Việt, phù hợp học sinh lớp 1 (đơn giản, dễ hiểu, ngắn gọn)
-- Trả về JSON THUẦN TÚY, KHÔNG markdown, KHÔNG giải thích thêm
+NGUYÊN TẮC SOẠN:
+1. Ngôn ngữ ĐƠN GIẢN, ngắn gọn, dễ đọc với trẻ 6-7 tuổi
+2. Mỗi câu phải có "imagePrompt" mô tả ĐÚNG hình ảnh minh họa BÀI TẬP (không phải ảnh trang trí chung chung)
+   - imagePrompt viết tiếng Anh, mô tả rõ nội dung số/chữ/hình trong bài, phong cách cartoon dành cho trẻ
+3. Trả về JSON THUẦN TÚY, KHÔNG markdown
 
-CẤU TRÚC JSON BẮT BUỘC (giữ nguyên tên field):
+CẤU TRÚC JSON BẮT BUỘC:
 {
   "title": "Phiếu Bài Tập ${subject} Lớp 1 - ${topic || 'Tổng hợp'}",
   "subject": "${subject}",
+  "readingPassage": "(chỉ có nội dung nếu có bài đọc hiểu, để trống nếu không)",
   "questions": [
     {
       "id": "1",
+      "type": "circle",
+      "question": "a) Khoanh vào số lớn nhất:",
+      "numbers": ["54", "19", "52"],
+      "imagePrompt": "three cheerful cartoon children each holding a sign with numbers 54, 19, 52, colorful cute style, white background, Vietnamese grade 1 math",
+      "options": ["54", "19", "52"],
+      "answer": "54"
+    },
+    {
+      "id": "2",
+      "type": "compare",
+      "question": "Điền >, < hoặc = vào ô trống:",
+      "pairs": [["25", "35"], ["45", "25"], ["99", "36"]],
+      "imagePrompt": "math comparison boxes showing pairs of two-digit numbers with empty box between them, colorful ribbon decoration, Vietnamese worksheet style",
+      "options": [],
+      "answer": "25 < 35; 45 > 25; 99 > 36"
+    },
+    {
+      "id": "3",
+      "type": "arrange",
+      "question": "Viết các số 57, 51, 45 theo thứ tự từ bé đến lớn:",
+      "imagePrompt": "colorful cartoon train with 3 empty wagon panels waiting to be filled with numbers, Vietnamese grade 1 style",
+      "options": ["57", "51", "45"],
+      "answer": "45, 51, 57"
+    },
+    {
+      "id": "4",
+      "type": "fill",
+      "question": "Điền số còn thiếu: 10, 20, ___, 40, ___",
+      "imagePrompt": "number line with cute animal characters, missing numbers shown as blank boxes, colorful cartoon",
+      "options": [],
+      "answer": "30, 50"
+    },
+    {
+      "id": "5",
       "type": "mcq",
-      "question": "Nội dung câu hỏi dạng chuỗi văn bản (string)",
-      "imagePrompt": "cute illustration of [object/concept], simple drawing for grade 1 kids, colorful, white background",
-      "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
+      "question": "Câu hỏi trắc nghiệm?",
+      "imagePrompt": "cute Vietnamese grade 1 student character related to the question topic, cartoon style",
+      "options": ["Đáp án A", "Đáp án B", "Đáp án C"],
       "answer": "Đáp án A"
     }
   ]
 }
 
-QUY TẮC TỪNG LOẠI (field "type"):
-- "mcq": options là mảng 4 chuỗi ["A", "B", "C", "D"], answer là 1 trong các chuỗi đó
-- "tf": options là ["Đúng", "Sai"], answer là "Đúng" hoặc "Sai"
-- "fill": options là [] (mảng rỗng), answer là từ/cụm cần điền
-- "match": options là [] (mảng rỗng), question mô tả cặp nối, answer là gợi ý đáp án
-- "essay": options là [] (mảng rỗng), answer là đáp án tham khảo
-- "arrange": options là các từ bị xáo trộn ["từ3","từ1","từ2"...], answer là câu đúng
+QUY TẮC FIELD "type":
+- "circle": Khoanh vào đáp án đúng trong nhóm. "numbers" là mảng các số/chữ để khoanh, "options" = numbers
+- "compare": So sánh các cặp số/đại lượng. "pairs" là mảng cặp [["A","B"],...]. "options" = []
+- "arrange": Sắp xếp thứ tự. "options" là các phần tử cần sắp xếp (đã xáo trộn). "answer" là thứ tự đúng
+- "fill": Điền khuyết. "options" = []. "answer" là nội dung cần điền
+- "mcq": Trắc nghiệm 3-4 lựa chọn. "answer" là đáp án đúng
+- "tf": Đúng/Sai. "options" = ["Đúng","Sai"]
+- "essay": Tự luận / Viết câu / Vẽ tranh. "options" = []
+- "reading": Câu hỏi đọc hiểu (ghép với readingPassage). "options" là 3 phương án A/B/C
 
 QUAN TRỌNG:
-- "question" PHẢI là chuỗi string, KHÔNG phải object hay null
-- "options" PHẢI là mảng các chuỗi string [], KHÔNG phải mảng object
-- "answer" PHẢI là chuỗi string
-- "id" là số thứ tự dạng chuỗi "1", "2", "3"...
-- "imagePrompt" PHẢI có trong MỌI câu hỏi - là mô tả hình minh họa bằng tiếng Anh phù hợp nội dung câu, dành cho trẻ lớp 1
-  Ví dụ imagePrompt hay:
-  + Toán: "cute number 5 with apple fruits counting, cartoon style for kids"
-  + Tiếng Việt: "cute cartoon cat reading a book, colorful illustration"
-  + Tự nhiên: "bright sun shining over green trees and flowers, kids illustration"
-  + Đạo đức: "children sharing food and smiling, friendly cartoon"
-  + Tổng quát: "happy grade 1 student with backpack and pencils, cute cartoon"
+- "question" PHẢI là string, KHÔNG phải object hay null
+- "options" PHẢI là mảng string [], không phải mảng object  
+- "answer" PHẢI là string
+- "imagePrompt" PHẢI CÓ trong MỌI câu, mô tả hình ảnh BÀI TẬP CỤ THỂ:
+  ĐÚNG: "three kids holding signs with numbers 54, 19, 52, circle the largest"
+  SAI: "cute cartoon illustration for kids"
 
 CHỈ XUẤT JSON THUẦN TÚY.`;
 
@@ -605,7 +658,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
 
       const parsed = this.parseJSONSafely(result.response.text());
 
-      // Chuẩn hóa dữ liệu: đảm bảo question là string, options là string[]
+      // Chuẩn hóa dữ liệu
       if (parsed && Array.isArray(parsed.questions)) {
         parsed.questions = parsed.questions.map((q: any, idx: number) => ({
           id: q.id ?? String(idx + 1),
@@ -618,6 +671,9 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
             ? q.options.map((o: any) => typeof o === 'string' ? o : (o?.text ?? JSON.stringify(o)))
             : [],
           answer: typeof q.answer === 'string' ? q.answer : (q.answer?.text ?? String(q.answer ?? '')),
+          // Giữ nguyên các field đặc thù của từng dạng bài
+          numbers: q.numbers,
+          pairs: q.pairs,
         }));
       }
 
