@@ -84,7 +84,7 @@
         window.addEventListener('load', () => {
             const debugDiv = document.createElement('div');
             debugDiv.id = 'ai-debug-panel';
-            debugDiv.style.cssText = 'position:fixed; bottom:10px; right:120px; background:rgba(0,0,0,0.85); color:#0f0; padding:12px; border-radius:12px; font-size:11px; z-index:9999; font-family:monospace; pointer-events:none; border: 1px solid #0f0; line-height:1.4;';
+            debugDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; background:rgba(0,0,0,0.7); color:#0f0; padding:8px 12px; border-radius:10px; font-size:10px; z-index:9999; font-family:monospace; pointer-events:none; border: 1px solid rgba(0,255,0,0.3); line-height:1.2; box-shadow: 0 4px 15px rgba(0,0,0,0.3);';
             document.body.appendChild(debugDiv);
 
             setInterval(() => {

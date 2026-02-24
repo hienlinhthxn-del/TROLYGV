@@ -30,6 +30,7 @@ const WorksheetCreator: React.FC = () => {
     const [showHistory, setShowHistory] = useState(false);
     const [autoGenerateImages, setAutoGenerateImages] = useState(true);
     const [imageProgress, setImageProgress] = useState({ current: 0, total: 0 });
+    const [activeImageIndexes, setActiveImageIndexes] = useState<number[]>([]);
 
     // Hạng mục cấu trúc câu hỏi chi tiết
     const [config, setConfig] = useState({
@@ -179,45 +180,63 @@ const WorksheetCreator: React.FC = () => {
         setIsGeneratingImages(true);
         forceStopRef.current = false;
         const updatedQuestions = [...ws.questions];
-        // Chỉ tạo ảnh cho câu có imagePrompt hoặc question
-        const questionsWithPrompt = updatedQuestions.filter(q => q.imagePrompt || q.question);
-        setImageProgress({ current: 0, total: questionsWithPrompt.length });
 
-        try {
-            let doneCount = 0;
-            for (let i = 0; i < updatedQuestions.length; i++) {
-                if (forceStopRef.current) {
-                    setProgress(`⏹️ Đã dừng! Đã vẽ ${doneCount}/${questionsWithPrompt.length} ảnh.`);
-                    break;
-                }
-                const q = updatedQuestions[i];
-                // Ưu tiên dùng imagePrompt từ AI, fallback sang question
+        // Chỉ chọn những câu chưa có ảnh và có thông tin để vẽ
+        const pendingIndexes = updatedQuestions
+            .map((q, idx) => ({ q, idx }))
+            .filter(({ q }) => !q.imageUrl && (q.imagePrompt || q.question))
+            .map(({ idx }) => idx);
+
+        if (pendingIndexes.length === 0) {
+            setIsGeneratingImages(false);
+            return;
+        }
+
+        setImageProgress({ current: 0, total: pendingIndexes.length });
+        let doneCount = 0;
+
+        // Xử lý song song (concurrency = 2) để tăng tốc nhưng tránh bị rate limit
+        const concurrency = 2;
+        const queue = [...pendingIndexes];
+
+        const processQueue = async () => {
+            while (queue.length > 0 && !forceStopRef.current) {
+                const index = queue.shift()!;
+                setActiveImageIndexes(prev => [...prev, index]);
+
+                const q = updatedQuestions[index];
                 const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
-                if (!promptToUse) continue;
 
-                if (i > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 600));
-                }
-                if (forceStopRef.current) break;
-
-                doneCount++;
-                setImageProgress({ current: doneCount, total: questionsWithPrompt.length });
-                setProgress(`🎨 Đang vẽ minh họa câu ${i + 1}/${updatedQuestions.length} (${doneCount}/${questionsWithPrompt.length})...`);
+                setProgress(`🎨 Đăng vẽ minh họa câu ${index + 1}...`);
 
                 try {
                     const imageUrl = await geminiService.generateImage(promptToUse);
-                    updatedQuestions[i].imageUrl = imageUrl;
+                    updatedQuestions[index].imageUrl = imageUrl;
+                    // Cập nhật worksheet ngay khi có 1 ảnh xong
                     setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
                 } catch (error) {
-                    console.error(`Lỗi tạo hình ảnh cho câu ${i + 1}:`, error);
-                    updatedQuestions[i].imageUrl = undefined;
+                    console.error(`Lỗi tạo hình ảnh cho câu ${index + 1}:`, error);
+                } finally {
+                    doneCount++;
+                    setImageProgress(prev => ({ ...prev, current: doneCount }));
+                    setActiveImageIndexes(prev => prev.filter(i => i !== index));
+                    // Nghỉ một chút giữa các request nếu cần
+                    await new Promise(r => setTimeout(r, 800));
                 }
             }
+        };
+
+        try {
+            // Chạy song song các worker
+            const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(() => processQueue());
+            await Promise.all(workers);
+
             if (!forceStopRef.current) {
                 setProgress(`✅ Hoàn thành! Đã vẽ ${doneCount} hình minh họa.`);
             }
         } finally {
             setIsGeneratingImages(false);
+            setActiveImageIndexes([]);
             setImageProgress({ current: 0, total: 0 });
             setTimeout(() => setProgress(''), 6000);
         }
@@ -603,9 +622,9 @@ const WorksheetCreator: React.FC = () => {
                                                 style={{ minHeight: '70px', background: '#f5f5f5', border: '2px dashed #ddd', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: isGeneratingImages ? 'default' : 'pointer', padding: '10px' }}
                                                 onClick={() => !isGeneratingImages && handleRetryImage(index)}
                                             >
-                                                <span style={{ fontSize: '22px' }}>{isGeneratingImages ? '⏳' : '🖼️'}</span>
+                                                <span style={{ fontSize: '22px' }}>{activeImageIndexes.includes(index) ? '⏳' : (isGeneratingImages ? '🕒' : '🖼️')}</span>
                                                 <span style={{ fontSize: '11px', color: '#999' }}>
-                                                    {isGeneratingImages ? 'Đang vẽ...' : 'Nhấn để AI vẽ hình minh họa'}
+                                                    {activeImageIndexes.includes(index) ? 'AI đang vẽ...' : (isGeneratingImages ? 'Đang chờ vẽ...' : 'Nhấn để AI vẽ hình minh họa')}
                                                 </span>
                                                 {q.imagePrompt && !isGeneratingImages && (
                                                     <span style={{ fontSize: '10px', color: '#bbb', fontStyle: 'italic', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.imagePrompt}>💡 {q.imagePrompt}</span>
