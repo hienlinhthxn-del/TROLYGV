@@ -81,18 +81,23 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
 /**
  * Xuất Phiếu học tập thành file Word chuyên nghiệp
  */
+/**
+ * Xuất Phiếu học tập hoặc Đề thi thành file Word chuyên nghiệp
+ */
 export async function exportWorksheetToDocx(worksheet: any) {
     const font = 'Times New Roman';
     const fontSize = 13;
 
     const children: any[] = [];
+    const questions = worksheet.questions || [];
+    const title = worksheet.title || worksheet.header || "ĐỀ THI / PHIẾU HỌC TẬP";
 
     // Tiêu đề
     children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
             new TextRun({
-                text: worksheet.title.toUpperCase(),
+                text: title.split('\n')[0].toUpperCase(),
                 bold: true,
                 size: (fontSize + 5) * 2,
                 font
@@ -101,19 +106,21 @@ export async function exportWorksheetToDocx(worksheet: any) {
         spacing: { after: 120 }
     }));
 
-    // Môn học
-    children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [
-            new TextRun({
-                text: `Môn: ${worksheet.subject}`,
-                italics: true,
-                size: fontSize * 2,
-                font
-            })
-        ],
-        spacing: { after: 240 }
-    }));
+    // Môn học (nếu có)
+    if (worksheet.subject) {
+        children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [
+                new TextRun({
+                    text: `Môn: ${worksheet.subject}${worksheet.grade ? ` - Lớp: ${worksheet.grade}` : ''}`,
+                    italics: true,
+                    size: fontSize * 2,
+                    font
+                })
+            ],
+            spacing: { after: 240 }
+        }));
+    }
 
     // Thông tin học sinh
     children.push(new Paragraph({
@@ -159,14 +166,16 @@ export async function exportWorksheetToDocx(worksheet: any) {
     }
 
     // Câu hỏi
-    for (let i = 0; i < worksheet.questions.length; i++) {
-        const q = worksheet.questions[i];
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const qContent = q.question || q.content || "";
+        const qImage = q.imageUrl || q.image || "";
 
         // Tiêu đề câu hỏi
         children.push(new Paragraph({
             children: [
                 new TextRun({
-                    text: `Câu ${i + 1}: ${q.question}`,
+                    text: `Câu ${i + 1}: ${qContent}`,
                     bold: true,
                     size: fontSize * 2,
                     font
@@ -176,24 +185,28 @@ export async function exportWorksheetToDocx(worksheet: any) {
         }));
 
         // Hình ảnh minh họa (nếu có)
-        if (q.imageUrl && q.imageUrl !== 'error') {
+        if (qImage && qImage !== 'error') {
             try {
-                const imageBuffer = await fetchImageAsArrayBuffer(q.imageUrl);
-                if (imageBuffer) {
-                    children.push(new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [
-                            new ImageRun({
-                                data: imageBuffer,
-                                transformation: {
-                                    width: 300,
-                                    height: 200,
-                                },
-                                type: "png"
-                            })
-                        ],
-                        spacing: { before: 120, after: 120 }
-                    }));
+                if (qImage.trim().startsWith('<svg')) {
+                    // Skip SVG for now as docx doesn't support it directly
+                } else {
+                    const imageBuffer = await fetchImageAsArrayBuffer(qImage);
+                    if (imageBuffer) {
+                        children.push(new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            children: [
+                                new ImageRun({
+                                    data: imageBuffer,
+                                    transformation: {
+                                        width: 300,
+                                        height: 200,
+                                    },
+                                    type: "png"
+                                })
+                            ],
+                            spacing: { before: 120, after: 120 }
+                        }));
+                    }
                 }
             } catch (e) {
                 console.error("Lỗi khi chèn ảnh vào Word:", e);
@@ -202,14 +215,14 @@ export async function exportWorksheetToDocx(worksheet: any) {
 
         // Tùy chọn (cho MCQ, TF, Reading)
         if (q.options && q.options.length > 0) {
-            // Nếu là so sánh hoặc sắp xếp, hiển thị kiểu khác
             if (q.type === 'compare') {
-                // Không làm gì thêm, đã có trong text câu hỏi hoặc tự xử lý sau
+                // Already in content
             } else if (q.type === 'arrange' || q.type === 'circle') {
+                const optText = q.options.map((o: any) => typeof o === 'string' ? o : o.text).join(", ");
                 children.push(new Paragraph({
                     children: [
                         new TextRun({
-                            text: `Các gợi ý: ${q.options.join(", ")}`,
+                            text: `Các gợi ý: ${optText}`,
                             italics: true,
                             size: (fontSize - 1) * 2,
                             font
@@ -218,20 +231,24 @@ export async function exportWorksheetToDocx(worksheet: any) {
                     spacing: { after: 120 }
                 }));
             } else {
-                // Hiển thị dạng A, B, C, D
-                const optionRows: any[] = [];
-                // Chia thành các hàng, mỗi hàng tối đa 2 option để tiết kiệm diện tích
+                // MCQ layout (2 columns)
                 for (let j = 0; j < q.options.length; j += 2) {
+                    const opt1 = q.options[j];
+                    const opt1Text = typeof opt1 === 'string' ? opt1 : opt1.text;
+
                     const rowChildren = [
                         new TextRun({
-                            text: `${String.fromCharCode(65 + j)}. ${q.options[j]}`,
+                            text: `${String.fromCharCode(65 + j)}. ${opt1Text}`,
                             size: fontSize * 2,
                             font
                         })
                     ];
+
                     if (j + 1 < q.options.length) {
+                        const opt2 = q.options[j + 1];
+                        const opt2Text = typeof opt2 === 'string' ? opt2 : opt2.text;
                         rowChildren.push(new TextRun({
-                            text: `\t${String.fromCharCode(65 + j + 1)}. ${q.options[j + 1]}`,
+                            text: `\t${String.fromCharCode(65 + j + 1)}. ${opt2Text}`,
                             size: fontSize * 2,
                             font
                         }));
@@ -244,18 +261,22 @@ export async function exportWorksheetToDocx(worksheet: any) {
             }
         }
 
-        // Dòng kẻ trả lời (nếu không có option hoặc là Tự luận/Điền khuyết)
-        if (!q.options || q.options.length === 0 || q.type === 'essay' || q.type === 'fill') {
-            children.push(new Paragraph({
-                children: [
-                    new TextRun({
-                        text: "Trả lời: ........................................................................................................................................................",
-                        size: fontSize * 2,
-                        font
-                    })
-                ],
-                spacing: { after: 120 }
-            }));
+        // Dòng kẻ trả lời
+        const isEssay = q.type === 'Tự luận' || q.type === 'essay' || q.type === 'fill' || (!q.options || q.options.length === 0);
+        if (isEssay) {
+            const lineCount = (q.type === 'Tự luận' || q.type === 'essay') ? 4 : 1;
+            for (let l = 0; l < lineCount; l++) {
+                children.push(new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: l === 0 ? "Trả lời: ........................................................................................................................................................" : "..........................................................................................................................................................................",
+                            size: fontSize * 2,
+                            font
+                        })
+                    ],
+                    spacing: { after: 120 }
+                }));
+            }
         }
     }
 
@@ -264,9 +285,9 @@ export async function exportWorksheetToDocx(worksheet: any) {
         alignment: AlignmentType.CENTER,
         children: [
             new TextRun({
-                text: "--- Chúc các em làm bài tốt! ---",
-                italics: true,
-                size: (fontSize - 1) * 2,
+                text: "--- Hết ---",
+                bold: true,
+                size: fontSize * 2,
                 font
             })
         ],
@@ -278,7 +299,7 @@ export async function exportWorksheetToDocx(worksheet: any) {
             properties: {
                 page: {
                     margin: {
-                        top: 1440, // 1 inch = 1440 twips
+                        top: 1440,
                         right: 1440,
                         bottom: 1440,
                         left: 1440,
@@ -290,7 +311,7 @@ export async function exportWorksheetToDocx(worksheet: any) {
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, `${worksheet.title || 'Phieu_hoc_tap'}.docx`);
+    saveAs(blob, `${(title.split('\n')[0] || 'Phieu_hoc_tap').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`);
 }
 
 /**

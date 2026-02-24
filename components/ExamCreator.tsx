@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExamQuestion, CognitiveLevel, Attachment } from '../types';
 import { geminiService, FilePart } from '../services/geminiService';
 import { convertPdfToImages, ocrImages } from '../services/pdfService';
+import { exportWorksheetToDocx } from '../docxHelper';
 
 interface ExamCreatorProps {
   onExportToWorkspace: (content: string) => void;
@@ -52,6 +53,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [savedExams, setSavedExams] = useState<SavedExam[]>([]);
   const [pendingImportFiles, setPendingImportFiles] = useState<Attachment[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -157,40 +159,23 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
     }
   };
 
-  const handleExportDOCX = () => {
+  const handleExportDOCX = async () => {
     if (questions.length === 0) return;
+    setExportProgress('Đang chuẩn bị nội dung file Word...');
     try {
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8" />
-          <title>${examHeader || 'Đề thi'}</title>
-          <style>body{font-family:Arial,Helvetica,sans-serif;color:#222} .question{margin:16px 0}</style>
-        </head>
-        <body>
-          <h1>${examHeader || ''}</h1>
-          <p><strong>Môn:</strong> ${config.subject} &nbsp; <strong>Lớp:</strong> ${config.grade}</p>
-          ${readingPassage ? `<h3>Đoạn đọc:</h3><div>${readingPassage}</div>` : ''}
-          ${questions.map((q, i) => `
-            <div class="question">
-              <div><strong>Câu ${i + 1}:</strong> ${q.content}</div>
-              ${q.image ? `<div><img src="${q.image}" style="max-width:520px; height:auto;"/></div>` : ''}
-              ${q.options && q.options.length ? `<div><em>Đáp án:</em><ul>${q.options.map(o => `<li>${typeof o === 'string' ? o : o.text}</li>`).join('')}</ul></div>` : ''}
-            </div>
-          `).join('')}
-        </body>
-        </html>
-      `;
+      const worksheetPayload = {
+        header: examHeader,
+        subject: config.subject,
+        grade: config.grade,
+        readingPassage,
+        questions
+      };
 
-      const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(examHeader || 'exam').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      await exportWorksheetToDocx(worksheetPayload);
+      setExportProgress('Đã xuất file thành công!');
+      setTimeout(() => setExportProgress(null), 3000);
     } catch (e: any) {
+      setExportProgress(null);
       alert('Lỗi khi xuất DOCX: ' + (e.message || e));
     }
   };
@@ -1169,11 +1154,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 <i className="fas fa-trash-alt mr-2"></i>Xóa
               </button>
             )}
-            <div className="flex items-center space-x-2">
-              <button onClick={handleExportJSON} disabled={questions.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-green-700 disabled:opacity-30 transition-all">Xuất JSON</button>
-              <button onClick={handleExportDOCX} disabled={questions.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-blue-700 disabled:opacity-30 transition-all">Xuất DOCX</button>
-              <button onClick={exportText} disabled={questions.length === 0} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700 disabled:opacity-30 transition-all">Xuất bản thảo</button>
-            </div>
+            {questions.length > 0 && (
+              <div className="flex items-center space-x-2 border-l border-slate-200 pl-4 ml-2">
+                <button onClick={handleExportJSON} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-emerald-700 transition-all flex items-center">
+                  <i className="fas fa-file-code mr-2"></i>JSON
+                </button>
+                <button onClick={handleExportDOCX} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-blue-700 transition-all flex items-center">
+                  <i className="fas fa-file-word mr-2"></i>Word
+                </button>
+                <button onClick={exportText} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-indigo-700 transition-all flex items-center">
+                  <i className="fas fa-file-lines mr-2"></i>Bản thảo
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1575,6 +1568,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {exportProgress && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border border-slate-700/50 backdrop-blur-md">
+            {exportProgress.includes('Thành công') ? (
+              <i className="fas fa-check-circle text-emerald-400"></i>
+            ) : (
+              <i className="fas fa-spinner fa-spin text-indigo-400"></i>
+            )}
+            <span className="text-[11px] font-black uppercase tracking-widest">{exportProgress}</span>
           </div>
         </div>
       )}
