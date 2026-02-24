@@ -177,14 +177,16 @@ const WorksheetCreator: React.FC = () => {
     };
 
     const generateImages = async (ws: Worksheet) => {
+        if (!ws || !ws.questions) return;
         setIsGeneratingImages(true);
         forceStopRef.current = false;
-        const updatedQuestions = [...ws.questions];
 
-        // Chỉ chọn những câu chưa có ảnh và có thông tin để vẽ
-        const pendingIndexes = updatedQuestions
+        // Cập nhật worksheet hiện tại nếu cần
+        setWorksheet(ws);
+
+        const pendingIndexes = ws.questions
             .map((q, idx) => ({ q, idx }))
-            .filter(({ q }) => !q.imageUrl && (q.imagePrompt || q.question))
+            .filter(({ q }) => !q.imageUrl || q.imageUrl === 'error')
             .map(({ idx }) => idx);
 
         if (pendingIndexes.length === 0) {
@@ -194,51 +196,75 @@ const WorksheetCreator: React.FC = () => {
 
         setImageProgress({ current: 0, total: pendingIndexes.length });
         let doneCount = 0;
-
-        // Xử lý song song (concurrency = 2) để tăng tốc nhưng tránh bị rate limit
         const concurrency = 2;
         const queue = [...pendingIndexes];
 
         const processQueue = async () => {
             while (queue.length > 0 && !forceStopRef.current) {
-                const index = queue.shift()!;
+                const index = queue.shift();
+                if (index === undefined) break;
+
                 setActiveImageIndexes(prev => [...prev, index]);
 
-                const q = updatedQuestions[index];
-                const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
-
-                setProgress(`🎨 Đăng vẽ minh họa câu ${index + 1}...`);
-
                 try {
+                    // Lấy câu hỏi từ state mới nhất
+                    const currentWs = await new Promise<Worksheet | null>(resolve => {
+                        setWorksheet(prev => { resolve(prev); return prev; });
+                    });
+
+                    if (!currentWs) break;
+                    const q = currentWs.questions[index];
+                    const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
+
+                    if (!promptToUse) {
+                        doneCount++;
+                        continue;
+                    }
+
+                    setProgress(`🎨 Đang vẽ ảnh câu ${index + 1}...`);
+
                     const imageUrl = await geminiService.generateImage(promptToUse);
-                    updatedQuestions[index].imageUrl = imageUrl;
-                    // Cập nhật worksheet ngay khi có 1 ảnh xong
-                    setWorksheet(prev => prev ? { ...prev, questions: [...updatedQuestions] } : null);
+
+                    setWorksheet(prev => {
+                        if (!prev) return null;
+                        const newQuestions = [...prev.questions];
+                        newQuestions[index] = { ...newQuestions[index], imageUrl: imageUrl || 'error' };
+                        return { ...prev, questions: newQuestions };
+                    });
                 } catch (error) {
-                    console.error(`Lỗi tạo hình ảnh cho câu ${index + 1}:`, error);
+                    console.error(`Lỗi vẽ ảnh cho câu ${index + 1}:`, error);
+                    setWorksheet(prev => {
+                        if (!prev) return null;
+                        const newQuestions = [...prev.questions];
+                        newQuestions[index] = { ...newQuestions[index], imageUrl: 'error' };
+                        return { ...prev, questions: newQuestions };
+                    });
                 } finally {
                     doneCount++;
                     setImageProgress(prev => ({ ...prev, current: doneCount }));
                     setActiveImageIndexes(prev => prev.filter(i => i !== index));
-                    // Nghỉ một chút giữa các request nếu cần
-                    await new Promise(r => setTimeout(r, 800));
+                    await new Promise(r => setTimeout(r, 600));
                 }
             }
         };
 
         try {
-            // Chạy song song các worker
             const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(() => processQueue());
             await Promise.all(workers);
 
             if (!forceStopRef.current) {
-                setProgress(`✅ Hoàn thành! Đã vẽ ${doneCount} hình minh họa.`);
+                setProgress(`✅ Đã xong ${doneCount} ảnh!`);
+                // Lưu bản cuối cùng vào lịch sử
+                setWorksheet(curr => {
+                    if (curr) saveToHistory(curr);
+                    return curr;
+                });
             }
         } finally {
             setIsGeneratingImages(false);
             setActiveImageIndexes([]);
             setImageProgress({ current: 0, total: 0 });
-            setTimeout(() => setProgress(''), 6000);
+            setTimeout(() => setProgress(''), 5000);
         }
     };
 
@@ -595,7 +621,7 @@ const WorksheetCreator: React.FC = () => {
 
                                     {/* Hình minh họa */}
                                     <div style={{ textAlign: 'center', margin: '10px 0' }}>
-                                        {q.imageUrl ? (
+                                        {q.imageUrl && q.imageUrl !== 'error' ? (
                                             <div style={{ position: 'relative', display: 'inline-block' }}>
                                                 <img src={q.imageUrl} style={{ maxWidth: '100%', maxHeight: '280px', borderRadius: '10px', border: '1px solid #eee' }} />
                                                 <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '4px' }}>
@@ -619,12 +645,12 @@ const WorksheetCreator: React.FC = () => {
                                             </div>
                                         ) : (
                                             <div
-                                                style={{ minHeight: '70px', background: '#f5f5f5', border: '2px dashed #ddd', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: isGeneratingImages ? 'default' : 'pointer', padding: '10px' }}
+                                                style={{ minHeight: '70px', background: q.imageUrl === 'error' ? '#FFEBEE' : '#f5f5f5', border: q.imageUrl === 'error' ? '2px dashed #EF5350' : '2px dashed #ddd', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: isGeneratingImages ? 'default' : 'pointer', padding: '10px' }}
                                                 onClick={() => !isGeneratingImages && handleRetryImage(index)}
                                             >
-                                                <span style={{ fontSize: '22px' }}>{activeImageIndexes.includes(index) ? '⏳' : (isGeneratingImages ? '🕒' : '🖼️')}</span>
-                                                <span style={{ fontSize: '11px', color: '#999' }}>
-                                                    {activeImageIndexes.includes(index) ? 'AI đang vẽ...' : (isGeneratingImages ? 'Đang chờ vẽ...' : 'Nhấn để AI vẽ hình minh họa')}
+                                                <span style={{ fontSize: '22px' }}>{activeImageIndexes.includes(index) ? '⏳' : (q.imageUrl === 'error' ? '⚠️' : (isGeneratingImages ? '🕒' : '🖼️'))}</span>
+                                                <span style={{ fontSize: '11px', color: q.imageUrl === 'error' ? '#D32F2F' : '#999', fontWeight: q.imageUrl === 'error' ? 'bold' : 'normal' }}>
+                                                    {activeImageIndexes.includes(index) ? 'AI đang vẽ...' : (q.imageUrl === 'error' ? 'Lỗi vẽ ảnh. Nhấn để thử lại' : (isGeneratingImages ? 'Đang chờ vẽ...' : 'Nhấn để AI vẽ hình minh họa'))}
                                                 </span>
                                                 {q.imagePrompt && !isGeneratingImages && (
                                                     <span style={{ fontSize: '10px', color: '#bbb', fontStyle: 'italic', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={q.imagePrompt}>💡 {q.imagePrompt}</span>

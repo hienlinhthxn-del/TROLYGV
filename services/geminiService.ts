@@ -859,16 +859,19 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
   }
 
   public async generateImage(prompt: string): Promise<string> {
-    // Rút ngắn prompt để tránh URL quá dài
-    const shortPrompt = prompt.length > 80 ? prompt.substring(0, 80) : prompt;
-    const enhancedPrompt = `${shortPrompt}, cute cartoon for kids, white background`;
+    // Rút ngắn prompt vừa phải để tránh URL quá dài (> 2000 chars total) nhưng vẫn giữ được ý nghĩa
+    const shortPrompt = prompt.length > 500 ? prompt.substring(0, 500) : prompt;
+    const enhancedPrompt = `${shortPrompt}, cute cartoon for kids, white background, high quality, educational illustration`;
 
-    // --- Phương án 1: image.pollinations.ai (endpoint cũ) ---
+    // Danh sách các nguồn phát sinh ảnh (ưu tiên các endpoint ổn định)
     const endpoints = [
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=flux`,
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=turbo`,
-      // Phương án 2: gen.pollinations.ai (endpoint mới, thử không key)
-      `https://gen.pollinations.ai/image/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}&width=512&height=512&model=flux`,
+      // Flux via Pollinations (Nguồn tốt nhất hiện tại)
+      `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?width=512&height=512&model=flux&nologo=true&seed=${Math.floor(Math.random() * 999999)}`,
+      // Turbo via Pollinations (Nhanh hơn Flux)
+      `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?width=512&height=512&model=turbo&nologo=true&seed=${Math.floor(Math.random() * 999999)}`,
+      // Các endpoint phụ
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${Math.floor(Math.random() * 999999)}`,
+      `https://gen.pollinations.ai/image/${encodeURIComponent(enhancedPrompt)}?nologo=true`
     ];
 
     for (let i = 0; i < endpoints.length; i++) {
@@ -951,7 +954,10 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
       console.warn('[Image] AI Horde lỗi:', hordeErr.message);
     }
 
-    throw new Error("Dịch vụ tạo ảnh đang bận. Thầy Cô bấm 'Vẽ lại' sau nhé.");
+    // --- Phương án 4: Fallback tối thượng - Trả về trực tiếp URL ảnh thay vì DataURL ---
+    // Điều này giúp vượt qua các lỗi Fetch/CORS/Blob nếu có, trình duyệt sẽ tự tải ảnh khi hiển thị
+    console.log('[Image] Toàn bộ fetch thất bại. Trả về URL trực tiếp làm phương án cuối.');
+    return endpoints[0]; // Trả về URL Flux trực tiếp
   }
   public async generateVideo(prompt: string): Promise<string> {
     const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
