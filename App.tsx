@@ -5,6 +5,7 @@ import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS } from './constants';
 import { geminiService, FilePart } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
 import ApiKeySettings from './components/ApiKeySettings';
+import { downloadLessonPlanAsDocx } from './docxHelper';
 
 // Lazy loading các component lớn
 const ClassroomManager = lazy(() => import('./components/ClassroomManager'));
@@ -649,8 +650,8 @@ const App: React.FC = () => {
 
       for await (const chunk of stream) {
         fullContent += chunk.text;
-        if (chunk.grounding?.groundingChunks) {
-          const newSources = (chunk.grounding.groundingChunks as any[])
+        if ((chunk as any).grounding?.groundingChunks) {
+          const newSources = ((chunk as any).grounding.groundingChunks as any[])
             .filter((c: any) => c.web)
             .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
           if (newSources.length > 0) {
@@ -781,6 +782,7 @@ const App: React.FC = () => {
                       key={msg.id}
                       message={msg}
                       onAction={msg.role === 'assistant' ? () => sendToWorkspace(msg.content) : undefined}
+                      onExportWord={msg.role === 'assistant' ? () => downloadLessonPlanAsDocx(msg.content) : undefined}
                     />
                   ))}
                   <div ref={messagesEndRef} />

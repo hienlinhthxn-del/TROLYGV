@@ -5,6 +5,7 @@ import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
+import { exportWorksheetToDocx } from '../docxHelper';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -199,7 +200,8 @@ const QuizPlayer: React.FC<{
   onCopyCode?: () => void;
   onCrop?: (src: string, type: 'question' | 'option', qIdx: number, optIdx?: number) => void;
   onUpdateQuestion?: (index: number, updatedQuestion: any) => void;
-}> = ({ data, onShare, onCopyCode, onCrop, onUpdateQuestion }) => {
+  onExportDocx?: () => void;
+}> = ({ data, onShare, onCopyCode, onCrop, onUpdateQuestion, onExportDocx }) => {
   const toSafeText = (value: unknown): string => {
     if (typeof value === 'string') return value;
     if (typeof value === 'number') return String(value);
@@ -506,6 +508,11 @@ const QuizPlayer: React.FC<{
               <i className="fas fa-code mr-1"></i>Mã
             </button>
           )}
+          {onExportDocx && (
+            <button onClick={onExportDocx} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition-all shadow-md flex items-center shadow-blue-100" title="Xuất ra file Word (.docx)">
+              <i className="fas fa-file-word mr-2"></i>Word
+            </button>
+          )}
           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
         </div>
       </div>
@@ -785,6 +792,27 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const removeAttachment = (index: number) => {
     setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleExportQuizDocx = async () => {
+    if (!result || !Array.isArray(result)) return;
+    try {
+      const payload = {
+        header: `ĐỀ THI: ${topic || subject}`,
+        subject: subject,
+        grade: grade,
+        questions: result.map(q => ({
+          content: q.question,
+          image: q.image,
+          options: q.options,
+          answer: q.answer,
+          explanation: q.explanation
+        }))
+      };
+      await exportWorksheetToDocx(payload);
+    } catch (e: any) {
+      alert('Lỗi xuất bản DOCX: ' + (e.message || e));
+    }
   };
 
   const getFileParts = (): FilePart[] => {
@@ -2771,7 +2799,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
                   ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (
-                    <QuizPlayer data={result} onShare={handleShareQuiz} onCopyCode={handleCopyQuizCode} onCrop={handleCropRequest} onUpdateQuestion={handleUpdateQuestion} />
+                    <QuizPlayer data={result} onShare={handleShareQuiz} onCopyCode={handleCopyQuizCode} onCrop={handleCropRequest} onUpdateQuestion={handleUpdateQuestion} onExportDocx={handleExportQuizDocx} />
                   ) : activeTab === 'images' ? (
                     <div className="flex flex-col items-center">
                       <div className="relative group">

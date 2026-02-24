@@ -854,7 +854,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             }
 
             const item = [
-              q.type === 'Trac nghiem' ? 1 : 0,
+              q.type === 'Trắc nghiệm' ? 1 : 0,
               q.content,
               q.options || [],
               q.answer,
@@ -862,7 +862,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               image
             ];
 
-            while (item.length > 1 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && item[item.length - 1].length === 0))) {
+            while (item.length > 1 && (!item[item.length - 1] || (Array.isArray(item[item.length - 1]) && (item[item.length - 1] as any).length === 0))) {
               item.pop();
             }
             return item;
@@ -1602,9 +1602,27 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                       <span className="text-[10px] text-slate-400 font-medium uppercase">{exam.questions.length} câu hỏi</span>
                       <span className="text-[10px] text-slate-400">{new Date(exam.timestamp).toLocaleString('vi-VN')}</span>
                     </div>
-                    <button onClick={(e) => handleDeleteExam(exam.id, e)} className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-full hover:bg-rose-50">
-                      <i className="fas fa-trash-alt text-xs"></i>
-                    </button>
+                    <div className="absolute top-3 right-3 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportWorksheetToDocx({
+                            header: exam.examHeader || exam.name,
+                            subject: config.subject, // Fallback to current config
+                            grade: config.grade,     // Fallback to current config
+                            readingPassage: exam.readingPassage,
+                            questions: exam.questions
+                          });
+                        }}
+                        className="w-7 h-7 flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full"
+                        title="Xuất Word trực tiếp"
+                      >
+                        <i className="fas fa-file-word text-xs"></i>
+                      </button>
+                      <button onClick={(e) => handleDeleteExam(exam.id, e)} className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 rounded-full hover:bg-rose-50">
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (
