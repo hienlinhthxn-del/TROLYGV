@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateWorksheetContentDetailed, geminiService } from '../services/geminiService';
+import { exportWorksheetToDocx } from '../docxHelper';
 
 interface WorksheetQuestion {
     id: string;
@@ -358,43 +359,16 @@ const WorksheetCreator: React.FC = () => {
     const handleExportDOCX = async () => {
         if (!worksheet) return;
         saveToHistory(worksheet);
-        try {
-            const html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>${worksheet.title}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; color: #333; }
-                    .header { text-align: center; }
-                    .question { margin: 18px 0; }
-                    .question-image img { max-width: 400px; height: auto; }
-                </style>
-            </head>
-            <body>
-                <div class="header"><h1>${worksheet.title}</h1><p>Môn: ${worksheet.subject}</p></div>
-                ${worksheet.questions.map((q, index) => `
-                    <div class="question">
-                        <div><strong>Câu ${index + 1}:</strong> ${q.question}</div>
-                        ${q.imageUrl ? `<div class="question-image"><img src="${q.imageUrl}" /></div>` : ''}
-                        ${q.options && q.options.length > 0 ? `<div><em>Đáp án:</em><ul>${q.options.map(o => `<li>${o}</li>`).join('')}</ul></div>` : ''}
-                    </div>
-                `).join('')}
-            </body>
-            </html>
-        `;
+        setProgress('Đang chuẩn bị nội dung file Word...');
 
-            // Create a blob and save as .docx (Word will open HTML content inside)
-            const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${worksheet.title || 'quiz'}.docx`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        try {
+            await exportWorksheetToDocx(worksheet);
+            setProgress('Đã xuất file Word thành công!');
+            setTimeout(() => setProgress(''), 3000);
         } catch (e: any) {
+            console.error('Lỗi khi xuất DOCX:', e);
             alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+            setProgress('Lỗi xuất file Word.');
         }
     };
 
