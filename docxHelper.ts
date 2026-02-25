@@ -137,35 +137,70 @@ export async function exportWorksheetToDocx(worksheet: any) {
         }
     }));
 
-    // Bài đọc hiểu (nếu có)
-    if (worksheet.readingPassage) {
+    // Ma trận đặc tả (nếu có)
+    if (worksheet.matrix) {
         children.push(new Paragraph({
             children: [
                 new TextRun({
-                    text: "PHẦN ĐỌC HIỂU",
+                    text: "MA TRẬN ĐẶC TẢ ĐỀ THI",
                     bold: true,
                     size: fontSize * 2,
                     font
                 })
             ],
-            spacing: { before: 240, after: 120 }
+            spacing: { before: 400, after: 200 },
+            alignment: AlignmentType.CENTER
         }));
 
-        children.push(new Paragraph({
-            alignment: AlignmentType.JUSTIFIED,
-            children: [
-                new TextRun({
-                    text: worksheet.readingPassage,
-                    size: fontSize * 2,
-                    font
-                })
-            ],
-            spacing: { after: 240, line: 360, lineRule: LineRuleType.AUTO },
-            indent: { firstLine: 480 }
+        const COGNITIVE_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Vận dụng cao'];
+        const tableRows = [
+            new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Nội dung", bold: true, size: fontSize * 2 })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                    ...COGNITIVE_LEVELS.map(l => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 15, type: WidthType.PERCENTAGE } })),
+                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Tổng cộng", bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 10, type: WidthType.PERCENTAGE } }),
+                ]
+            })
+        ];
+
+        Object.entries(worksheet.matrix).forEach(([strand, levels]: [any, any]) => {
+            let strandTotal = 0;
+            const cells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: strand, size: fontSize * 2 })] })] })];
+
+            COGNITIVE_LEVELS.forEach(l => {
+                const count = (levels[l]?.mcq || 0) + (levels[l]?.essay || 0);
+                strandTotal += count;
+                cells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: count > 0 ? count.toString() : "-", size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
+            });
+
+            cells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: strandTotal.toString(), bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
+            tableRows.push(new TableRow({ children: cells }));
+        });
+
+        children.push(new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: tableRows,
+            margins: { bottom: 400 }
         }));
+
+        // Sang trang mới sau ma trận
+        children.push(new Paragraph({ children: [new TextRun({ text: "", break: 1 })] }));
     }
 
     // Câu hỏi
+    children.push(new Paragraph({
+        children: [
+            new TextRun({
+                text: "NỘI DUNG ĐỀ THI",
+                bold: true,
+                size: fontSize * 2,
+                font
+            })
+        ],
+        spacing: { before: 240, after: 240 },
+        alignment: AlignmentType.CENTER
+    }));
+
     for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         const qContent = q.question || q.content || "";
@@ -291,8 +326,53 @@ export async function exportWorksheetToDocx(worksheet: any) {
                 font
             })
         ],
-        spacing: { before: 400 }
+        spacing: { before: 400, after: 400 }
     }));
+
+    // Đáp án & Hướng dẫn chấm (vào trang mới)
+    children.push(new Paragraph({ children: [new TextRun({ text: "", break: 1 })] }));
+    children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+            new TextRun({
+                text: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
+                bold: true,
+                size: (fontSize + 2) * 2,
+                font
+            })
+        ],
+        spacing: { after: 240 }
+    }));
+
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        children.push(new Paragraph({
+            children: [
+                new TextRun({
+                    text: `Câu ${i + 1}: ${q.answer || "............... "}`,
+                    bold: true,
+                    size: fontSize * 2,
+                    font
+                })
+            ],
+            spacing: { after: 120 }
+        }));
+
+        if (q.explanation) {
+            children.push(new Paragraph({
+                children: [
+                    new TextRun({
+                        text: `Giải thích: ${q.explanation}`,
+                        italics: true,
+                        size: fontSize * 2,
+                        font
+                    })
+                ],
+                spacing: { after: 200 },
+                indent: { left: 720 }
+            }));
+        }
+    }
 
     const doc = new Document({
         sections: [{

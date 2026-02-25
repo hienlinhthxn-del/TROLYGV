@@ -168,7 +168,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         subject: config.subject,
         grade: config.grade,
         readingPassage,
-        questions
+        questions,
+        matrix: strandMatrix
       };
 
       await exportWorksheetToDocx(worksheetPayload);

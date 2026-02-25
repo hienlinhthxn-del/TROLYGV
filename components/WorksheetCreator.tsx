@@ -708,6 +708,13 @@ const WorksheetCreator: React.FC = () => {
                                 {isGeneratingImages ? '⏳ ĐANG VẼ ẢNH...' : '🖨️ XUẤT PDF & IN'}
                             </button>
                             <button
+                                onClick={handleExportDOCX}
+                                disabled={isGeneratingImages}
+                                style={{ flex: 1, minWidth: '120px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}
+                            >
+                                📝 Xuất Word
+                            </button>
+                            <button
                                 onClick={() => { forceStopRef.current = false; generateImages(worksheet); }}
                                 disabled={isGeneratingImages}
                                 style={{ flex: 1, minWidth: '120px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#FF6B9D', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}
@@ -717,7 +724,7 @@ const WorksheetCreator: React.FC = () => {
                             <button onClick={() => {
                                 const newQ: WorksheetQuestion = { id: Date.now().toString(), type: 'essay', question: 'Câu hỏi mới...' };
                                 setWorksheet({ ...worksheet, questions: [...worksheet.questions, newQ] });
-                            }} style={{ flex: 1, minWidth: '100px', padding: '15px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px' }}>➕ Thêm câu</button>
+                            }} style={{ flex: 1, minWidth: '100px', padding: '15px', background: '#9C27B0', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px' }}>➕ Thêm câu</button>
                         </div>
                     </div>
                 )}
