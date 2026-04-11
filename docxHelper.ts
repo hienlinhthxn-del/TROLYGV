@@ -187,6 +187,44 @@ export async function exportWorksheetToDocx(worksheet: any) {
         children.push(new Paragraph({ children: [new TextRun({ text: "", break: 1 })] }));
     }
 
+    // Bài đọc hiểu (nếu có)
+    if (worksheet.readingPassage && worksheet.readingPassage.trim()) {
+        children.push(new Paragraph({
+            children: [
+                new TextRun({
+                    text: "BÀI ĐỌC HIỂU",
+                    bold: true,
+                    size: fontSize * 2,
+                    font
+                })
+            ],
+            spacing: { before: 240, after: 200 },
+            alignment: AlignmentType.CENTER
+        }));
+
+        // Xuất nội dung bài đọc hiểu
+        const readingLines = worksheet.readingPassage.split('\n');
+        readingLines.forEach(line => {
+            children.push(new Paragraph({
+                children: [
+                    new TextRun({
+                        text: line.trim() || "",
+                        size: fontSize * 2,
+                        font,
+                        italics: true
+                    })
+                ],
+                spacing: { after: 100 },
+                alignment: AlignmentType.LEFT,
+                indent: { left: 720 }
+            }));
+        });
+
+        children.push(new Paragraph({
+            spacing: { after: 240 }
+        }));
+    }
+
     // Câu hỏi
     children.push(new Paragraph({
         children: [
