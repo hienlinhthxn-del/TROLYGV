@@ -696,6 +696,10 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [isConverting, setIsConverting] = useState(false);
   const [croppingContext, setCroppingContext] = useState<{ src: string, type: 'question' | 'option', qIdx: number, optIdx?: number } | null>(null);
 
+  // State cho Merge PDF
+  const [pdfFilesToMerge, setPdfFilesToMerge] = useState<File[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2188,6 +2192,69 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
   };
 
+  const handleAddPdfToMerge = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setPdfFilesToMerge(prev => [...prev, ...files]);
+    }
+    e.target.value = ''; // Reset input
+  };
+
+  const handleRemovePdfFromMerge = (index: number) => {
+    setPdfFilesToMerge(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMergePdf = async () => {
+    if (pdfFilesToMerge.length < 2) {
+      alert('Vui lòng chọn ít nhất 2 file PDF để ghép!');
+      return;
+    }
+    
+    setIsMerging(true);
+    try {
+      // @ts-ignore
+      const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+
+      // Tạo PDF mới
+      const mergedPdf = await PDFDocument.create();
+
+      // Ghép từng file PDF
+      for (const file of pdfFilesToMerge) {
+        const arrayBuffer = await file.arrayBuffer();
+        const sourceDoc = await PDFDocument.load(arrayBuffer);
+        
+        // Copy tất cả trang từ file này
+        const pages = sourceDoc.getPages();
+        const pageIndices = Array.from({ length: pages.length }, (_, i) => i);
+        const copiedPages = await mergedPdf.copyPages(sourceDoc, pageIndices);
+        copiedPages.forEach(page => mergedPdf.addPage(page));
+      }
+
+      if (mergedPdf.getPageCount() === 0) {
+        throw new Error("Không thể tạo file PDF ghép. Các file có thể bị lỗi.");
+      }
+
+      // Tải xuống file PDF ghép
+      const pdfBytes = await mergedPdf.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Ghep_${pdfFilesToMerge.length}_PDF_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+      alert(`✅ Đã ghép ${pdfFilesToMerge.length} file PDF và tải xuống thành công!`);
+      setPdfFilesToMerge([]); // Reset danh sách
+    } catch (error: any) {
+      console.error("PDF Merge Error:", error);
+      alert(`Lỗi khi ghép PDF: ${error.message}`);
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       {showCropper && <ImageCropper onClose={() => { setShowCropper(false); setCroppingContext(null); }} initialSrc={croppingContext?.src} onCropComplete={croppingContext ? handleCropComplete : undefined} />}
@@ -2479,20 +2546,94 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                     </div>
                   ) : (
                     activeTab === 'pdf_tools' ? (
-                      <div className="space-y-4 animate-in fade-in">
-                        <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
-                          <i className="fas fa-info-circle mr-2"></i>
-                          Công cụ giúp Thầy Cô chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
-                        </div>
+                      <div className="space-y-6 animate-in fade-in">
                         <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
-                          <input
-                            type="file"
-                            accept="application/pdf"
-                            onChange={handlePdfToolUpload}
-                            className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                          />
+                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <i className="fas fa-link text-indigo-600"></i>
+                            Ghép PDF (Merge)
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800 text-[11px]">
+                              <i className="fas fa-info-circle mr-2"></i>
+                              Chọn nhiều file PDF để ghép thành một file duy nhất.
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF (có thể chọn nhiều lần)</label>
+                              <input
+                                type="file"
+                                accept="application/pdf"
+                                multiple
+                                onChange={handleAddPdfToMerge}
+                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                              />
+                            </div>
+
+                            {pdfFilesToMerge.length > 0 && (
+                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                                <p className="text-[11px] font-bold text-slate-700">
+                                  <i className="fas fa-file-pdf mr-2 text-rose-500"></i>
+                                  {pdfFilesToMerge.length} file được chọn:
+                                </p>
+                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                  {pdfFilesToMerge.map((file, idx) => (
+                                    <div key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100 text-[11px]">
+                                      <div className="flex-1 truncate">
+                                        <span className="font-bold text-slate-700">{idx + 1}. </span>
+                                        <span className="text-slate-600">{file.name}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleRemovePdfFromMerge(idx)}
+                                        className="ml-2 px-2 py-1 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-all font-bold text-[10px]"
+                                      >
+                                        <i className="fas fa-trash-alt"></i>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={handleMergePdf}
+                                  disabled={isMerging || pdfFilesToMerge.length < 2}
+                                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:from-emerald-700 hover:to-emerald-800 transition-all disabled:opacity-50 shadow-lg shadow-emerald-100 mt-3"
+                                >
+                                  {isMerging ? (
+                                    <>
+                                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                                      Đang ghép...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-download mr-2"></i>
+                                      Ghép & Tải Xuống
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        <hr className="border-slate-200" />
+
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <i className="fas fa-scissors text-indigo-600"></i>
+                            Cắt PDF (Split)
+                          </h3>
+                          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
+                            <i className="fas fa-info-circle mr-2"></i>
+                            Chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
+                          </div>
+                          <div className="mt-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              onChange={handlePdfToolUpload}
+                              className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            />
+                          </div>
+                        </div>
+
                         {pdfToolFile && (
                           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                             <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
