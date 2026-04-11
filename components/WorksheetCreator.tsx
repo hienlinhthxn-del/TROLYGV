@@ -123,7 +123,6 @@ const WorksheetCreator: React.FC = () => {
 
         setIsGenerating(true);
         setProgress('Đang đọc ảnh mẫu và tạo nội dung câu hỏi...');
-        setWorksheet(null);
 
         try {
             const fileParts = sampleImage ? [{ inlineData: { data: sampleImage.split(',')[1], mimeType: 'image/png' } }] : undefined;
@@ -154,7 +153,14 @@ const WorksheetCreator: React.FC = () => {
             setWorksheet(content);
             if (autoGenerateImages) {
                 setProgress('Câu hỏi đã xong! Đang vẽ hình minh họa...');
-                await generateImages(content);
+                try {
+                    await generateImages(content);
+                } catch (imgError: any) {
+                    console.error('Lỗi khi vẽ ảnh:', imgError);
+                    // Giữ lại worksheet ngay cả khi có lỗi vẽ ảnh
+                    setProgress('⚠️ Vẽ ảnh có lỗi, nhưng phiếu vẫn được tạo. Bạn có thể vẽ lại sau!');
+                    setTimeout(() => setProgress(''), 5000);
+                }
             } else {
                 setProgress('Tạo câu hỏi hoàn tất! Nhấn "🎨 Vẽ tất cả ảnh" để tạo hình minh họa.');
                 setTimeout(() => setProgress(''), 5000);
