@@ -185,93 +185,113 @@ const WorksheetCreator: React.FC = () => {
 
     const generateImages = async (ws: Worksheet) => {
         if (!ws || !ws.questions) return;
-        setIsGeneratingImages(true);
-        forceStopRef.current = false;
-
-        // Cập nhật worksheet hiện tại nếu cần
-        setWorksheet(ws);
-
-        const pendingIndexes = ws.questions
-            .map((q, idx) => ({ q, idx }))
-            .filter(({ q }) => !q.imageUrl || q.imageUrl === 'error')
-            .map(({ idx }) => idx);
-
-        if (pendingIndexes.length === 0) {
-            setIsGeneratingImages(false);
-            return;
-        }
-
-        setImageProgress({ current: 0, total: pendingIndexes.length });
-        let doneCount = 0;
-        const concurrency = 2;
-        const queue = [...pendingIndexes];
-
-        const processQueue = async () => {
-            while (queue.length > 0 && !forceStopRef.current) {
-                const index = queue.shift();
-                if (index === undefined) break;
-
-                setActiveImageIndexes(prev => [...prev, index]);
-
-                try {
-                    // Lấy câu hỏi từ state mới nhất
-                    const currentWs = await new Promise<Worksheet | null>(resolve => {
-                        setWorksheet(prev => { resolve(prev); return prev; });
-                    });
-
-                    if (!currentWs) break;
-                    const q = currentWs.questions[index];
-                    const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
-
-                    if (!promptToUse) {
-                        doneCount++;
-                        continue;
-                    }
-
-                    setProgress(`🎨 Đang vẽ ảnh câu ${index + 1}...`);
-
-                    const imageUrl = await geminiService.generateImage(promptToUse);
-
-                    setWorksheet(prev => {
-                        if (!prev) return null;
-                        const newQuestions = [...prev.questions];
-                        newQuestions[index] = { ...newQuestions[index], imageUrl: imageUrl || 'error' };
-                        return { ...prev, questions: newQuestions };
-                    });
-                } catch (error) {
-                    console.error(`Lỗi vẽ ảnh cho câu ${index + 1}:`, error);
-                    setWorksheet(prev => {
-                        if (!prev) return null;
-                        const newQuestions = [...prev.questions];
-                        newQuestions[index] = { ...newQuestions[index], imageUrl: 'error' };
-                        return { ...prev, questions: newQuestions };
-                    });
-                } finally {
-                    doneCount++;
-                    setImageProgress(prev => ({ ...prev, current: doneCount }));
-                    setActiveImageIndexes(prev => prev.filter(i => i !== index));
-                    await new Promise(r => setTimeout(r, 600));
-                }
-            }
-        };
-
+        
         try {
+            setIsGeneratingImages(true);
+            forceStopRef.current = false;
+
+            // Đảm bảo worksheet được lưu trước khi bắt đầu
+            const wsToGen = { ...ws };
+            setWorksheet(wsToGen);
+
+            const pendingIndexes = wsToGen.questions
+                .map((q, idx) => ({ q, idx }))
+                .filter(({ q }) => !q.imageUrl || q.imageUrl === 'error')
+                .map(({ idx }) => idx);
+
+            if (pendingIndexes.length === 0) {
+                setProgress('✅ Tất cả ảnh đã hoàn thành!');
+                // Lưu vào lịch sử
+                setWorksheet(curr => {
+                    if (curr) saveToHistory(curr);
+                    return curr;
+                });
+                setTimeout(() => setProgress(''), 3000);
+                return;
+            }
+
+            setImageProgress({ current: 0, total: pendingIndexes.length });
+            let doneCount = 0;
+            const concurrency = 2;
+            const queue = [...pendingIndexes];
+
+            const processQueue = async () => {
+                while (queue.length > 0 && !forceStopRef.current) {
+                    const index = queue.shift();
+                    if (index === undefined) break;
+
+                    setActiveImageIndexes(prev => [...prev, index]);
+
+                    try {
+                        // Lấy câu hỏi từ state mới nhất
+                        const currentWs = await new Promise<Worksheet | null>(resolve => {
+                            setWorksheet(prev => { resolve(prev); return prev; });
+                        });
+
+                        if (!currentWs) break;
+                        const q = currentWs.questions[index];
+                        if (!q) continue;
+                        
+                        const promptToUse = (q.imagePrompt && q.imagePrompt.trim()) ? q.imagePrompt.trim() : q.question;
+
+                        if (!promptToUse) {
+                            doneCount++;
+                            continue;
+                        }
+
+                        setProgress(`🎨 Đang vẽ ảnh câu ${index + 1}...`);
+
+                        const imageUrl = await geminiService.generateImage(promptToUse);
+
+                        setWorksheet(prev => {
+                            if (!prev) return null;
+                            const newQuestions = [...prev.questions];
+                            newQuestions[index] = { ...newQuestions[index], imageUrl: imageUrl || 'error' };
+                            return { ...prev, questions: newQuestions };
+                        });
+                    } catch (error) {
+                        console.error(`Lỗi vẽ ảnh cho câu ${index + 1}:`, error);
+                        setWorksheet(prev => {
+                            if (!prev) return null;
+                            const newQuestions = [...prev.questions];
+                            newQuestions[index] = { ...newQuestions[index], imageUrl: 'error' };
+                            return { ...prev, questions: newQuestions };
+                        });
+                    } finally {
+                        doneCount++;
+                        setImageProgress(prev => ({ ...prev, current: doneCount }));
+                        setActiveImageIndexes(prev => prev.filter(i => i !== index));
+                        await new Promise(r => setTimeout(r, 600));
+                    }
+                }
+            };
+
             const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(() => processQueue());
             await Promise.all(workers);
 
             if (!forceStopRef.current) {
                 setProgress(`✅ Đã xong ${doneCount} ảnh!`);
-                // Lưu bản cuối cùng vào lịch sử
+                // Lưu bản cuối cùng vào lịch sử - làm điều này cuối cùng
                 setWorksheet(curr => {
-                    if (curr) saveToHistory(curr);
+                    if (curr) {
+                        try {
+                            saveToHistory(curr);
+                        } catch (historyError) {
+                            console.warn('Lỗi lưu lịch sử:', historyError);
+                        }
+                    }
                     return curr;
                 });
             }
+        } catch (error: any) {
+            console.error('Lỗi toàn bộ quá trình vẽ ảnh:', error);
+            setProgress(`❌ Lỗi: ${error.message || 'Không thể vẽ ảnh'}`);
         } finally {
             setIsGeneratingImages(false);
             setActiveImageIndexes([]);
             setImageProgress({ current: 0, total: 0 });
-            setTimeout(() => setProgress(''), 5000);
+            // Delay rõ ràng để đảm bảo UI render xong trước khi clear progress
+            setTimeout(() => setProgress(''), 4000);
         }
     };
 
