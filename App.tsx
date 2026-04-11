@@ -772,7 +772,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden p-0 sm:p-6 lg:pt-2 pb-[80px] lg:pb-0">
+        <div className="flex-1 overflow-y-auto p-0 sm:p-6 lg:pt-2 pb-[80px] lg:pb-0">
           <Suspense fallback={<LoadingView />}>
             {view === 'chat' && (
               <div className="h-full flex flex-col max-w-5xl mx-auto bg-white rounded-none sm:rounded-[40px] border-none sm:border border-slate-200 shadow-xl overflow-hidden">

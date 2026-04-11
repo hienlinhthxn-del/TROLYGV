@@ -379,8 +379,8 @@ const WorksheetCreator: React.FC = () => {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', background: '#f0f2f5', height: '100%', overflowY: 'auto', borderRadius: '20px' }} className="custom-scrollbar">
-            <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+        <div style={{ padding: '0px', maxWidth: '1200px', margin: '0 auto', background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column' }} className="custom-scrollbar w-full">
+            <div style={{ background: 'white', borderRadius: '0px', padding: '30px', boxShadow: 'none', flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                     <div style={{ flex: 1, textAlign: 'center' }}>
                         <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
@@ -709,7 +709,7 @@ const WorksheetCreator: React.FC = () => {
                             );
                         })}
 
-                        <div style={{ position: 'sticky', bottom: '20px', zIndex: 100, display: 'flex', gap: '10px', padding: '15px', background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: '20px', boxShadow: '0 -5px 25px rgba(0,0,0,0.15)', border: '2px solid #FF6B9D', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '10px', padding: '15px', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: '0px', boxShadow: 'none', border: 'none', flexWrap: 'wrap', marginTop: '20px' }}>
                             <button onClick={handleExportPDF} disabled={isGeneratingImages} style={{ flex: 2, minWidth: '140px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}>
                                 {isGeneratingImages ? '⏳ ĐANG VẼ ẢNH...' : '🖨️ XUẤT PDF & IN'}
                             </button>
