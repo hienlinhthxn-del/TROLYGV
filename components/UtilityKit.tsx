@@ -2088,49 +2088,27 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     setIsConverting(true);
 
     try {
-      // PHƯƠNG PHÁP MỚI: Render lại từng trang để đảm bảo nội dung không bị mất
-      // @ts-ignore
-      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-      // @ts-ignore
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
       // @ts-ignore
       const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
 
-      // Load PDF bằng pdf.js để render
+      // Load PDF gốc bằng pdf-lib (giữ nguyên nội dung gốc, không render ảnh)
       const arrayBuffer = await pdfToolFile.arrayBuffer();
-      const pdfToRender = await pdfjsLib.getDocument(arrayBuffer).promise;
-
-      // Tạo file PDF mới bằng pdf-lib
+      const sourceDoc = await PDFDocument.load(arrayBuffer);
+      
+      // Tạo PDF mới
       const newPdf = await PDFDocument.create();
 
       const start = Math.max(1, splitRange.start);
-      const end = Math.min(pdfToRender.numPages, splitRange.end);
+      const end = Math.min(sourceDoc.getPageCount(), splitRange.end);
 
       if (start > end) {
         throw new Error("Phạm vi trang được chọn không hợp lệ (Trang bắt đầu lớn hơn trang kết thúc).");
       }
 
-      for (let i = start; i <= end; i++) {
-        // Yield to main thread
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        const page = await pdfToRender.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 }); // Scale 1.5 cho chất lượng tốt
-
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({ canvasContext: context!, viewport: viewport }).promise;
-
-        // Chuyển canvas thành ảnh và nhúng vào PDF mới
-        const pngDataUrl = canvas.toDataURL('image/png');
-        const pngImage = await newPdf.embedPng(pngDataUrl);
-
-        const newPage = newPdf.addPage([viewport.width, viewport.height]);
-        newPage.drawImage(pngImage, { x: 0, y: 0, width: viewport.width, height: viewport.height });
-      }
+      // Copy trang gốc thay vì render ảnh (giữ nguyên text và format)
+      const pageIndices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
+      const copiedPages = await newPdf.copyPages(sourceDoc, pageIndices);
+      copiedPages.forEach(page => newPdf.addPage(page));
 
       if (newPdf.getPageCount() === 0) {
         throw new Error("Không thể tạo file PDF mới. File gốc có thể bị lỗi.");
@@ -2140,15 +2118,16 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `Cat_Trang_${start} -${end}_${pdfToolFile.name} `;
+      const cleanFileName = pdfToolFile.name.replace('.pdf', '').replace(/[<>:"/\\|?*]/g, '');
+      link.download = `Cat_Trang_${start}-${end}_${cleanFileName}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
-      alert("✅ Đã cắt và tải xuống file PDF thành công!");
+      alert("✅ Đã cắt và tải xuống file PDF thành công! File PDF vẫn giữ nguyên nội dung text gốc, người dùng khác có thể đọc bình thường.");
     } catch (error: any) {
-      console.error("PDF Split Error (Render Method):", error);
-      if (window.confirm(`Lỗi khi cắt file PDF: ${error.message} \n\nĐây là lỗi phức tạp.Thầy / Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh(ZIP) không ? `)) {
+      console.error("PDF Split Error:", error);
+      if (window.confirm(`Lỗi khi cắt file PDF: ${error.message} \n\nĐây là lỗi phức tạp. Thầy / Cô có muốn thử phương án cuối cùng là chuyển các trang này thành file ảnh (ZIP) không?`)) {
         await handlePdfToImages();
       }
     } finally {
