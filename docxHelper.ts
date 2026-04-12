@@ -84,7 +84,7 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
 /**
  * Xuất Phiếu học tập hoặc Đề thi thành file Word chuyên nghiệp
  */
-export async function exportWorksheetToDocx(worksheet: any) {
+export async function exportWorksheetToDocx(worksheet: any, options?: { skipImages?: boolean }) {
     try {
         // Validation input
         if (!worksheet) {
@@ -96,7 +96,8 @@ export async function exportWorksheetToDocx(worksheet: any) {
             throw new Error('Questions phải là một array');
         }
 
-        console.log('[exportWorksheetToDocx] Bắt đầu export với', questions.length, 'câu hỏi');
+        const skipImages = options?.skipImages || false;
+        console.log('[exportWorksheetToDocx] Bắt đầu export với', questions.length, 'câu hỏi, skipImages=', skipImages);
 
     const font = 'Times New Roman';
     const fontSize = 13;
@@ -274,7 +275,7 @@ export async function exportWorksheetToDocx(worksheet: any) {
         }));
 
         // Hình ảnh minh họa (nếu có)
-        if (qImage && qImage !== 'error' && typeof qImage === 'string') {
+        if (!skipImages && qImage && qImage !== 'error' && typeof qImage === 'string') {
             try {
                 if (!qImage.trim().startsWith('<svg')) {
                     const imageBuffer = await fetchImageAsArrayBuffer(qImage);
@@ -462,30 +463,65 @@ export async function exportWorksheetToDocx(worksheet: any) {
 
 /**
  * Helper để fetch ảnh và chuyển thành ArrayBuffer
+ * Timeout: 3 giây (giảm từ 5s)
  */
 async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null> {
     try {
+        if (!url || typeof url !== 'string') {
+            console.warn('Invalid image URL:', url);
+            return null;
+        }
+
+        // Data URI (base64)
         if (url.startsWith('data:')) {
-            const base64Content = url.split(',')[1];
-            if (!base64Content) return null;
-            const binaryString = window.atob(base64Content);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes.buffer;
-        } else {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
-            
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                console.warn(`Không thể fetch ảnh từ ${url}: ${response.status}`);
+            try {
+                const base64Content = url.split(',')[1];
+                if (!base64Content) return null;
+                const binaryString = window.atob(base64Content);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            } catch (e) {
+                console.warn('Lỗi convert base64:', e);
                 return null;
             }
-            return await response.arrayBuffer();
+        }
+
+        // Remote URL - 3 giây timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            console.warn('Image fetch timeout:', url);
+            controller.abort();
+        }, 3000);
+
+        try {
+            const response = await fetch(url, { 
+                signal: controller.signal,
+                mode: 'cors',
+                cache: 'no-cache'
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                console.warn(`Không thể fetch ảnh từ ${url}: ${response.status} ${response.statusText}`);
+                return null;
+            }
+
+            const buffer = await response.arrayBuffer();
+            if (buffer && buffer.byteLength > 0) {
+                return buffer;
+            }
+            return null;
+        } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                console.warn('Image fetch timeout (3s):', url);
+            } else {
+                console.warn('Fetch error:', url, fetchError?.message);
+            }
+            return null;
         }
     } catch (e) {
         console.warn("Lỗi fetch ảnh:", e);

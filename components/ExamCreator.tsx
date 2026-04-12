@@ -172,7 +172,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         matrix: strandMatrix
       };
 
-      await exportWorksheetToDocx(worksheetPayload);
+      await exportWorksheetToDocx(worksheetPayload, { skipImages: false });
       setExportProgress('Đã xuất file thành công!');
       setTimeout(() => setExportProgress(null), 3000);
     } catch (e: any) {
@@ -1612,11 +1612,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                           e.stopPropagation();
                           exportWorksheetToDocx({
                             header: exam.examHeader || exam.name,
-                            subject: config.subject, // Fallback to current config
-                            grade: config.grade,     // Fallback to current config
+                            subject: config.subject,
+                            grade: config.grade,
                             readingPassage: exam.readingPassage,
                             questions: exam.questions
-                          }).catch((err: any) => {
+                          }, { skipImages: false }).catch((err: any) => {
                             const errorMsg = err?.message || String(err) || 'Lỗi không xác định';
                             console.error('Lỗi xuất exam:', err);
                             alert('Lỗi khi xuất Word: ' + errorMsg);

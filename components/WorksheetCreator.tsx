@@ -388,8 +388,27 @@ const WorksheetCreator: React.FC = () => {
         setProgress('Đang chuẩn bị nội dung file Word...');
 
         try {
-            await exportWorksheetToDocx(worksheet);
+            // Export không ảnh nếu muốn nhanh hơn
+            await exportWorksheetToDocx(worksheet, { skipImages: false });
             setProgress('Đã xuất file Word thành công!');
+            setTimeout(() => setProgress(''), 3000);
+        } catch (e: any) {
+            console.error('Lỗi khi xuất DOCX:', e);
+            const errorMsg = e?.message || String(e) || 'Lỗi không xác định';
+            alert('Lỗi khi xuất DOCX: ' + errorMsg);
+            setProgress('Lỗi xuất file Word.');
+            setTimeout(() => setProgress(''), 3000);
+        }
+    };
+
+    const handleExportFast = async () => {
+        if (!worksheet) return;
+        setProgress('Đang xuất nhanh (không ảnh)...');
+
+        try {
+            // Export KHÔNG ảnh - nhanh hơn rất nhiều
+            await exportWorksheetToDocx(worksheet, { skipImages: true });
+            setProgress('✓ Xuất nhanh thành công!');
             setTimeout(() => setProgress(''), 3000);
         } catch (e: any) {
             console.error('Lỗi khi xuất DOCX:', e);
@@ -741,6 +760,14 @@ const WorksheetCreator: React.FC = () => {
                                 style={{ flex: 1, minWidth: '120px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#2196F3', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}
                             >
                                 📝 Xuất Word
+                            </button>
+                            <button
+                                onClick={handleExportFast}
+                                disabled={isGeneratingImages}
+                                style={{ flex: 1, minWidth: '140px', padding: '15px', background: isGeneratingImages ? '#ccc' : '#FF9800', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', cursor: isGeneratingImages ? 'not-allowed' : 'pointer' }}
+                                title="Xuất Word nhanh (không ảnh) - nếu gặp lỗi timeout"
+                            >
+                                ⚡ Xuất Nhanh
                             </button>
                             <button
                                 onClick={() => { forceStopRef.current = false; generateImages(worksheet); }}

@@ -813,7 +813,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           explanation: q.explanation
         }))
       };
-      await exportWorksheetToDocx(payload);
+      await exportWorksheetToDocx(payload, { skipImages: false });
     } catch (e: any) {
       const errorMsg = e?.message || String(e) || 'Lỗi không xác định';
       console.error('Lỗi xuất DOCX:', e);
