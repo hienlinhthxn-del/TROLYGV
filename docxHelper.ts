@@ -85,6 +85,7 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
  * Xuất Phiếu học tập hoặc Đề thi thành file Word chuyên nghiệp
  */
 export async function exportWorksheetToDocx(worksheet: any) {
+    try {
     const font = 'Times New Roman';
     const fontSize = 13;
 
@@ -184,7 +185,10 @@ export async function exportWorksheetToDocx(worksheet: any) {
         }));
 
         // Sang trang mới sau ma trận
-        children.push(new Paragraph({ children: [new TextRun({ text: "", break: 1 })] }));
+        children.push(new Paragraph({
+            pageBreakBefore: true,
+            children: [new TextRun({ text: " " })]
+        }));
     }
 
     // Bài đọc hiểu (nếu có)
@@ -208,7 +212,7 @@ export async function exportWorksheetToDocx(worksheet: any) {
             children.push(new Paragraph({
                 children: [
                     new TextRun({
-                        text: line.trim() || "",
+                        text: line.trim() || " ",
                         size: fontSize * 2,
                         font,
                         italics: true
@@ -221,6 +225,7 @@ export async function exportWorksheetToDocx(worksheet: any) {
         });
 
         children.push(new Paragraph({
+            children: [new TextRun({ text: " " })],
             spacing: { after: 240 }
         }));
     }
@@ -260,9 +265,9 @@ export async function exportWorksheetToDocx(worksheet: any) {
         // Hình ảnh minh họa (nếu có)
         if (qImage && qImage !== 'error') {
             try {
-                if (qImage.trim().startsWith('<svg')) {
+                if (typeof qImage === 'string' && qImage.trim().startsWith('<svg')) {
                     // Skip SVG for now as docx doesn't support it directly
-                } else {
+                } else if (typeof qImage === 'string') {
                     const imageBuffer = await fetchImageAsArrayBuffer(qImage);
                     if (imageBuffer) {
                         children.push(new Paragraph({
@@ -368,7 +373,10 @@ export async function exportWorksheetToDocx(worksheet: any) {
     }));
 
     // Đáp án & Hướng dẫn chấm (vào trang mới)
-    children.push(new Paragraph({ children: [new TextRun({ text: "", break: 1 })] }));
+    children.push(new Paragraph({
+        pageBreakBefore: true,
+        children: [new TextRun({ text: " " })]
+    }));
     children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
@@ -430,6 +438,10 @@ export async function exportWorksheetToDocx(worksheet: any) {
 
     const blob = await Packer.toBlob(doc);
     saveAs(blob, `${(title.split('\n')[0] || 'Phieu_hoc_tap').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`);
+    } catch (error: any) {
+        console.error('Lỗi khi xuất DOCX:', error);
+        throw new Error(`Không thể xuất file Word: ${error?.message || error}`);
+    }
 }
 
 /**
@@ -439,6 +451,7 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
     try {
         if (url.startsWith('data:')) {
             const base64Content = url.split(',')[1];
+            if (!base64Content) return null;
             const binaryString = window.atob(base64Content);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -446,11 +459,20 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
             }
             return bytes.buffer;
         } else {
-            const response = await fetch(url);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
+            
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                console.warn(`Không thể fetch ảnh từ ${url}: ${response.status}`);
+                return null;
+            }
             return await response.arrayBuffer();
         }
     } catch (e) {
-        console.error("Lỗi fetch ảnh:", e);
+        console.warn("Lỗi fetch ảnh:", e);
         return null;
     }
 }
@@ -459,12 +481,27 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
  * Helper download file
  */
 function saveAs(blob: Blob, fileName: string) {
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    try {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        
+        // Đúng URL object sẽ được kiểm tra trước
+        if (!url || !link) {
+            throw new Error('Không thể tạo link download');
+        }
+        
+        document.body.appendChild(link);
+        link.click();
+        
+        // Đợi một chút trước khi xóa
+        setTimeout(() => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+    } catch (e) {
+        console.error('Lỗi khi download file:', e);
+        throw e;
+    }
 }
