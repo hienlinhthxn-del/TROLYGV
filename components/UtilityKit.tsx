@@ -5,7 +5,7 @@ import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
-import { exportWorksheetToDocx } from '../docxHelper';
+import { exportWorksheetToDocx, convertPdfToWordDocx } from '../docxHelper';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -698,6 +698,11 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   // State cho Merge PDF
   const [pdfFilesToMerge, setPdfFilesToMerge] = useState<File[]>([]);
+  
+  // State cho PDF to Word conversion
+  const [pdfToWordFile, setPdfToWordFile] = useState<File | null>(null);
+  const [pdfToWordTitle, setPdfToWordTitle] = useState('');
+  const [isConvertingToWord, setIsConvertingToWord] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -2257,6 +2262,41 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
   };
 
+  const handlePdfToWord = async () => {
+    if (!pdfToWordFile) {
+      alert('Vui lòng chọn file PDF để chuyển đổi!');
+      return;
+    }
+
+    setIsConvertingToWord(true);
+    try {
+      // Đọc file PDF thành base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(pdfToWordFile);
+      });
+      const base64Data = await base64Promise;
+
+      // Tạo tên file Word
+      const fileName = pdfToWordTitle.trim() 
+        ? `${pdfToWordTitle.replace(/[<>:"/\\|?*]/g, '')}.docx`
+        : pdfToWordFile.name.replace('.pdf', '.docx');
+
+      // Chuyển đổi PDF sang Word
+      await convertPdfToWordDocx(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''));
+      
+      alert('✅ Chuyển đổi thành công! File Word đã được tải xuống.');
+      setPdfToWordFile(null);
+      setPdfToWordTitle('');
+    } catch (error: any) {
+      console.error('PDF to Word Error:', error);
+      alert(`Lỗi chuyển đổi PDF sang Word:\n${error.message}`);
+    } finally {
+      setIsConvertingToWord(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
       {showCropper && <ImageCropper onClose={() => { setShowCropper(false); setCroppingContext(null); }} initialSrc={croppingContext?.src} onCropComplete={croppingContext ? handleCropComplete : undefined} />}
@@ -2551,6 +2591,130 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       <div className="space-y-6 animate-in fade-in">
                         <div>
                           <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <i className="fas fa-file-word text-blue-600"></i>
+                            Chuyển PDF sang Word
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 text-[11px]">
+                              <i className="fas fa-info-circle mr-2"></i>
+                              Chuyển đổi file PDF thành tài liệu Word (.docx) để có thể chỉnh sửa dễ dàng hơn.
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF</label>
+                              <input
+                                type="file"
+                                accept="application/pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    setPdfToWordFile(file);
+                                  }
+                                }}
+                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              />
+                            </div>
+
+                            {pdfToWordFile && (
+                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                                <p className="text-xs font-bold text-slate-700">
+                                  <i className="fas fa-file-pdf mr-2 text-rose-500"></i>
+                                  {pdfToWordFile.name}
+                                </p>
+                                <div>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tiêu đề tài liệu (tùy chọn)</label>
+                                  <input
+                                    type="text"
+                                    placeholder="VD: Tài liệu học tập"
+                                    value={pdfToWordTitle}
+                                    onChange={(e) => setPdfToWordTitle(e.target.value)}
+                                    className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                  />
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                  <button
+                                    onClick={handlePdfToWord}
+                                    disabled={isConvertingToWord}
+                                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 shadow-lg shadow-blue-100"
+                                  >
+                                    {isConvertingToWord ? (
+                                      <>
+                                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                                        Đang chuyển đổi...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="fas fa-download mr-2"></i>
+                                        Chuyển sang Word & Tải về
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPdfToWordFile(null);
+                                      setPdfToWordTitle('');
+                                    }}
+                                    className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <hr className="border-slate-200" />
+
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <i className="fas fa-scissors text-indigo-600"></i>
+                            Cắt PDF (Split)
+                          </h3>
+                          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
+                            <i className="fas fa-info-circle mr-2"></i>
+                            Chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
+                          </div>
+                          <div className="mt-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              onChange={handlePdfToolUpload}
+                              className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                            />
+                          </div>
+                        </div>
+
+                        {pdfToolFile && (
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                            <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Từ trang</label>
+                                <input type="number" min="1" max={pdfPageCount} value={splitRange.start} onChange={(e) => setSplitRange(prev => ({ ...prev, start: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Đến trang</label>
+                                <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <button onClick={handleSplitPdf} disabled={isConverting} className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all disabled:opacity-50">
+                                {isConverting ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-scissors mr-2"></i>}
+                                {isConverting ? 'Đang xử lý...' : 'Cắt PDF'}
+                              </button>
+                              <button onClick={handlePdfToImages} disabled={isConverting} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50">
+                                {isConverting ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-images mr-2"></i>Chuyển thành Ảnh</>}
+                                {isConverting ? 'Đang xử lý...' : 'Chuyển thành Ảnh'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <hr className="border-slate-200" />
+
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <i className="fas fa-link text-indigo-600"></i>
                             Ghép PDF (Merge)
                           </h3>
@@ -2613,54 +2777,6 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                             )}
                           </div>
                         </div>
-
-                        <hr className="border-slate-200" />
-
-                        <div>
-                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <i className="fas fa-scissors text-indigo-600"></i>
-                            Cắt PDF (Split)
-                          </h3>
-                          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-800 text-xs">
-                            <i className="fas fa-info-circle mr-2"></i>
-                            Chia nhỏ file đề thi lớn để AI xử lý dễ dàng hơn.
-                          </div>
-                          <div className="mt-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File PDF gốc</label>
-                            <input
-                              type="file"
-                              accept="application/pdf"
-                              onChange={handlePdfToolUpload}
-                              className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                            />
-                          </div>
-                        </div>
-
-                        {pdfToolFile && (
-                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                            <p className="text-xs font-bold text-slate-700"><i className="fas fa-file-pdf mr-2 text-rose-500"></i>{pdfToolFile.name} ({pdfPageCount} trang)</p>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Từ trang</label>
-                                <input type="number" min="1" max={pdfPageCount} value={splitRange.start} onChange={(e) => setSplitRange(prev => ({ ...prev, start: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Đến trang</label>
-                                <input type="number" min="1" max={pdfPageCount} value={splitRange.end} onChange={(e) => setSplitRange(prev => ({ ...prev, end: parseInt(e.target.value) }))} className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold" />
-                              </div>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <button onClick={handleSplitPdf} disabled={isConverting} className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all disabled:opacity-50">
-                                {isConverting ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-scissors mr-2"></i>}
-                                {isConverting ? 'Đang xử lý...' : 'Cắt PDF'}
-                              </button>
-                              <button onClick={handlePdfToImages} disabled={isConverting} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50">
-                                {isConverting ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-images mr-2"></i>Chuyển thành Ảnh</>}
-                                {isConverting ? 'Đang xử lý...' : 'Chuyển thành Ảnh'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 gap-3">

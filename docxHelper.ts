@@ -1,4 +1,5 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LineRuleType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle } from "docx";
+import { convertPdfToImages } from './services/pdfService';
 
 export interface DocxOptions {
     font?: string;
@@ -526,6 +527,146 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
     } catch (e) {
         console.warn("Lỗi fetch ảnh:", e);
         return null;
+    }
+}
+
+/**
+ * Chuyển đổi file PDF sang Word Document
+ * @param base64Pdf - Base64 string của file PDF
+ * @param fileName - Tên file Word cần tạo
+ * @param title - Tiêu đề tài liệu (tùy chọn)
+ */
+export async function convertPdfToWordDocx(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string) {
+    try {
+        // Chuyển PDF sang mảng hình ảnh
+        console.log('[convertPdfToWordDocx] Đang chuyển PDF sang hình ảnh...');
+        const pdfImages = await convertPdfToImages(base64Pdf, 50); // Giới hạn 50 trang
+        
+        if (!pdfImages || pdfImages.length === 0) {
+            throw new Error('Không thể chuyển đổi PDF. File có thể bị lỗi hoặc định dạng không hợp lệ.');
+        }
+
+        console.log(`[convertPdfToWordDocx] Chuyển đổi thành công ${pdfImages.length} trang`);
+
+        // Tạo Document Word
+        const children: any[] = [];
+        const font = 'Times New Roman';
+        const fontSize = 13;
+
+        // Thêm tiêu đề nếu có
+        if (title && title.trim()) {
+            children.push(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                    new TextRun({
+                        text: title.toUpperCase(),
+                        bold: true,
+                        size: (fontSize + 4) * 2,
+                        font
+                    })
+                ],
+                spacing: { after: 240 }
+            }));
+
+            children.push(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                    new TextRun({
+                        text: `(Chuyển đổi từ PDF)`,
+                        italics: true,
+                        size: fontSize * 2,
+                        font,
+                        color: '999999'
+                    })
+                ],
+                spacing: { after: 400 }
+            }));
+        }
+
+        // Thêm từng trang PDF dưới dạng hình ảnh
+        for (let i = 0; i < pdfImages.length; i++) {
+            const pdfImage = pdfImages[i];
+            
+            try {
+                // Chuyển base64 của hình ảnh thành ArrayBuffer
+                const base64Data = pdfImage.inlineData.data;
+                const binaryString = atob(base64Data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let j = 0; j < binaryString.length; j++) {
+                    bytes[j] = binaryString.charCodeAt(j);
+                }
+                const imageBuffer = bytes.buffer;
+
+                // Thêm số trang
+                if (pdfImages.length > 1) {
+                    children.push(new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: `Trang ${i + 1}`,
+                                italics: true,
+                                size: (fontSize - 2) * 2,
+                                font,
+                                color: 'CCCCCC'
+                            })
+                        ],
+                        spacing: { before: 240, after: 120 },
+                        alignment: AlignmentType.CENTER
+                    }));
+                }
+
+                // Thêm hình ảnh trang
+                children.push(new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                        new ImageRun({
+                            data: imageBuffer,
+                            transformation: {
+                                width: 550,  // Rộng phù hợp trang A4
+                                height: 700  // Tỷ lệ hình ảnh
+                            },
+                            type: "jpeg"
+                        })
+                    ],
+                    spacing: { before: 120, after: 240 }
+                }));
+
+                // Thêm page break sau mỗi trang (ngoại trừ trang cuối)
+                if (i < pdfImages.length - 1) {
+                    children.push(new Paragraph({
+                        pageBreakBefore: true,
+                        children: [new TextRun({ text: " " })]
+                    }));
+                }
+            } catch (imgError) {
+                console.warn(`[convertPdfToWordDocx] Lỗi xử lý trang ${i + 1}:`, imgError);
+                // Tiếp tục với trang tiếp theo
+            }
+        }
+
+        // Tạo Document
+        const doc = new Document({
+            styles: {
+                default: {
+                    document: {
+                        run: { font, size: fontSize * 2 },
+                    },
+                },
+            },
+            sections: [{ properties: {}, children: children }],
+        });
+
+        // Chuyển đổi thành Blob
+        console.log('[convertPdfToWordDocx] Đang tạo file Word...');
+        const blob = await Packer.toBlob(doc);
+        
+        // Tải xuống
+        console.log('[convertPdfToWordDocx] Đang tải xuống file...');
+        saveAs(blob, fileName);
+        
+        return { success: true, pageCount: pdfImages.length };
+    } catch (error: any) {
+        console.error('[convertPdfToWordDocx] Lỗi:', error);
+        throw new Error(`Lỗi chuyển đổi PDF sang Word: ${error.message}`);
     }
 }
 
