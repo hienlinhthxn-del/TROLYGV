@@ -815,7 +815,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
       };
       await exportWorksheetToDocx(payload);
     } catch (e: any) {
-      alert('Lỗi xuất bản DOCX: ' + (e.message || e));
+      const errorMsg = e?.message || String(e) || 'Lỗi không xác định';
+      console.error('Lỗi xuất DOCX:', e);
+      alert('Lỗi xuất bản DOCX: ' + errorMsg);
     }
   };
 

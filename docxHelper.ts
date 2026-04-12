@@ -86,11 +86,22 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
  */
 export async function exportWorksheetToDocx(worksheet: any) {
     try {
+        // Validation input
+        if (!worksheet) {
+            throw new Error('Dữ liệu phiếu học tập toàn không or undefined');
+        }
+
+        const questions = worksheet.questions || [];
+        if (!Array.isArray(questions)) {
+            throw new Error('Questions phải là một array');
+        }
+
+        console.log('[exportWorksheetToDocx] Bắt đầu export với', questions.length, 'câu hỏi');
+
     const font = 'Times New Roman';
     const fontSize = 13;
 
     const children: any[] = [];
-    const questions = worksheet.questions || [];
     const title = worksheet.title || worksheet.header || "ĐỀ THI / PHIẾU HỌC TẬP";
 
     // Tiêu đề
@@ -263,11 +274,9 @@ export async function exportWorksheetToDocx(worksheet: any) {
         }));
 
         // Hình ảnh minh họa (nếu có)
-        if (qImage && qImage !== 'error') {
+        if (qImage && qImage !== 'error' && typeof qImage === 'string') {
             try {
-                if (typeof qImage === 'string' && qImage.trim().startsWith('<svg')) {
-                    // Skip SVG for now as docx doesn't support it directly
-                } else if (typeof qImage === 'string') {
+                if (!qImage.trim().startsWith('<svg')) {
                     const imageBuffer = await fetchImageAsArrayBuffer(qImage);
                     if (imageBuffer) {
                         children.push(new Paragraph({
@@ -287,7 +296,8 @@ export async function exportWorksheetToDocx(worksheet: any) {
                     }
                 }
             } catch (e) {
-                console.error("Lỗi khi chèn ảnh vào Word:", e);
+                console.warn(`Lỗi khi chèn ảnh câu ${i + 1}:`, e);
+                // Tiếp tục nếu ảnh fail, không crash document
             }
         }
 
@@ -437,9 +447,15 @@ export async function exportWorksheetToDocx(worksheet: any) {
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, `${(title.split('\n')[0] || 'Phieu_hoc_tap').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`);
+    console.log('[exportWorksheetToDocx] Blob created successfully, size:', blob.size, 'bytes');
+    
+    const fileName = `${(title.split('\n')[0] || 'Phieu_hoc_tap').replace(/[^a-z0-9\-_ ]/gi, '_')}.docx`;
+    console.log('[exportWorksheetToDocx] Downloading file as:', fileName);
+    
+    saveAs(blob, fileName);
+    console.log('[exportWorksheetToDocx] File download initiated');
     } catch (error: any) {
-        console.error('Lỗi khi xuất DOCX:', error);
+        console.error('[exportWorksheetToDocx] Error:', error);
         throw new Error(`Không thể xuất file Word: ${error?.message || error}`);
     }
 }
@@ -483,23 +499,35 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
 function saveAs(blob: Blob, fileName: string) {
     try {
         const url = window.URL.createObjectURL(blob);
+        if (!url) {
+            throw new Error('Không thể tạo object URL từ blob');
+        }
+
         const link = document.createElement('a');
+        if (!link) {
+            throw new Error('Không thể tạo element <a>');
+        }
+
+        link.style.display = 'none';
         link.href = url;
         link.download = fileName;
         
-        // Đúng URL object sẽ được kiểm tra trước
-        if (!url || !link) {
-            throw new Error('Không thể tạo link download');
-        }
-        
         document.body.appendChild(link);
+        
+        // Trigger click
         link.click();
         
-        // Đợi một chút trước khi xóa
+        // Cleanup sau một chút time
         setTimeout(() => {
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        }, 100);
+            try {
+                if (document.body.contains(link)) {
+                    document.body.removeChild(link);
+                }
+                window.URL.revokeObjectURL(url);
+            } catch (cleanupError) {
+                console.warn('Lỗi cleanup download:', cleanupError);
+            }
+        }, 200);
     } catch (e) {
         console.error('Lỗi khi download file:', e);
         throw e;

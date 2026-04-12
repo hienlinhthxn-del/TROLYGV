@@ -393,8 +393,10 @@ const WorksheetCreator: React.FC = () => {
             setTimeout(() => setProgress(''), 3000);
         } catch (e: any) {
             console.error('Lỗi khi xuất DOCX:', e);
-            alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+            const errorMsg = e?.message || String(e) || 'Lỗi không xác định';
+            alert('Lỗi khi xuất DOCX: ' + errorMsg);
             setProgress('Lỗi xuất file Word.');
+            setTimeout(() => setProgress(''), 3000);
         }
     };
 

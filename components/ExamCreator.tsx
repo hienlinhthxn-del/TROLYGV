@@ -176,8 +176,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       setExportProgress('Đã xuất file thành công!');
       setTimeout(() => setExportProgress(null), 3000);
     } catch (e: any) {
+      const errorMsg = e?.message || String(e) || 'Lỗi không xác định';
+      console.error('Lỗi khi xuất DOCX:', e);
+      alert('Lỗi khi xuất DOCX: ' + errorMsg);
       setExportProgress(null);
-      alert('Lỗi khi xuất DOCX: ' + (e.message || e));
+      setTimeout(() => setExportProgress(null), 3000);
     }
   };
 
@@ -1613,6 +1616,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                             grade: config.grade,     // Fallback to current config
                             readingPassage: exam.readingPassage,
                             questions: exam.questions
+                          }).catch((err: any) => {
+                            const errorMsg = err?.message || String(err) || 'Lỗi không xác định';
+                            console.error('Lỗi xuất exam:', err);
+                            alert('Lỗi khi xuất Word: ' + errorMsg);
                           });
                         }}
                         className="w-7 h-7 flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full"
