@@ -1,5 +1,5 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LineRuleType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle } from "docx";
-import { convertPdfToImages } from './services/pdfService';
+import { convertPdfToImages, ocrImages } from './services/pdfService';
 
 export interface DocxOptions {
     font?: string;
@@ -667,6 +667,192 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
     } catch (error: any) {
         console.error('[convertPdfToWordDocx] Lỗi:', error);
         throw new Error(`Lỗi chuyển đổi PDF sang Word: ${error.message}`);
+    }
+}
+
+/**
+ * Chuyển đổi file PDF sang Word Document với OCR (trích xuất văn bản)
+ * @param base64Pdf - Base64 string của file PDF
+ * @param fileName - Tên file Word cần tạo
+ * @param title - Tiêu đề tài liệu (tùy chọn)
+ * @param includeImages - Có thêm ảnh gốc không (mặc định true)
+ */
+export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string, includeImages: boolean = true) {
+    try {
+        console.log('[convertPdfToWordWithOCR] Bắt đầu chuyển đổi PDF sang Word với OCR...');
+        
+        // Chuyển PDF sang mảng hình ảnh
+        const pdfImages = await convertPdfToImages(base64Pdf, 50);
+        
+        if (!pdfImages || pdfImages.length === 0) {
+            throw new Error('Không thể chuyển đổi PDF. File có thể bị lỗi hoặc định dạng không hợp lệ.');
+        }
+
+        console.log(`[convertPdfToWordWithOCR] Chuyển đổi thành công ${pdfImages.length} trang`);
+
+        // Trích xuất dataUrl từ pdfImages
+        const dataUrls = pdfImages.map(img => img.dataUrl || `data:${img.inlineData.mimeType};base64,${img.inlineData.data}`);
+        
+        // Sử dụng OCR để trích xuất văn bản
+        console.log('[convertPdfToWordWithOCR] Đang nhận diện văn bản bằng OCR...');
+        const extractedTexts = await ocrImages(dataUrls, 'vie+eng');
+        
+        // Tạo Document Word
+        const children: any[] = [];
+        const font = 'Times New Roman';
+        const fontSize = 13;
+
+        // Thêm tiêu đề nếu có
+        if (title && title.trim()) {
+            children.push(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                    new TextRun({
+                        text: title.toUpperCase(),
+                        bold: true,
+                        size: (fontSize + 4) * 2,
+                        font
+                    })
+                ],
+                spacing: { after: 240 }
+            }));
+
+            children.push(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                    new TextRun({
+                        text: `(Trích xuất từ PDF bằng OCR)`,
+                        italics: true,
+                        size: fontSize * 2,
+                        font,
+                        color: '999999'
+                    })
+                ],
+                spacing: { after: 400 }
+            }));
+        }
+
+        // Thêm văn bản và ảnh từ mỗi trang
+        for (let i = 0; i < extractedTexts.length; i++) {
+            const pageText = extractedTexts[i];
+            const pdfImage = pdfImages[i];
+
+            // Thêm số trang
+            if (extractedTexts.length > 1) {
+                children.push(new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: `─ TRANG ${i + 1} ─`,
+                            bold: true,
+                            size: (fontSize - 1) * 2,
+                            font,
+                            color: '0066CC'
+                        })
+                    ],
+                    spacing: { before: 400, after: 200 },
+                    alignment: AlignmentType.CENTER
+                }));
+            }
+
+            // Thêm văn bản trích xuất
+            if (pageText && pageText.trim()) {
+                const paragraphs = pageText.split('\n').filter((line: string) => line.trim());
+                paragraphs.forEach((para: string, idx: number) => {
+                    children.push(new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: para.trim(),
+                                size: fontSize * 2,
+                                font
+                            })
+                        ],
+                        spacing: { after: 120, line: 360, lineRule: LineRuleType.AUTO },
+                        alignment: AlignmentType.JUSTIFY
+                    }));
+                });
+            } else {
+                // Nếu OCR không nhận diện được, thêm ghi chú
+                children.push(new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: `[Không thể nhận diện văn bản trên trang này]`,
+                            italics: true,
+                            size: (fontSize - 2) * 2,
+                            font,
+                            color: 'CC6666'
+                        })
+                    ],
+                    spacing: { after: 200 },
+                    alignment: AlignmentType.CENTER
+                }));
+            }
+
+            // Thêm ảnh gốc nếu tùy chọn
+            if (includeImages && pdfImage) {
+                try {
+                    const base64Data = pdfImage.inlineData.data;
+                    const binaryString = atob(base64Data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let j = 0; j < binaryString.length; j++) {
+                        bytes[j] = binaryString.charCodeAt(j);
+                    }
+                    const imageBuffer = bytes.buffer;
+
+                    children.push(new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [
+                            new ImageRun({
+                                data: imageBuffer,
+                                transformation: {
+                                    width: 500,
+                                    height: 650
+                                },
+                                type: "jpeg"
+                            })
+                        ],
+                        spacing: { before: 240, after: 240 }
+                    }));
+                } catch (imgError) {
+                    console.warn(`[convertPdfToWordWithOCR] Lỗi xử lý ảnh trang ${i + 1}:`, imgError);
+                }
+            }
+
+            // Thêm page break (ngoại trừ trang cuối)
+            if (i < extractedTexts.length - 1) {
+                children.push(new Paragraph({
+                    pageBreakBefore: true,
+                    children: [new TextRun({ text: " " })]
+                }));
+            }
+        }
+
+        // Tạo Document
+        const doc = new Document({
+            styles: {
+                default: {
+                    document: {
+                        run: { font, size: fontSize * 2 },
+                    },
+                    paragraph: {
+                        spacing: { line: 360, lineRule: LineRuleType.AUTO }
+                    }
+                },
+            },
+            sections: [{ properties: {}, children: children }],
+        });
+
+        // Chuyển đổi thành Blob
+        console.log('[convertPdfToWordWithOCR] Đang tạo file Word...');
+        const blob = await Packer.toBlob(doc);
+        
+        // Tải xuống
+        console.log('[convertPdfToWordWithOCR] Đang tải xuống file...');
+        saveAs(blob, fileName);
+        
+        return { success: true, pageCount: extractedTexts.length, extractedCharCount: extractedTexts.join('').length };
+    } catch (error: any) {
+        console.error('[convertPdfToWordWithOCR] Lỗi:', error);
+        throw new Error(`Lỗi chuyển đổi PDF sang Word với OCR: ${error.message}`);
     }
 }
 

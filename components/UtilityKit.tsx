@@ -5,7 +5,7 @@ import { Attachment, Message, TeacherPersona } from '../types';
 import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
-import { exportWorksheetToDocx, convertPdfToWordDocx } from '../docxHelper';
+import { exportWorksheetToDocx, convertPdfToWordDocx, convertPdfToWordWithOCR } from '../docxHelper';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -703,6 +703,8 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfToWordFile, setPdfToWordFile] = useState<File | null>(null);
   const [pdfToWordTitle, setPdfToWordTitle] = useState('');
   const [isConvertingToWord, setIsConvertingToWord] = useState(false);
+  const [pdfToWordMode, setPdfToWordMode] = useState<'image' | 'ocr'>('ocr'); // image hoặc ocr
+  const [pdfToWordIncludeImages, setPdfToWordIncludeImages] = useState(true);
   const [isMerging, setIsMerging] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -2283,10 +2285,17 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         ? `${pdfToWordTitle.replace(/[<>:"/\\|?*]/g, '')}.docx`
         : pdfToWordFile.name.replace('.pdf', '.docx');
 
-      // Chuyển đổi PDF sang Word
-      await convertPdfToWordDocx(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''));
+      // Chuyển đổi PDF sang Word theo mode được chọn
+      if (pdfToWordMode === 'ocr') {
+        console.log('[handlePdfToWord] Using OCR mode...');
+        await convertPdfToWordWithOCR(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''), pdfToWordIncludeImages);
+        alert('✅ Chuyển đổi thành công! File Word với văn bản (OCR) đã được tải xuống.\n\n💡 Lưu ý: OCR có thể mất vài giây tùy vào số trang.');
+      } else {
+        console.log('[handlePdfToWord] Using image-only mode...');
+        await convertPdfToWordDocx(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''));
+        alert('✅ Chuyển đổi thành công! File Word (chỉ ảnh) đã được tải xuống.');
+      }
       
-      alert('✅ Chuyển đổi thành công! File Word đã được tải xuống.');
       setPdfToWordFile(null);
       setPdfToWordTitle('');
     } catch (error: any) {
@@ -2620,6 +2629,56 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   <i className="fas fa-file-pdf mr-2 text-rose-500"></i>
                                   {pdfToWordFile.name}
                                 </p>
+
+                                {/* Chọn mode */}
+                                <div>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Chế độ chuyển đổi</label>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setPdfToWordMode('ocr')}
+                                      className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        pdfToWordMode === 'ocr'
+                                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'
+                                          : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-300'
+                                      }`}
+                                    >
+                                      <i className="fas fa-spell-check mr-2"></i>
+                                      OCR (VĂN BẢN)
+                                    </button>
+                                    <button
+                                      onClick={() => setPdfToWordMode('image')}
+                                      className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        pdfToWordMode === 'image'
+                                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
+                                          : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
+                                      }`}
+                                    >
+                                      <i className="fas fa-image mr-2"></i>
+                                      ẢNH ONLY
+                                    </button>
+                                  </div>
+                                  <p className="text-[9px] text-slate-500 italic mt-2">
+                                    {pdfToWordMode === 'ocr' 
+                                      ? '✓ Trích xuất văn bản (mất vài giây) + tùy chọn thêm ảnh' 
+                                      : '✓ Chỉ nhúng ảnh PDF vào Word (nhanh nhất)'}
+                                  </p>
+                                </div>
+
+                                {/* Tùy chọn cho OCR mode */}
+                                {pdfToWordMode === 'ocr' && (
+                                  <div>
+                                    <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-lg border border-slate-200 hover:border-indigo-300 transition-all">
+                                      <input
+                                        type="checkbox"
+                                        checked={pdfToWordIncludeImages}
+                                        onChange={(e) => setPdfToWordIncludeImages(e.target.checked)}
+                                        className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                                      />
+                                      <span className="text-[10px] font-bold text-slate-700">Thêm ảnh gốc PDF vào Word (mỗi trang)</span>
+                                    </label>
+                                  </div>
+                                )}
+
                                 <div>
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tiêu đề tài liệu (tùy chọn)</label>
                                   <input
@@ -2630,6 +2689,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                     className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                                   />
                                 </div>
+
                                 <div className="flex gap-2 pt-2">
                                   <button
                                     onClick={handlePdfToWord}
