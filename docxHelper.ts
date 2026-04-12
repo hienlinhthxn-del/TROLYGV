@@ -12,7 +12,7 @@ export interface DocxOptions {
  * Helper function để tạo TextRun với font mặc định
  */
 const createTextRun = (options: any) => {
-    return createTextRun({
+    return new TextRun({
         ...options,
         font: options.font || 'Calibri'
     });
