@@ -9,6 +9,29 @@ export interface DocxOptions {
 }
 
 /**
+ * Làm sạch text từ OCR - loại bỏ ký tự lạ, chuẩn hóa mã hóa
+ */
+const cleanOCRText = (text: string): string => {
+    if (!text) return '';
+    
+    return text
+        // Loại bỏ các ký tự điều khiển lạ (control characters)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        // Chuẩn hóa Unicode - loại bỏ các ký tự không phải dấu (combining marks) lạ
+        .replace(/[\u0300-\u036F]/g, '')
+        // Thay thế dấu gạch chân lạ (underscores từ OCR nhầm tưởng) bằng khoảng trắng
+        // Nhưng giữ những dấu gạch chân thật có vai trò (với khoảng trắng xung quanh)
+        .replace(/(?<!\S)_+(?!\S)/g, ' ')
+        // Thay thế các ký tự đặc biệt lạ (Euro €, ¥, £, v.v.) bằng ký tự tương tự tiếng Việt
+        .replace(/€/g, 'Â')
+        .replace(/[¥¢]/g, '')
+        // Chuẩn hóa giãn cách - loại bỏ giãn cách dư thừa
+        .replace(/\s+/g, ' ')
+        // Loại bỏ khoảng trắng đầu cuối
+        .trim();
+};
+
+/**
  * Helper function để tạo TextRun với font mặc định
  */
 const createTextRun = (options: any) => {
@@ -766,7 +789,10 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
 
             // Thêm văn bản trích xuất
             if (pageText && pageText.trim()) {
-                const paragraphs = pageText.split('\n').filter((line: string) => line.trim());
+                const paragraphs = pageText.split('\n')
+                    .map((line: string) => cleanOCRText(line))
+                    .filter((line: string) => line.trim());
+                    
                 paragraphs.forEach((para: string, idx: number) => {
                     children.push(new Paragraph({
                         children: [
