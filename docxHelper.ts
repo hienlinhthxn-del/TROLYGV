@@ -568,8 +568,9 @@ async function fetchImageAsArrayBuffer(url: string): Promise<ArrayBuffer | null>
  * @param base64Pdf - Base64 string của file PDF
  * @param fileName - Tên file Word cần tạo
  * @param title - Tiêu đề tài liệu (tùy chọn)
+ * @param selectedFont - Font được chọn (mặc định: Calibri)
  */
-export async function convertPdfToWordDocx(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string) {
+export async function convertPdfToWordDocx(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string, selectedFont: string = 'Calibri') {
     try {
         // Chuyển PDF sang mảng hình ảnh
         console.log('[convertPdfToWordDocx] Đang chuyển PDF sang hình ảnh...');
@@ -583,7 +584,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
 
         // Tạo Document Word
         const children: any[] = [];
-        const font = 'Calibri';
+        const font = selectedFont;
         const fontSize = 13;
 
         // Thêm tiêu đề nếu có
@@ -709,8 +710,9 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
  * @param fileName - Tên file Word cần tạo
  * @param title - Tiêu đề tài liệu (tùy chọn)
  * @param includeImages - Có thêm ảnh gốc không (mặc định true)
+ * @param selectedFont - Font được chọn (mặc định: Calibri)
  */
-export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string, includeImages: boolean = true) {
+export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: string = "Tai_lieu_tu_PDF.docx", title?: string, includeImages: boolean = true, selectedFont: string = 'Calibri') {
     try {
         console.log('[convertPdfToWordWithOCR] Bắt đầu chuyển đổi PDF sang Word với OCR...');
         
@@ -732,7 +734,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
         
         // Tạo Document Word
         const children: any[] = [];
-        const font = 'Calibri';
+        const font = selectedFont;
         const fontSize = 13;
 
         // Thêm tiêu đề nếu có

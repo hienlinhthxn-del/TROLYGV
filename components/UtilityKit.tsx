@@ -705,6 +705,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [isConvertingToWord, setIsConvertingToWord] = useState(false);
   const [pdfToWordMode, setPdfToWordMode] = useState<'image' | 'ocr'>('ocr'); // image hoặc ocr
   const [pdfToWordIncludeImages, setPdfToWordIncludeImages] = useState(true);
+  const [pdfToWordFont, setPdfToWordFont] = useState('Calibri'); // Thêm state cho font
   const [isMerging, setIsMerging] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -2288,16 +2289,17 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       // Chuyển đổi PDF sang Word theo mode được chọn
       if (pdfToWordMode === 'ocr') {
         console.log('[handlePdfToWord] Using OCR mode...');
-        await convertPdfToWordWithOCR(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''), pdfToWordIncludeImages);
+        await convertPdfToWordWithOCR(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''), pdfToWordIncludeImages, pdfToWordFont);
         alert('✅ Chuyển đổi thành công! File Word với văn bản (OCR) đã được tải xuống.\n\n💡 Lưu ý: OCR có thể mất vài giây tùy vào số trang.');
       } else {
         console.log('[handlePdfToWord] Using image-only mode...');
-        await convertPdfToWordDocx(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''));
+        await convertPdfToWordDocx(base64Data, fileName, pdfToWordTitle || pdfToWordFile.name.replace('.pdf', ''), pdfToWordFont);
         alert('✅ Chuyển đổi thành công! File Word (chỉ ảnh) đã được tải xuống.');
       }
       
       setPdfToWordFile(null);
       setPdfToWordTitle('');
+      setPdfToWordFont('Calibri'); // Reset font về mặc định
     } catch (error: any) {
       console.error('PDF to Word Error:', error);
       alert(`Lỗi chuyển đổi PDF sang Word:\n${error.message}`);
@@ -2690,6 +2692,23 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   />
                                 </div>
 
+                                <div>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Phông chữ</label>
+                                  <select
+                                    value={pdfToWordFont}
+                                    onChange={(e) => setPdfToWordFont(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                  >
+                                    <option value="Calibri">Calibri (Mặc định)</option>
+                                    <option value="Times New Roman">Times New Roman</option>
+                                    <option value="Arial">Arial</option>
+                                    <option value="Verdana">Verdana</option>
+                                    <option value="Georgia">Georgia</option>
+                                    <option value="Courier New">Courier New</option>
+                                    <option value="Comic Sans MS">Comic Sans MS</option>
+                                  </select>
+                                </div>
+
                                 <div className="flex gap-2 pt-2">
                                   <button
                                     onClick={handlePdfToWord}
@@ -2712,6 +2731,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                     onClick={() => {
                                       setPdfToWordFile(null);
                                       setPdfToWordTitle('');
+                                      setPdfToWordFont('Calibri');
                                     }}
                                     className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all"
                                   >
