@@ -9,10 +9,20 @@ export interface DocxOptions {
 }
 
 /**
+ * Helper function để tạo TextRun với font mặc định
+ */
+const createTextRun = (options: any) => {
+    return createTextRun({
+        ...options,
+        font: options.font || 'Calibri'
+    });
+};
+
+/**
  * Chuyển đổi nội dung text/markdown thành file Word và tải xuống
  */
 export async function downloadLessonPlanAsDocx(content: string, fileName: string = "Giao_an_AI.docx", options: DocxOptions = {}) {
-    const { font = 'Times New Roman', fontSize = 13, alignment = 'justify', lineSpacing = 1.5 } = options;
+    const { font = 'Calibri', fontSize = 13, alignment = 'justify', lineSpacing = 1.5 } = options;
 
     const docxAlignment =
         alignment === 'left' ? AlignmentType.LEFT :
@@ -46,7 +56,7 @@ export async function downloadLessonPlanAsDocx(content: string, fileName: string
         }
 
         return new Paragraph({
-            children: [new TextRun(trimmedLine)],
+            children: [createTextRun({ text: trimmedLine, font })],
             spacing: { after: 120, line: spacingValue, lineRule: LineRuleType.AUTO },
             alignment: docxAlignment
         });
@@ -100,7 +110,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         const skipImages = options?.skipImages || false;
         console.log('[exportWorksheetToDocx] Bắt đầu export với', questions.length, 'câu hỏi, skipImages=', skipImages);
 
-    const font = 'Times New Roman';
+    const font = 'Calibri';
     const fontSize = 13;
 
     const children: any[] = [];
@@ -110,7 +120,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
-            new TextRun({
+            createTextRun({
                 text: title.split('\n')[0].toUpperCase(),
                 bold: true,
                 size: (fontSize + 5) * 2,
@@ -125,7 +135,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         children.push(new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [
-                new TextRun({
+                createTextRun({
                     text: `Môn: ${worksheet.subject}${worksheet.grade ? ` - Lớp: ${worksheet.grade}` : ''}`,
                     italics: true,
                     size: fontSize * 2,
@@ -139,7 +149,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     // Thông tin học sinh
     children.push(new Paragraph({
         children: [
-            new TextRun({
+            createTextRun({
                 text: "Họ và tên: ........................................................... Lớp: ................. Ngày: ..../..../20....",
                 size: fontSize * 2,
                 font
@@ -155,7 +165,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     if (worksheet.matrix) {
         children.push(new Paragraph({
             children: [
-                new TextRun({
+                createTextRun({
                     text: "MA TRẬN ĐẶC TẢ ĐỀ THI",
                     bold: true,
                     size: fontSize * 2,
@@ -170,24 +180,24 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         const tableRows = [
             new TableRow({
                 children: [
-                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Nội dung", bold: true, size: fontSize * 2 })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
-                    ...COGNITIVE_LEVELS.map(l => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: l, bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 15, type: WidthType.PERCENTAGE } })),
-                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Tổng cộng", bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 10, type: WidthType.PERCENTAGE } }),
+                    new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: "Nội dung", bold: true, size: fontSize * 2 })] })], width: { size: 30, type: WidthType.PERCENTAGE } }),
+                    ...COGNITIVE_LEVELS.map(l => new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: l, bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 15, type: WidthType.PERCENTAGE } })),
+                    new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: "Tổng cộng", bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })], width: { size: 10, type: WidthType.PERCENTAGE } }),
                 ]
             })
         ];
 
         Object.entries(worksheet.matrix).forEach(([strand, levels]: [any, any]) => {
             let strandTotal = 0;
-            const cells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: strand, size: fontSize * 2 })] })] })];
+            const cells = [new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: strand, size: fontSize * 2 })] })] })];
 
             COGNITIVE_LEVELS.forEach(l => {
                 const count = (levels[l]?.mcq || 0) + (levels[l]?.essay || 0);
                 strandTotal += count;
-                cells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: count > 0 ? count.toString() : "-", size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
+                cells.push(new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: count > 0 ? count.toString() : "-", size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
             });
 
-            cells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: strandTotal.toString(), bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
+            cells.push(new TableCell({ children: [new Paragraph({ children: [createTextRun({ text: strandTotal.toString(), bold: true, size: fontSize * 2 })], alignment: AlignmentType.CENTER })] }));
             tableRows.push(new TableRow({ children: cells }));
         });
 
@@ -200,7 +210,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         // Sang trang mới sau ma trận
         children.push(new Paragraph({
             pageBreakBefore: true,
-            children: [new TextRun({ text: " " })]
+            children: [createTextRun({ text: " " })]
         }));
     }
 
@@ -208,7 +218,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     if (worksheet.readingPassage && worksheet.readingPassage.trim()) {
         children.push(new Paragraph({
             children: [
-                new TextRun({
+                createTextRun({
                     text: "BÀI ĐỌC HIỂU",
                     bold: true,
                     size: fontSize * 2,
@@ -221,10 +231,10 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
 
         // Xuất nội dung bài đọc hiểu
         const readingLines = worksheet.readingPassage.split('\n');
-        readingLines.forEach(line => {
+        readingLines.forEach((line: string) => {
             children.push(new Paragraph({
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: line.trim() || " ",
                         size: fontSize * 2,
                         font,
@@ -238,7 +248,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         });
 
         children.push(new Paragraph({
-            children: [new TextRun({ text: " " })],
+            children: [createTextRun({ text: " " })],
             spacing: { after: 240 }
         }));
     }
@@ -246,7 +256,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     // Câu hỏi
     children.push(new Paragraph({
         children: [
-            new TextRun({
+            createTextRun({
                 text: "NỘI DUNG ĐỀ THI",
                 bold: true,
                 size: fontSize * 2,
@@ -265,7 +275,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         // Tiêu đề câu hỏi
         children.push(new Paragraph({
             children: [
-                new TextRun({
+                createTextRun({
                     text: `Câu ${i + 1}: ${qContent}`,
                     bold: true,
                     size: fontSize * 2,
@@ -311,7 +321,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                 const optText = q.options.map((o: any) => typeof o === 'string' ? o : o.text).join(", ");
                 children.push(new Paragraph({
                     children: [
-                        new TextRun({
+                        createTextRun({
                             text: `Các gợi ý: ${optText}`,
                             italics: true,
                             size: (fontSize - 1) * 2,
@@ -327,7 +337,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                     const opt1Text = typeof opt1 === 'string' ? opt1 : opt1.text;
 
                     const rowChildren = [
-                        new TextRun({
+                        createTextRun({
                             text: `${String.fromCharCode(65 + j)}. ${opt1Text}`,
                             size: fontSize * 2,
                             font
@@ -337,7 +347,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                     if (j + 1 < q.options.length) {
                         const opt2 = q.options[j + 1];
                         const opt2Text = typeof opt2 === 'string' ? opt2 : opt2.text;
-                        rowChildren.push(new TextRun({
+                        rowChildren.push(createTextRun({
                             text: `\t${String.fromCharCode(65 + j + 1)}. ${opt2Text}`,
                             size: fontSize * 2,
                             font
@@ -358,7 +368,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
             for (let l = 0; l < lineCount; l++) {
                 children.push(new Paragraph({
                     children: [
-                        new TextRun({
+                        createTextRun({
                             text: l === 0 ? "Trả lời: ........................................................................................................................................................" : "..........................................................................................................................................................................",
                             size: fontSize * 2,
                             font
@@ -374,7 +384,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
-            new TextRun({
+            createTextRun({
                 text: "--- Hết ---",
                 bold: true,
                 size: fontSize * 2,
@@ -387,12 +397,12 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     // Đáp án & Hướng dẫn chấm (vào trang mới)
     children.push(new Paragraph({
         pageBreakBefore: true,
-        children: [new TextRun({ text: " " })]
+        children: [createTextRun({ text: " " })]
     }));
     children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
-            new TextRun({
+            createTextRun({
                 text: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
                 bold: true,
                 size: (fontSize + 2) * 2,
@@ -406,7 +416,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         const q = questions[i];
         children.push(new Paragraph({
             children: [
-                new TextRun({
+                createTextRun({
                     text: `Câu ${i + 1}: ${q.answer || "............... "}`,
                     bold: true,
                     size: fontSize * 2,
@@ -419,7 +429,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         if (q.explanation) {
             children.push(new Paragraph({
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: `Giải thích: ${q.explanation}`,
                         italics: true,
                         size: fontSize * 2,
@@ -550,7 +560,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
 
         // Tạo Document Word
         const children: any[] = [];
-        const font = 'Times New Roman';
+        const font = 'Calibri';
         const fontSize = 13;
 
         // Thêm tiêu đề nếu có
@@ -558,7 +568,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
             children.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: title.toUpperCase(),
                         bold: true,
                         size: (fontSize + 4) * 2,
@@ -571,7 +581,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
             children.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: `(Chuyển đổi từ PDF)`,
                         italics: true,
                         size: fontSize * 2,
@@ -601,7 +611,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
                 if (pdfImages.length > 1) {
                     children.push(new Paragraph({
                         children: [
-                            new TextRun({
+                            createTextRun({
                                 text: `Trang ${i + 1}`,
                                 italics: true,
                                 size: (fontSize - 2) * 2,
@@ -624,7 +634,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
                                 width: 550,  // Rộng phù hợp trang A4
                                 height: 700  // Tỷ lệ hình ảnh
                             },
-                            type: "jpeg"
+                            type: "jpg"
                         })
                     ],
                     spacing: { before: 120, after: 240 }
@@ -634,7 +644,7 @@ export async function convertPdfToWordDocx(base64Pdf: string, fileName: string =
                 if (i < pdfImages.length - 1) {
                     children.push(new Paragraph({
                         pageBreakBefore: true,
-                        children: [new TextRun({ text: " " })]
+                        children: [createTextRun({ text: " " })]
                     }));
                 }
             } catch (imgError) {
@@ -699,7 +709,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
         
         // Tạo Document Word
         const children: any[] = [];
-        const font = 'Times New Roman';
+        const font = 'Calibri';
         const fontSize = 13;
 
         // Thêm tiêu đề nếu có
@@ -707,7 +717,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
             children.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: title.toUpperCase(),
                         bold: true,
                         size: (fontSize + 4) * 2,
@@ -720,7 +730,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
             children.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                    new TextRun({
+                    createTextRun({
                         text: `(Trích xuất từ PDF bằng OCR)`,
                         italics: true,
                         size: fontSize * 2,
@@ -741,7 +751,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
             if (extractedTexts.length > 1) {
                 children.push(new Paragraph({
                     children: [
-                        new TextRun({
+                        createTextRun({
                             text: `─ TRANG ${i + 1} ─`,
                             bold: true,
                             size: (fontSize - 1) * 2,
@@ -760,21 +770,21 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
                 paragraphs.forEach((para: string, idx: number) => {
                     children.push(new Paragraph({
                         children: [
-                            new TextRun({
+                            createTextRun({
                                 text: para.trim(),
                                 size: fontSize * 2,
                                 font
                             })
                         ],
                         spacing: { after: 120, line: 360, lineRule: LineRuleType.AUTO },
-                        alignment: AlignmentType.JUSTIFY
+                        alignment: AlignmentType.JUSTIFIED
                     }));
                 });
             } else {
                 // Nếu OCR không nhận diện được, thêm ghi chú
                 children.push(new Paragraph({
                     children: [
-                        new TextRun({
+                        createTextRun({
                             text: `[Không thể nhận diện văn bản trên trang này]`,
                             italics: true,
                             size: (fontSize - 2) * 2,
@@ -807,7 +817,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
                                     width: 500,
                                     height: 650
                                 },
-                                type: "jpeg"
+                                type: "jpg"
                             })
                         ],
                         spacing: { before: 240, after: 240 }
@@ -821,7 +831,7 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
             if (i < extractedTexts.length - 1) {
                 children.push(new Paragraph({
                     pageBreakBefore: true,
-                    children: [new TextRun({ text: " " })]
+                    children: [createTextRun({ text: " " })]
                 }));
             }
         }
@@ -832,9 +842,6 @@ export async function convertPdfToWordWithOCR(base64Pdf: string, fileName: strin
                 default: {
                     document: {
                         run: { font, size: fontSize * 2 },
-                    },
-                    paragraph: {
-                        spacing: { line: 360, lineRule: LineRuleType.AUTO }
                     }
                 },
             },
