@@ -815,7 +815,7 @@ const App: React.FC = () => {
             )}
 
             {view === 'classroom' && <ClassroomManager classroom={classroom} onUpdate={updateClassroom} onAIAssist={(p, atts) => { setInput(p); if (atts) setPendingAttachments(atts); setView('chat'); }} />}
-            {view === 'workspace' && <Workspace initialContent={workspaceContent} onSave={(c) => setWorkspaceContent(c)} onSaveToCloud={handleSaveToCloud} />}
+            {view === 'workspace' && <Workspace initialContent={workspaceContent} onSave={(c) => { setWorkspaceContent(c); localStorage.setItem('edu_workspace_content', c); }} onSaveToCloud={handleSaveToCloud} />}
             {view === 'exam' && <ExamCreator onExportToWorkspace={sendToWorkspace} onStartPractice={startPractice} onCreateAssignment={handleCreateAssignmentFromExam} />}
             {view === 'worksheet' && <WorksheetCreator />}
             {view === 'cloud' && <CloudDrive documents={cloudDocs} onOpen={handleOpenCloudDoc} onDelete={handleDeleteCloudDoc} />}
