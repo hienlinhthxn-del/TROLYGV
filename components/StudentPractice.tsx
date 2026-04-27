@@ -220,24 +220,29 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
     const score = (results!.correctCount / questions.length * 10).toFixed(1);
 
-    // Nếu có assignmentId, tạo link nộp bài tự động
+    // Nếu có assignmentId, tạo link nộp bài tự động và gửi ngay
     if (assignmentId) {
+      if (!studentName.trim()) {
+        alert("Em vui lòng nhập Họ và tên để nộp bài tự động.");
+        return;
+      }
+
       const submissionData = {
         aid: assignmentId,
-        sid: studentName || 'Học sinh không tên',
+        sid: studentName,
         sc: score,
       };
       const encodedSubmission = btoa(JSON.stringify(submissionData));
       const submissionUrl = `${window.location.origin}${window.location.pathname}?submission=${encodedSubmission}`;
 
-      navigator.clipboard.writeText(submissionUrl).then(() => {
-        alert("✅ Đã sao chép LINK NỘP BÀI!\n\nEm hãy gửi link này cho Thầy Cô để được ghi điểm tự động nhé.");
-      });
-    } else {
-      // Fallback: Nếu không có assignmentId (link đề cũ), dùng phương pháp copy mã
-      const resultString = `#EDU_RESULT#:${studentName || 'Học sinh'}:${score}:${results!.correctCount}/${questions.length}`;
-      navigator.clipboard.writeText(resultString).then(() => alert("✅ Đã sao chép KẾT QUẢ!\n\nEm hãy gửi mã này cho Thầy Cô nhé."));
+      // Chuyển hướng trực tiếp đến đường dẫn nộp bài để ứng dụng tự động lưu kết quả.
+      window.location.href = submissionUrl;
+      return;
     }
+
+    // Fallback: Nếu không có assignmentId (link đề cũ), dùng phương pháp copy mã
+    const resultString = `#EDU_RESULT#:${studentName || 'Học sinh'}:${score}:${results!.correctCount}/${questions.length}`;
+    navigator.clipboard.writeText(resultString).then(() => alert("✅ Đã sao chép KẾT QUẢ!\n\nEm hãy gửi mã này cho Thầy Cô nhé."));
   };
 
   if (isSubmitted && results) {
@@ -298,10 +303,10 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
                     onClick={handleGenerateSubmission}
                     className={`w-full sm:w-auto px-6 py-3 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 whitespace-nowrap ${assignmentId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'}`}
                   >
-                    <i className="fas fa-paper-plane mr-2"></i>{assignmentId ? 'Lấy Link Nộp Bài' : 'Sao chép KQ'}
+                    <i className="fas fa-paper-plane mr-2"></i>{assignmentId ? 'Nộp bài tự động' : 'Sao chép KQ'}
                   </button>
                 </div>
-                <p className={`text-[10px] font-medium ${assignmentId ? 'text-indigo-400' : 'text-amber-500'}`}>{assignmentId ? 'Nhập tên, nhấn nút và gửi LINK cho Thầy Cô qua Zalo/Tin nhắn.' : 'Nhập tên, nhấn nút và gửi MÃ cho Thầy Cô qua Zalo/Tin nhắn.'}</p>
+                <p className={`text-[10px] font-medium ${assignmentId ? 'text-indigo-400' : 'text-amber-500'}`}>{assignmentId ? 'Nhập tên, nhấn nút để tự động nộp bài. Em không cần sao chép link nữa.' : 'Nhập tên, nhấn nút và gửi MÃ cho Thầy Cô qua Zalo/Tin nhắn.'}</p>
               </div>
 
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-left space-y-4">
