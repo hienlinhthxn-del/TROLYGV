@@ -983,7 +983,29 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
 
   public async generateSpeech(text: string, voice: string): Promise<string | null> {
     this.refreshKeys();
-    const geminiVoice = voice === 'Kore' ? 'Orus' : 'Aoede'; // Kore = Giọng Nam (Orus), Puck = Giọng Nữ (Aoede)
+    const voiceMap: Record<string, { geminiVoice: string; sampleRate: number; stylePrompt: string }> = {
+      Kore: {
+        geminiVoice: 'Orus',
+        sampleRate: 24000,
+        stylePrompt: 'Hãy đọc văn bản sau bằng giọng nam giáo viên Việt Nam trầm ấm, chuẩn mực, rõ ràng:\n\n',
+      },
+      Puck: {
+        geminiVoice: 'Aoede',
+        sampleRate: 24000,
+        stylePrompt: 'Hãy đọc văn bản sau bằng giọng nữ giáo viên Việt Nam dịu dàng, truyền cảm, rõ ràng:\n\n',
+      },
+      Boy: {
+        geminiVoice: 'Puck',
+        sampleRate: 26800,
+        stylePrompt: 'Hãy đọc chậm rãi văn bản sau bằng giọng một bé trai tiểu học Việt Nam (8 tuổi), giọng cao, trong sáng, hồn nhiên, lễ phép:\n\n',
+      },
+      Girl: {
+        geminiVoice: 'Leda',
+        sampleRate: 27400,
+        stylePrompt: 'Hãy đọc chậm rãi văn bản sau bằng giọng một bé gái tiểu học Việt Nam (8 tuổi), giọng cao, trong trẻo, nhí nhảnh, dễ thương:\n\n',
+      },
+    };
+    const selectedVoiceCfg = voiceMap[voice] || voiceMap.Kore;
 
     // 1. Thử tạo giọng đọc qua Gemini 2.5 Flash TTS nếu có API Key cá nhân
     for (const key of this.allApiKeys) {
@@ -994,13 +1016,13 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text }] }],
+              contents: [{ parts: [{ text: `${selectedVoiceCfg.stylePrompt}${text}` }] }],
               generationConfig: {
                 responseModalities: ['AUDIO'],
                 speechConfig: {
                   voiceConfig: {
                     prebuiltVoiceConfig: {
-                      voiceName: geminiVoice,
+                      voiceName: selectedVoiceCfg.geminiVoice,
                     },
                   },
                 },
@@ -1015,7 +1037,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
           if (inlineData?.data) {
             const mimeType: string = inlineData.mimeType || '';
             if (mimeType.includes('pcm') || mimeType.includes('L16')) {
-              return this.pcmBase64ToWavDataUrl(inlineData.data, 24000);
+              return this.pcmBase64ToWavDataUrl(inlineData.data, selectedVoiceCfg.sampleRate);
             }
             return `data:${mimeType || 'audio/wav'};base64,${inlineData.data}`;
           }

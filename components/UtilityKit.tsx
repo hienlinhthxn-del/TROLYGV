@@ -666,7 +666,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [grade, setGrade] = useState('Lớp 1');
   const [topic, setTopic] = useState('');
   const [videoStyle, setVideoStyle] = useState('Hoạt hình đơn giản');
-  const [voiceName, setVoiceName] = useState<'Kore' | 'Puck'>('Kore');
+  const [voiceName, setVoiceName] = useState<'Kore' | 'Puck' | 'Boy' | 'Girl'>('Kore');
   const [quizCount, setQuizCount] = useState(5);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -1993,7 +1993,13 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
 
     const ext = targetUrl.includes('audio/wav') ? 'wav' : 'mp3';
-    const voiceLabel = voiceName === 'Kore' ? 'Giong_Nam' : 'Giong_Nu';
+    const voiceLabelMap: Record<string, string> = {
+      Kore: 'Giong_Nam',
+      Puck: 'Giong_Nu',
+      Boy: 'Giong_Be_Trai',
+      Girl: 'Giong_Be_Gai',
+    };
+    const voiceLabel = voiceLabelMap[voiceName] || 'Giong_Doc';
     const link = document.createElement('a');
     link.href = targetUrl;
     link.download = `Giong_doc_AI_${voiceLabel}_${Date.now()}.${ext}`;
@@ -3684,16 +3690,28 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
-                      onClick={() => setVoiceName('Kore')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      onClick={() => { setVoiceName('Kore'); setAudioUrl(null); setIsPlaying(false); }}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Kore' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-indigo-200'}`}
                     >
                       <i className="fas fa-mars mr-2"></i>Giọng Nam
                     </button>
                     <button
-                      onClick={() => setVoiceName('Puck')}
-                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                      onClick={() => { setVoiceName('Puck'); setAudioUrl(null); setIsPlaying(false); }}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Puck' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-indigo-200'}`}
                     >
                       <i className="fas fa-venus mr-2"></i>Giọng Nữ
+                    </button>
+                    <button
+                      onClick={() => { setVoiceName('Boy'); setAudioUrl(null); setIsPlaying(false); }}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Boy' ? 'bg-sky-600 text-white border-sky-600 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-sky-200'}`}
+                    >
+                      <i className="fas fa-child mr-2"></i>Giọng Bé Trai
+                    </button>
+                    <button
+                      onClick={() => { setVoiceName('Girl'); setAudioUrl(null); setIsPlaying(false); }}
+                      className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${voiceName === 'Girl' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-pink-200'}`}
+                    >
+                      <i className="fas fa-child-dress mr-2"></i>Giọng Bé Gái
                     </button>
                   </div>
                 </div>
@@ -3929,19 +3947,42 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                             <div className="flex items-center justify-center space-x-4">
                               <button
                                 onClick={() => {
-                                  if (audioUrl) {
-                                    audioRef.current?.play();
+                                  if (audioUrl && audioRef.current) {
+                                    const isChildVoice = voiceName === 'Boy' || voiceName === 'Girl';
+                                    const isMp3Fallback = audioUrl.startsWith('data:audio/mpeg');
+                                    if (isChildVoice && isMp3Fallback) {
+                                      (audioRef.current as any).preservesPitch = false;
+                                      (audioRef.current as any).mozPreservesPitch = false;
+                                      (audioRef.current as any).webkitPreservesPitch = false;
+                                      audioRef.current.playbackRate = voiceName === 'Girl' ? 1.24 : 1.18;
+                                    } else {
+                                      (audioRef.current as any).preservesPitch = true;
+                                      audioRef.current.playbackRate = 1.0;
+                                    }
+                                    audioRef.current.play();
                                     setIsPlaying(true);
                                   } else if ('speechSynthesis' in window) {
                                     window.speechSynthesis.cancel();
                                     const utterance = new SpeechSynthesisUtterance(topic);
                                     utterance.lang = 'vi-VN';
-                                    utterance.rate = 0.9;
+                                    if (voiceName === 'Boy') {
+                                      utterance.pitch = 1.45;
+                                      utterance.rate = 1.02;
+                                    } else if (voiceName === 'Girl') {
+                                      utterance.pitch = 1.65;
+                                      utterance.rate = 1.05;
+                                    } else if (voiceName === 'Kore') {
+                                      utterance.pitch = 0.85;
+                                      utterance.rate = 0.92;
+                                    } else {
+                                      utterance.pitch = 1.05;
+                                      utterance.rate = 0.92;
+                                    }
 
                                     const voices = window.speechSynthesis.getVoices();
                                     const viVoices = voices.filter(v => v.lang.includes('vi'));
                                     if (viVoices.length > 0) {
-                                      if (voiceName === 'Kore') {
+                                      if (voiceName === 'Kore' || voiceName === 'Boy') {
                                         utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh') || v.name.toLowerCase().includes('khang')) || viVoices[0];
                                       } else {
                                         utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('thao') || v.name.toLowerCase().includes('linh')) || viVoices[0];
@@ -3982,7 +4023,9 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                               </button>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'AI Audio' : 'Hệ thống'}`}
+                              {isPlaying
+                                ? 'Đang phát giọng đọc...'
+                                : `Giọng ${voiceName === 'Kore' ? 'Nam' : voiceName === 'Puck' ? 'Nữ' : voiceName === 'Boy' ? 'Bé Trai' : 'Bé Gái'} • ${audioUrl ? 'AI Audio' : 'Hệ thống'}`}
                             </p>
                             <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-center">
                               <button

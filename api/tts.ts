@@ -88,7 +88,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 1. Thử dùng Gemini 2.5 Flash TTS nếu có API Key trên server
   const keys = getServerApiKeys();
-  const geminiVoice = voice === 'Kore' ? 'Orus' : 'Aoede'; // Kore button = Giọng Nam (Orus), Puck button = Giọng Nữ (Aoede)
+  const voiceMap: Record<string, { geminiVoice: string; sampleRate: number; stylePrompt: string }> = {
+    Kore: {
+      geminiVoice: 'Orus',
+      sampleRate: 24000,
+      stylePrompt: 'Hãy đọc văn bản sau bằng giọng nam giáo viên Việt Nam trầm ấm, chuẩn mực, rõ ràng:\n\n',
+    },
+    Puck: {
+      geminiVoice: 'Aoede',
+      sampleRate: 24000,
+      stylePrompt: 'Hãy đọc văn bản sau bằng giọng nữ giáo viên Việt Nam dịu dàng, truyền cảm, rõ ràng:\n\n',
+    },
+    Boy: {
+      geminiVoice: 'Puck',
+      sampleRate: 26800,
+      stylePrompt: 'Hãy đọc chậm rãi văn bản sau bằng giọng một bé trai tiểu học Việt Nam (8 tuổi), giọng cao, trong sáng, hồn nhiên, lễ phép:\n\n',
+    },
+    Girl: {
+      geminiVoice: 'Leda',
+      sampleRate: 27400,
+      stylePrompt: 'Hãy đọc chậm rãi văn bản sau bằng giọng một bé gái tiểu học Việt Nam (8 tuổi), giọng cao, trong trẻo, nhí nhảnh, dễ thương:\n\n',
+    },
+  };
+  const selectedVoiceCfg = voiceMap[voice] || voiceMap.Kore;
 
   for (const key of keys) {
     try {
@@ -98,13 +120,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text }] }],
+            contents: [{ parts: [{ text: `${selectedVoiceCfg.stylePrompt}${text}` }] }],
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: geminiVoice,
+                    voiceName: selectedVoiceCfg.geminiVoice,
                   },
                 },
               },
@@ -120,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const mimeType: string = inlineData.mimeType || '';
           if (mimeType.includes('pcm') || mimeType.includes('L16')) {
             const pcmBuffer = Buffer.from(inlineData.data, 'base64');
-            const wavBuffer = pcmToWavBuffer(pcmBuffer, 24000, 1, 16);
+            const wavBuffer = pcmToWavBuffer(pcmBuffer, selectedVoiceCfg.sampleRate, 1, 16);
             return res.status(200).json({
               audioUrl: `data:audio/wav;base64,${wavBuffer.toString('base64')}`,
               ext: 'wav',
