@@ -47,10 +47,15 @@ const WorksheetCreator: React.FC = () => {
     });
 
     const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
+    const worksheetRef = useRef<Worksheet | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isGeneratingImages, setIsGeneratingImages] = useState(false);
     const [progress, setProgress] = useState('');
     const forceStopRef = useRef(false);
+
+    useEffect(() => {
+        worksheetRef.current = worksheet;
+    }, [worksheet]);
 
     const subjects = ['Toán', 'Tiếng Việt', 'Tự nhiên & Xã hội', 'Đạo đức', 'Âm nhạc', 'Mỹ thuật'];
 
@@ -77,15 +82,56 @@ const WorksheetCreator: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const saved = localStorage.getItem('worksheet_history');
-        if (saved) setHistory(JSON.parse(saved));
+        try {
+            const saved = localStorage.getItem('worksheet_history');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) setHistory(parsed);
+            }
+        } catch (e) {
+            console.warn('Không thể đọc lịch sử phiếu học tập:', e);
+            localStorage.removeItem('worksheet_history');
+        }
     }, []);
 
+    const persistHistorySafely = (items: Worksheet[]) => {
+        try {
+            localStorage.setItem('worksheet_history', JSON.stringify(items.slice(0, 10)));
+        } catch {
+            try {
+                // Nếu vượt quá bộ nhớ localStorage (5MB) do ảnh base64 nặng, lược bỏ ảnh base64 ở các phiếu cũ
+                const lightItems = items.slice(0, 10).map((item, idx) => ({
+                    ...item,
+                    questions: (item.questions || []).map(q => ({
+                        ...q,
+                        imageUrl: idx === 0 && q.imageUrl && q.imageUrl.length < 150000
+                            ? q.imageUrl
+                            : (q.imageUrl?.startsWith('data:') ? undefined : q.imageUrl)
+                    }))
+                }));
+                localStorage.setItem('worksheet_history', JSON.stringify(lightItems));
+            } catch (e2) {
+                console.warn('Bộ nhớ trình duyệt đã đầy, chỉ lưu lịch sử trong phiên hiện tại:', e2);
+            }
+        }
+    };
+
     const saveToHistory = (ws: Worksheet) => {
-        const updatedWs = { ...ws, id: ws.id || Date.now().toString(), lastModified: new Date().toISOString() };
-        const newHistory = [updatedWs, ...history.filter(h => h.id !== updatedWs.id)].slice(0, 20);
-        setHistory(newHistory);
-        localStorage.setItem('worksheet_history', JSON.stringify(newHistory));
+        if (!ws) return;
+        try {
+            const updatedWs: Worksheet = {
+                ...ws,
+                id: ws.id || Date.now().toString(),
+                lastModified: new Date().toISOString()
+            };
+            setHistory(prev => {
+                const newHistory = [updatedWs, ...prev.filter(h => h.id !== updatedWs.id)].slice(0, 20);
+                persistHistorySafely(newHistory);
+                return newHistory;
+            });
+        } catch (e) {
+            console.warn('Lỗi khi lưu lịch sử:', e);
+        }
     };
 
     const handleDeleteFromHistory = (id: string, e: React.MouseEvent) => {
@@ -93,7 +139,7 @@ const WorksheetCreator: React.FC = () => {
         if (window.confirm('Bạn có chắc muốn xóa phiếu này khỏi lịch sử?')) {
             const updated = history.filter(h => h.id !== id);
             setHistory(updated);
-            localStorage.setItem('worksheet_history', JSON.stringify(updated));
+            persistHistorySafely(updated);
         }
     };
 
@@ -105,7 +151,7 @@ const WorksheetCreator: React.FC = () => {
         if (newName && newName.trim() !== '') {
             const updated = history.map(h => h.id === id ? { ...h, title: newName.trim() } : h);
             setHistory(updated);
-            localStorage.setItem('worksheet_history', JSON.stringify(updated));
+            persistHistorySafely(updated);
         }
     };
 
@@ -190,8 +236,12 @@ const WorksheetCreator: React.FC = () => {
             setIsGeneratingImages(true);
             forceStopRef.current = false;
 
-            // Đảm bảo worksheet được lưu trước khi bắt đầu
-            const wsToGen = { ...ws };
+            const wsToGen: Worksheet = {
+                ...ws,
+                id: ws.id || Date.now().toString(),
+                questions: [...ws.questions]
+            };
+            worksheetRef.current = wsToGen;
             setWorksheet(wsToGen);
 
             const pendingIndexes = wsToGen.questions
@@ -201,11 +251,7 @@ const WorksheetCreator: React.FC = () => {
 
             if (pendingIndexes.length === 0) {
                 setProgress('✅ Tất cả ảnh đã hoàn thành!');
-                // Lưu vào lịch sử
-                setWorksheet(curr => {
-                    if (curr) saveToHistory(curr);
-                    return curr;
-                });
+                saveToHistory(wsToGen);
                 setTimeout(() => setProgress(''), 3000);
                 return;
             }
@@ -223,11 +269,7 @@ const WorksheetCreator: React.FC = () => {
                     setActiveImageIndexes(prev => [...prev, index]);
 
                     try {
-                        // Lấy câu hỏi từ state mới nhất
-                        const currentWs = await new Promise<Worksheet | null>(resolve => {
-                            setWorksheet(prev => { resolve(prev); return prev; });
-                        });
-
+                        const currentWs = worksheetRef.current;
                         if (!currentWs) break;
                         const q = currentWs.questions[index];
                         if (!q) continue;
@@ -247,7 +289,9 @@ const WorksheetCreator: React.FC = () => {
                             if (!prev) return null;
                             const newQuestions = [...prev.questions];
                             newQuestions[index] = { ...newQuestions[index], imageUrl: imageUrl || 'error' };
-                            return { ...prev, questions: newQuestions };
+                            const nextWs = { ...prev, questions: newQuestions };
+                            worksheetRef.current = nextWs;
+                            return nextWs;
                         });
                     } catch (error) {
                         console.error(`Lỗi vẽ ảnh cho câu ${index + 1}:`, error);
@@ -255,7 +299,9 @@ const WorksheetCreator: React.FC = () => {
                             if (!prev) return null;
                             const newQuestions = [...prev.questions];
                             newQuestions[index] = { ...newQuestions[index], imageUrl: 'error' };
-                            return { ...prev, questions: newQuestions };
+                            const nextWs = { ...prev, questions: newQuestions };
+                            worksheetRef.current = nextWs;
+                            return nextWs;
                         });
                     } finally {
                         doneCount++;
@@ -269,19 +315,9 @@ const WorksheetCreator: React.FC = () => {
             const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(() => processQueue());
             await Promise.all(workers);
 
-            if (!forceStopRef.current) {
+            if (!forceStopRef.current && worksheetRef.current) {
                 setProgress(`✅ Đã xong ${doneCount} ảnh!`);
-                // Lưu bản cuối cùng vào lịch sử - làm điều này cuối cùng
-                setWorksheet(curr => {
-                    if (curr) {
-                        try {
-                            saveToHistory(curr);
-                        } catch (historyError) {
-                            console.warn('Lỗi lưu lịch sử:', historyError);
-                        }
-                    }
-                    return curr;
-                });
+                saveToHistory(worksheetRef.current);
             }
         } catch (error: any) {
             console.error('Lỗi toàn bộ quá trình vẽ ảnh:', error);
@@ -290,7 +326,6 @@ const WorksheetCreator: React.FC = () => {
             setIsGeneratingImages(false);
             setActiveImageIndexes([]);
             setImageProgress({ current: 0, total: 0 });
-            // Delay rõ ràng để đảm bảo UI render xong trước khi clear progress
             setTimeout(() => setProgress(''), 4000);
         }
     };
@@ -304,7 +339,9 @@ const WorksheetCreator: React.FC = () => {
         try {
             const imageUrl = await geminiService.generateImage(promptToRetry);
             updatedQuestions[index].imageUrl = imageUrl;
-            setWorksheet({ ...worksheet, questions: updatedQuestions });
+            const nextWs = { ...worksheet, questions: updatedQuestions };
+            worksheetRef.current = nextWs;
+            setWorksheet(nextWs);
             setProgress('Đã vẽ lại ảnh mới!');
             setTimeout(() => setProgress(''), 3000);
         } catch (error) {
@@ -315,25 +352,30 @@ const WorksheetCreator: React.FC = () => {
 
     const handleExportPDF = () => {
         if (!worksheet) return;
-        saveToHistory(worksheet);
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-        const html = `
+        try {
+            saveToHistory(worksheet);
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert('Trình duyệt đã chặn cửa sổ bật lên (Pop-up). Thầy Cô vui lòng cho phép Pop-up để in PDF nhé!');
+                return;
+            }
+            const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>${worksheet.title}</title>
+        <title>${worksheet.title || 'Phiếu bài tập'}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           body { font-family: 'Arial', sans-serif; max-width: 210mm; margin: 0 auto; padding: 20px; color: #333; }
           .header { text-align: center; border-bottom: 3px solid #FF6B9D; padding-bottom: 15px; margin-bottom: 20px; }
-          .header h1 { color: #FF6B9D; margin: 0; font-size: 28px; }
+          .header h1 { color: #FF6B9D; margin: 0; font-size: 26px; }
           .student-info { margin-bottom: 20px; padding: 10px; border: 1px dashed #999; border-radius: 5px; font-size: 14px; }
-          .question { margin: 25px 0; padding: 15px; border: 1px solid #eee; border-radius: 10px; page-break-inside: avoid; }
-          .question-header { font-weight: bold; color: #1976D2; margin-bottom: 10px; font-size: 18px; }
-          .question-image { text-align: center; margin: 15px 0; }
-          .question-image img { max-width: 70%; max-height: 250px; border-radius: 10px; }
+          .reading-box { margin-bottom: 20px; padding: 15px; border: 1px solid #FFE082; background: #FFFDE7; border-radius: 8px; line-height: 1.6; }
+          .question { margin: 20px 0; padding: 15px; border: 1px solid #eee; border-radius: 10px; page-break-inside: avoid; }
+          .question-header { font-weight: bold; color: #1976D2; margin-bottom: 10px; font-size: 16px; }
+          .question-image { text-align: center; margin: 12px 0; }
+          .question-image img { max-width: 65%; max-height: 220px; border-radius: 10px; }
           .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
           .option { padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #fff; }
           .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
@@ -341,34 +383,45 @@ const WorksheetCreator: React.FC = () => {
       </head>
       <body>
         <div class="header">
-          <h1>${worksheet.title}</h1>
-          <p>Môn: ${worksheet.subject}</p>
+          <h1>${worksheet.title || 'Phiếu Bài Tập'}</h1>
+          <p>Môn: ${worksheet.subject || ''}</p>
         </div>
         <div class="student-info">Họ tên: ........................................................... Lớp: ................. Ngày: ..../..../20....</div>
-        ${worksheet.questions.map((q, index) => `
+        ${worksheet.readingPassage ? `<div class="reading-box"><strong>📖 Bài đọc hiểu:</strong><br/>${worksheet.readingPassage.replace(/\n/g, '<br/>')}</div>` : ''}
+        ${(worksheet.questions || []).map((q, index) => {
+            const opts = (q.options && q.options.length > 0) ? q.options : (q.numbers || []);
+            const pairsHtml = (q.type === 'compare' && Array.isArray(q.pairs) && q.pairs.length > 0)
+                ? `<div class="options">${q.pairs.map((p: any) => `<div class="option" style="text-align:center;font-weight:bold;">${Array.isArray(p) ? `${p[0] ?? ''} &nbsp; [ ... ] &nbsp; ${p[1] ?? ''}` : String(p)}</div>`).join('')}</div>`
+                : '';
+            const optsHtml = (opts && opts.length > 0 && q.type !== 'compare')
+                ? `<div class="options">${opts.map((opt: any) => `<div class="option">${typeof opt === 'string' ? opt : (opt?.text ?? String(opt))}</div>`).join('')}</div>`
+                : (q.type !== 'compare' ? `<div style="height: 50px; border-bottom: 1px dotted #ccc; margin-top: 15px;">Trả lời:....................................................................</div>` : '');
+            return `
           <div class="question">
-            <div class="question-header">Câu ${index + 1}: ${q.question}</div>
-            ${q.imageUrl ? `<div class="question-image"><img src="${q.imageUrl}" /></div>` : ''}
-            ${q.options && q.options.length > 0 ? `
-              <div class="options">
-                ${q.options.map(opt => `<div class="option">${opt}</div>`).join('')}
-              </div>
-            ` : `<div style="height: 60px; border-bottom: 1px dotted #ccc; margin-top: 15px;">Trả lời:....................................................................</div>`}
+            <div class="question-header">Câu ${index + 1}: ${typeof q.question === 'string' ? q.question : JSON.stringify(q.question || '')}</div>
+            ${q.imageUrl && q.imageUrl !== 'error' ? `<div class="question-image"><img src="${q.imageUrl}" /></div>` : ''}
+            ${pairsHtml}
+            ${optsHtml}
           </div>
-        `).join('')}
+        `;
+        }).join('')}
         <div class="footer">Dành cho học sinh lớp 1 - Chúc các em học tốt!</div>
       </body>
       </html>
     `;
-        printWindow.document.write(html);
-        printWindow.document.close();
-        setTimeout(() => printWindow.print(), 1000);
+            printWindow.document.write(html);
+            printWindow.document.close();
+            setTimeout(() => printWindow.print(), 1000);
+        } catch (e: any) {
+            console.error('Lỗi khi xuất PDF:', e);
+            alert('Lỗi khi xuất PDF: ' + (e?.message || e));
+        }
     };
 
     const handleExportJSON = () => {
         if (!worksheet) return;
-        saveToHistory(worksheet);
         try {
+            saveToHistory(worksheet);
             const jsonStr = JSON.stringify(worksheet, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -383,14 +436,17 @@ const WorksheetCreator: React.FC = () => {
     };
 
     const handleExportDOCX = async () => {
-        if (!worksheet) return;
-        saveToHistory(worksheet);
+        const currentWs = worksheetRef.current || worksheet;
+        if (!currentWs) return;
+        if (isGeneratingImages) {
+            forceStopRef.current = true;
+        }
         setProgress('Đang chuẩn bị nội dung file Word...');
 
         try {
-            // Export không ảnh nếu muốn nhanh hơn
-            await exportWorksheetToDocx(worksheet, { skipImages: false });
-            setProgress('Đã xuất file Word thành công!');
+            saveToHistory(currentWs);
+            await exportWorksheetToDocx(currentWs, { skipImages: false });
+            setProgress('✅ Đã xuất file Word (.docx) thành công!');
             setTimeout(() => setProgress(''), 3000);
         } catch (e: any) {
             console.error('Lỗi khi xuất DOCX:', e);
@@ -402,12 +458,13 @@ const WorksheetCreator: React.FC = () => {
     };
 
     const handleExportFast = async () => {
-        if (!worksheet) return;
+        const currentWs = worksheetRef.current || worksheet;
+        if (!currentWs) return;
         setProgress('Đang xuất nhanh (không ảnh)...');
 
         try {
-            // Export KHÔNG ảnh - nhanh hơn rất nhiều
-            await exportWorksheetToDocx(worksheet, { skipImages: true });
+            saveToHistory(currentWs);
+            await exportWorksheetToDocx(currentWs, { skipImages: true });
             setProgress('✓ Xuất nhanh thành công!');
             setTimeout(() => setProgress(''), 3000);
         } catch (e: any) {
@@ -440,9 +497,9 @@ const WorksheetCreator: React.FC = () => {
                         <h3 style={{ margin: '0 0 15px 0', color: '#7B1FA2' }}>📋 Danh sách Phiếu đã tạo gần đây:</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' }}>
                             {history.length > 0 ? history.map((ws) => (
-                                <div key={ws.id} onClick={() => { setWorksheet(ws); setShowHistory(false); }} style={{ padding: '15px', background: 'white', borderRadius: '10px', border: '1px solid #ce93d8', cursor: 'pointer', transition: 'all 0.2s', position: 'relative' }} className="group" onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                                <div key={ws.id || Math.random()} onClick={() => { setWorksheet(ws); setShowHistory(false); }} style={{ padding: '15px', background: 'white', borderRadius: '10px', border: '1px solid #ce93d8', cursor: 'pointer', transition: 'all 0.2s', position: 'relative' }} className="group" onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                                     <div style={{ fontWeight: 'bold', color: '#1976D2', marginBottom: '5px', paddingRight: '30px' }} className="line-clamp-1">{ws.title}</div>
-                                    <div style={{ fontSize: '11px', color: '#888' }}>Môn: {ws.subject} - {ws.questions.length} câu</div>
+                                    <div style={{ fontSize: '11px', color: '#888' }}>Môn: {ws.subject} - {ws.questions?.length || 0} câu</div>
                                     <div style={{ fontSize: '10px', color: '#aaa', marginTop: '5px' }}>{ws.lastModified ? new Date(ws.lastModified).toLocaleString('vi-VN') : ''}</div>
                                     <div className="absolute top-3 right-3 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={(e) => handleRenameFromHistory(ws.id!, e)} title="Đổi tên" className="w-7 h-7 flex items-center justify-center bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-full border border-slate-200 transition-all">
@@ -681,44 +738,44 @@ const WorksheetCreator: React.FC = () => {
                                     </div>
 
                                     {/* Hiển thị dữ liệu đặc thù theo type */}
-                                    {q.type === 'circle' && q.numbers && q.numbers.length > 0 && (
+                                    {q.type === 'circle' && Array.isArray(q.numbers) && q.numbers.length > 0 && (
                                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', margin: '10px 0', padding: '10px', background: 'white', borderRadius: '10px', border: '1px solid #eee' }}>
-                                            {q.numbers.map((num, ni) => (
+                                            {q.numbers.map((num: any, ni: number) => (
                                                 <div key={ni} style={{ width: '50px', height: '50px', borderRadius: '50%', border: '3px solid #E91E63', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: '#E91E63', background: '#FCE4EC' }}>
-                                                    {num}
+                                                    {typeof num === 'string' || typeof num === 'number' ? num : (num?.text ?? JSON.stringify(num))}
                                                 </div>
                                             ))}
                                         </div>
                                     )}
 
-                                    {q.type === 'compare' && q.pairs && q.pairs.length > 0 && (
+                                    {q.type === 'compare' && Array.isArray(q.pairs) && q.pairs.length > 0 && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '10px 0' }}>
-                                            {q.pairs.map((pair, pi) => (
+                                            {q.pairs.map((pair: any, pi: number) => (
                                                 <div key={pi} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '8px', background: 'white', borderRadius: '8px', border: '1px solid #eee' }}>
-                                                    <span style={{ padding: '6px 14px', background: '#E0F7FA', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', border: '1px solid #00BCD4' }}>{pair[0]}</span>
+                                                    <span style={{ padding: '6px 14px', background: '#E0F7FA', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', border: '1px solid #00BCD4' }}>{Array.isArray(pair) ? String(pair[0] ?? '') : String(pair ?? '')}</span>
                                                     <span style={{ width: '40px', height: '36px', border: '2px solid #FF9800', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 'bold', color: '#FF9800', background: '#FFF8E1' }}>?</span>
-                                                    <span style={{ padding: '6px 14px', background: '#E0F7FA', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', border: '1px solid #00BCD4' }}>{pair[1]}</span>
+                                                    <span style={{ padding: '6px 14px', background: '#E0F7FA', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', border: '1px solid #00BCD4' }}>{Array.isArray(pair) ? String(pair[1] ?? '') : ''}</span>
                                                 </div>
                                             ))}
                                         </div>
                                     )}
 
-                                    {q.type === 'arrange' && q.options && q.options.length > 0 && (
+                                    {q.type === 'arrange' && Array.isArray(q.options) && q.options.length > 0 && (
                                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', margin: '10px 0', padding: '12px', background: 'white', borderRadius: '10px', border: '1px dashed #673AB7' }}>
-                                            {q.options.map((opt, oi) => (
-                                                <span key={oi} style={{ padding: '8px 16px', background: '#EDE7F6', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', color: '#673AB7', border: '1px solid #B39DDB' }}>{opt}</span>
+                                            {q.options.map((opt: any, oi: number) => (
+                                                <span key={oi} style={{ padding: '8px 16px', background: '#EDE7F6', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', color: '#673AB7', border: '1px solid #B39DDB' }}>{typeof opt === 'string' ? opt : (opt?.text ?? String(opt))}</span>
                                             ))}
                                             <span style={{ fontSize: '12px', color: '#999', width: '100%', textAlign: 'center', marginTop: '4px' }}>↕ Sắp xếp các phần tử trên theo thứ tự đúng</span>
                                         </div>
                                     )}
 
                                     {/* Options cho MCQ, TF, Reading */}
-                                    {(q.type === 'mcq' || q.type === 'tf' || q.type === 'reading') && q.options && q.options.length > 0 && (
+                                    {(q.type === 'mcq' || q.type === 'tf' || q.type === 'reading') && Array.isArray(q.options) && q.options.length > 0 && (
                                         <div style={{ display: 'grid', gridTemplateColumns: q.options.length <= 3 ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '12px' }}>
-                                            {q.options.map((opt, i) => (
+                                            {q.options.map((opt: any, i: number) => (
                                                 <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                                     <span style={{ fontWeight: 'bold', color: '#555', minWidth: '22px' }}>{String.fromCharCode(65 + i)}.</span>
-                                                    <input type="text" value={opt} onChange={(e) => {
+                                                    <input type="text" value={typeof opt === 'string' ? opt : (opt?.text ?? String(opt))} onChange={(e) => {
                                                         const updated = [...worksheet.questions];
                                                         if (updated[index].options) {
                                                             updated[index].options![i] = e.target.value;

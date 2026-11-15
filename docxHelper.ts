@@ -291,8 +291,9 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
     }));
 
     for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const qContent = q.question || q.content || "";
+        const q = questions[i] || {};
+        const rawContent = q.question ?? q.content ?? "";
+        const qContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
         const qImage = q.imageUrl || q.image || "";
 
         // Tiêu đề câu hỏi
@@ -312,19 +313,18 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         if (!skipImages && qImage && qImage !== 'error' && typeof qImage === 'string') {
             try {
                 if (!qImage.trim().startsWith('<svg')) {
-                    const imageBuffer = await fetchImageAsArrayBuffer(qImage);
-                    if (imageBuffer) {
-                        const imgType = (qImage.includes('image/jpeg') || qImage.includes('image/jpg') || /\.jpe?g($|\?)/i.test(qImage)) ? "jpg" : "png";
+                    const pngBytes = await normalizeImageToPngBytes(qImage);
+                    if (pngBytes && pngBytes.byteLength > 0) {
                         children.push(new Paragraph({
                             alignment: AlignmentType.CENTER,
                             children: [
                                 new ImageRun({
-                                    data: imageBuffer,
+                                    data: pngBytes,
                                     transformation: {
-                                        width: 300,
+                                        width: 280,
                                         height: 200,
                                     },
-                                    type: imgType
+                                    type: "png"
                                 })
                             ],
                             spacing: { before: 120, after: 120 }
@@ -337,18 +337,43 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
             }
         }
 
-        // Tùy chọn (cho MCQ, TF, Reading)
-        if (q.options && q.options.length > 0) {
+        // Hiển thị cặp so sánh cho dạng compare
+        if (q.type === 'compare' && Array.isArray(q.pairs) && q.pairs.length > 0) {
+            const pairStrs = q.pairs.map((pair: any) => {
+                if (Array.isArray(pair)) return `${pair[0] ?? ''}   [ ..... ]   ${pair[1] ?? ''}`;
+                return String(pair);
+            });
+            children.push(new Paragraph({
+                children: [
+                    createTextRun({
+                        text: pairStrs.join('          '),
+                        bold: true,
+                        size: fontSize * 2,
+                        font
+                    })
+                ],
+                spacing: { after: 120 }
+            }));
+        }
+
+        // Hiển thị dãy số khoanh tròn nếu q.numbers có mà q.options trống
+        const effectiveOptions = (Array.isArray(q.options) && q.options.length > 0)
+            ? q.options
+            : (Array.isArray(q.numbers) && q.numbers.length > 0 ? q.numbers : []);
+
+        // Tùy chọn (cho MCQ, TF, Reading, Arrange, Circle)
+        if (effectiveOptions.length > 0) {
             if (q.type === 'compare') {
-                // Already in content
+                // Already handled above
             } else if (q.type === 'arrange' || q.type === 'circle') {
-                const optText = q.options.map((o: any) => typeof o === 'string' ? o : o.text).join(", ");
+                const optText = effectiveOptions.map((o: any) => typeof o === 'string' ? o : (o?.text ?? String(o))).join("   |   ");
                 children.push(new Paragraph({
                     children: [
                         createTextRun({
-                            text: `Các gợi ý: ${optText}`,
-                            italics: true,
-                            size: (fontSize - 1) * 2,
+                            text: q.type === 'circle' ? `Khoanh vào đáp án đúng:   ${optText}` : `Các gợi ý:   ${optText}`,
+                            bold: q.type === 'circle',
+                            italics: q.type !== 'circle',
+                            size: fontSize * 2,
                             font
                         })
                     ],
@@ -356,9 +381,9 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                 }));
             } else {
                 // MCQ layout (2 columns)
-                for (let j = 0; j < q.options.length; j += 2) {
-                    const opt1 = q.options[j];
-                    const opt1Text = typeof opt1 === 'string' ? opt1 : opt1.text;
+                for (let j = 0; j < effectiveOptions.length; j += 2) {
+                    const opt1 = effectiveOptions[j];
+                    const opt1Text = typeof opt1 === 'string' ? opt1 : (opt1?.text ?? String(opt1 ?? ''));
 
                     const rowChildren = [
                         createTextRun({
@@ -368,9 +393,9 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                         })
                     ];
 
-                    if (j + 1 < q.options.length) {
-                        const opt2 = q.options[j + 1];
-                        const opt2Text = typeof opt2 === 'string' ? opt2 : opt2.text;
+                    if (j + 1 < effectiveOptions.length) {
+                        const opt2 = effectiveOptions[j + 1];
+                        const opt2Text = typeof opt2 === 'string' ? opt2 : (opt2?.text ?? String(opt2 ?? ''));
                         rowChildren.push(createTextRun({
                             text: `\t${String.fromCharCode(65 + j + 1)}. ${opt2Text}`,
                             size: fontSize * 2,
@@ -386,7 +411,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         }
 
         // Dòng kẻ trả lời
-        const isEssay = q.type === 'Tự luận' || q.type === 'essay' || q.type === 'fill' || (!q.options || q.options.length === 0);
+        const isEssay = q.type === 'Tự luận' || q.type === 'essay' || q.type === 'fill' || q.type === 'arrange' || (effectiveOptions.length === 0 && q.type !== 'compare');
         if (isEssay) {
             const lineCount = (q.type === 'Tự luận' || q.type === 'essay') ? 4 : 1;
             for (let l = 0; l < lineCount; l++) {
@@ -494,6 +519,87 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
         console.error('[exportWorksheetToDocx] Error:', error);
         throw new Error(`Không thể xuất file Word: ${error?.message || error}`);
     }
+}
+
+/**
+ * Chuẩn hóa mọi định dạng ảnh (WebP, JPEG, PNG, DataURL, URL) về PNG Uint8Array thông qua Canvas
+ * giúp thư viện docx không bị lỗi khi đóng gói file Word.
+ */
+async function normalizeImageToPngBytes(url: string): Promise<Uint8Array | null> {
+    if (!url || typeof url !== 'string') return null;
+
+    if (typeof document !== 'undefined') {
+        try {
+            const pngBytes = await new Promise<Uint8Array | null>((resolve) => {
+                const img = new Image();
+                if (!url.startsWith('data:')) {
+                    img.crossOrigin = 'anonymous';
+                }
+                const timer = setTimeout(() => {
+                    resolve(null);
+                }, 4000);
+
+                img.onload = () => {
+                    clearTimeout(timer);
+                    try {
+                        const maxW = 500;
+                        const maxH = 380;
+                        let w = img.naturalWidth || 400;
+                        let h = img.naturalHeight || 300;
+                        if (w > maxW) {
+                            h = Math.round((h * maxW) / w);
+                            w = maxW;
+                        }
+                        if (h > maxH) {
+                            w = Math.round((w * maxH) / h);
+                            h = maxH;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) {
+                            resolve(null);
+                            return;
+                        }
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.drawImage(img, 0, 0, w, h);
+                        const dataUrl = canvas.toDataURL('image/png');
+                        const base64 = dataUrl.split(',')[1];
+                        if (!base64) {
+                            resolve(null);
+                            return;
+                        }
+                        const binary = window.atob(base64);
+                        const bytes = new Uint8Array(binary.length);
+                        for (let i = 0; i < binary.length; i++) {
+                            bytes[i] = binary.charCodeAt(i);
+                        }
+                        resolve(bytes);
+                    } catch {
+                        resolve(null);
+                    }
+                };
+
+                img.onerror = () => {
+                    clearTimeout(timer);
+                    resolve(null);
+                };
+
+                img.src = url;
+            });
+
+            if (pngBytes && pngBytes.byteLength > 0) {
+                return pngBytes;
+            }
+        } catch (e) {
+            console.warn('Canvas image normalization fallback:', e);
+        }
+    }
+
+    const buf = await fetchImageAsArrayBuffer(url);
+    return buf ? new Uint8Array(buf) : null;
 }
 
 /**
@@ -916,7 +1022,7 @@ function saveAs(blob: Blob, fileName: string) {
         // Trigger click
         link.click();
         
-        // Cleanup sau một chút time
+        // Cleanup sau 10 giây để trình duyệt kịp tải các file Word dung lượng lớn
         setTimeout(() => {
             try {
                 if (document.body.contains(link)) {
@@ -926,7 +1032,7 @@ function saveAs(blob: Blob, fileName: string) {
             } catch (cleanupError) {
                 console.warn('Lỗi cleanup download:', cleanupError);
             }
-        }, 200);
+        }, 10000);
     } catch (e) {
         console.error('Lỗi khi download file:', e);
         throw e;
