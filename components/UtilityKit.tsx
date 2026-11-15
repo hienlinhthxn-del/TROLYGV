@@ -708,6 +708,12 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [pdfToWordFont, setPdfToWordFont] = useState('Calibri'); // Thêm state cho font
   const [isMerging, setIsMerging] = useState(false);
 
+  // State cho Word / Excel sang PDF
+  const [officeToPdfFile, setOfficeToPdfFile] = useState<File | null>(null);
+  const [officeToPdfOrientation, setOfficeToPdfOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [isConvertingOfficeToPdf, setIsConvertingOfficeToPdf] = useState(false);
+  const [officePreviewHtml, setOfficePreviewHtml] = useState<string | null>(null);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2343,6 +2349,243 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
   };
 
+  const buildOfficeDocumentHtml = async (file: File): Promise<string> => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const baseStyle = `
+      <style>
+        .office-pdf-doc {
+          font-family: 'Times New Roman', 'Be Vietnam Pro', serif;
+          color: #0f172a;
+          line-height: 1.6;
+          font-size: 13pt;
+          word-wrap: break-word;
+        }
+        .office-pdf-doc h1, .office-pdf-doc h2, .office-pdf-doc h3, .office-pdf-doc h4 {
+          color: #1e293b;
+          margin-top: 12px;
+          margin-bottom: 8px;
+          font-weight: bold;
+        }
+        .office-pdf-doc p {
+          margin: 0 0 8px 0;
+        }
+        .office-pdf-doc table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 12px 0;
+          font-size: 10.5pt;
+          page-break-inside: auto;
+        }
+        .office-pdf-doc tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+        }
+        .office-pdf-doc th, .office-pdf-doc td {
+          border: 1px solid #94a3b8;
+          padding: 6px 8px;
+          text-align: left;
+          vertical-align: top;
+        }
+        .office-pdf-doc th {
+          background-color: #f1f5f9;
+          font-weight: bold;
+        }
+        .office-pdf-doc img {
+          max-width: 100%;
+          height: auto;
+          display: block;
+          margin: 8px auto;
+        }
+        .excel-sheet-title {
+          font-family: 'Be Vietnam Pro', Arial, sans-serif;
+          font-size: 13pt;
+          font-weight: 800;
+          color: #0f766e;
+          margin: 16px 0 8px 0;
+          padding-bottom: 4px;
+          border-bottom: 2px solid #99f6e4;
+        }
+      </style>
+    `;
+
+    if (ext === 'docx') {
+      const mammothMod = await import('mammoth');
+      const mammothLib = (mammothMod as any).default || mammothMod;
+      const arrayBuffer = await file.arrayBuffer();
+      const res = await mammothLib.convertToHtml({ arrayBuffer });
+      if (!res.value || !res.value.trim()) {
+        const raw = await mammothLib.extractRawText({ arrayBuffer });
+        const paragraphs = (raw.value || '')
+          .split(/\r?\n/)
+          .map((line: string) => `<p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '&nbsp;'}</p>`)
+          .join('');
+        return `${baseStyle}<div class="office-pdf-doc">${paragraphs}</div>`;
+      }
+      return `${baseStyle}<div class="office-pdf-doc">${res.value}</div>`;
+    }
+
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      const XLSX = await import('xlsx');
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      let sheetsHtml = '';
+
+      workbook.SheetNames.forEach((sheetName, idx) => {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
+        const nonEmptyRows = rows.filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''));
+        if (nonEmptyRows.length === 0) return;
+
+        const maxCols = Math.max(...nonEmptyRows.map(r => r.length), 1);
+        const tableRows = nonEmptyRows
+          .map((row, rIdx) => {
+            const tag = rIdx === 0 ? 'th' : 'td';
+            const cells: string[] = [];
+            for (let c = 0; c < maxCols; c++) {
+              const val = String(row[c] ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+              cells.push(`<${tag}>${val}</${tag}>`);
+            }
+            return `<tr>${cells.join('')}</tr>`;
+          })
+          .join('');
+
+        sheetsHtml += `
+          <div style="${idx > 0 ? 'page-break-before: always;' : ''}">
+            ${workbook.SheetNames.length > 1 ? `<div class="excel-sheet-title">Bảng: ${sheetName}</div>` : ''}
+            <table>${tableRows}</table>
+          </div>
+        `;
+      });
+
+      if (!sheetsHtml) {
+        throw new Error('File Excel không có dữ liệu để chuyển đổi.');
+      }
+      return `${baseStyle}<div class="office-pdf-doc">${sheetsHtml}</div>`;
+    }
+
+    if (ext === 'txt' || ext === 'md' || ext === 'doc') {
+      const text = await file.text();
+      const cleanLines = text
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+        .split(/\r?\n/)
+        .map(line => `<p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '&nbsp;'}</p>`)
+        .join('');
+      return `${baseStyle}<div class="office-pdf-doc">${cleanLines}</div>`;
+    }
+
+    throw new Error('Định dạng file chưa được hỗ trợ. Vui lòng chọn file Word (.docx) hoặc Excel (.xlsx, .xls, .csv).');
+  };
+
+  const handleOfficeToPdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'doc') {
+      alert('💡 Lưu ý: File .doc (Word 97-2003 cũ) có thể hiển thị thiếu định dạng. Để giữ nguyên 100% bảng biểu và hình ảnh, khuyến nghị lưu file dưới dạng .docx trước khi chuyển đổi.');
+    }
+    setOfficeToPdfFile(file);
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      setOfficeToPdfOrientation('landscape');
+    } else {
+      setOfficeToPdfOrientation('portrait');
+    }
+
+    try {
+      const html = await buildOfficeDocumentHtml(file);
+      setOfficePreviewHtml(html);
+      setResult(html);
+    } catch (err: any) {
+      console.error('Preview Office file error:', err);
+      setOfficePreviewHtml(null);
+    }
+  };
+
+  const handleConvertOfficeToPdf = async () => {
+    if (!officeToPdfFile) {
+      alert('Vui lòng chọn file Word hoặc Excel cần chuyển sang PDF!');
+      return;
+    }
+
+    setIsConvertingOfficeToPdf(true);
+    try {
+      const htmlContent = officePreviewHtml || (await buildOfficeDocumentHtml(officeToPdfFile));
+      setOfficePreviewHtml(htmlContent);
+      setResult(htmlContent);
+
+      const html2pdfMod = await import('html2pdf.js');
+      const html2pdfLib = (html2pdfMod as any).default || html2pdfMod;
+
+      const wrapper = document.createElement('div');
+      wrapper.style.padding = '12mm';
+      wrapper.style.backgroundColor = '#ffffff';
+      wrapper.style.color = '#0f172a';
+      wrapper.style.width = officeToPdfOrientation === 'landscape' ? '273mm' : '186mm';
+      wrapper.innerHTML = htmlContent;
+
+      const baseName = officeToPdfFile.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .trim() || 'Tai_lieu';
+
+      const opt = {
+        margin: [10, 10, 10, 10] as [number, number, number, number],
+        filename: `${baseName}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: officeToPdfOrientation },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      await html2pdfLib().set(opt).from(wrapper).save();
+      alert(`✅ Đã chuyển đổi "${officeToPdfFile.name}" sang PDF và tải về máy thành công!`);
+    } catch (error: any) {
+      console.error('Office to PDF Error:', error);
+      alert(`Lỗi khi chuyển sang PDF: ${error.message || 'Không xác định'}`);
+    } finally {
+      setIsConvertingOfficeToPdf(false);
+    }
+  };
+
+  const handlePrintOfficeToPdf = async () => {
+    if (!officeToPdfFile) return;
+    try {
+      const htmlContent = officePreviewHtml || (await buildOfficeDocumentHtml(officeToPdfFile));
+      const printWin = window.open('', '_blank');
+      if (!printWin) {
+        alert('Vui lòng cho phép trình duyệt mở cửa sổ bật lên (Pop-up) để in / lưu PDF!');
+        return;
+      }
+      const baseName = officeToPdfFile.name.replace(/\.[^/.]+$/, '');
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html lang="vi">
+          <head>
+            <meta charset="UTF-8" />
+            <title>${baseName}</title>
+            <style>
+              @page { size: A4 ${officeToPdfOrientation}; margin: 12mm; }
+              body { margin: 0; padding: 16px; background: #fff; color: #0f172a; }
+            </style>
+          </head>
+          <body>
+            ${htmlContent}
+            <script>
+              window.onload = function() {
+                setTimeout(function() { window.print(); }, 400);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWin.document.close();
+    } catch (error: any) {
+      alert('Không thể mở bản in PDF: ' + (error.message || 'Lỗi không xác định'));
+    }
+  };
+
   return (
     <div className="h-full flex flex-col space-y-4 sm:space-y-6 animate-in fade-in duration-500 overflow-y-auto lg:overflow-hidden p-3 sm:p-0">
       {showCropper && <ImageCropper onClose={() => { setShowCropper(false); setCroppingContext(null); }} initialSrc={croppingContext?.src} onCropComplete={croppingContext ? handleCropComplete : undefined} />}
@@ -2635,6 +2878,107 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                   ) : (
                     activeTab === 'pdf_tools' ? (
                       <div className="space-y-6 animate-in fade-in">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <i className="fas fa-file-pdf text-rose-600"></i>
+                            Chuyển Word / Excel sang PDF
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="p-4 bg-rose-50 rounded-xl border border-rose-100 text-rose-800 text-[11px]">
+                              <i className="fas fa-info-circle mr-2"></i>
+                              Chuyển đổi tài liệu Word (<b>.docx</b>) hoặc bảng tính Excel (<b>.xlsx, .xls, .csv</b>) sang file PDF chuẩn A4.
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Chọn File Word hoặc Excel</label>
+                              <input
+                                type="file"
+                                accept=".docx,.doc,.xlsx,.xls,.csv,.txt"
+                                onChange={handleOfficeToPdfFileChange}
+                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-rose-50 file:text-rose-700 hover:file:bg-rose-100"
+                              />
+                            </div>
+
+                            {officeToPdfFile && (
+                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                                <p className="text-xs font-bold text-slate-700 flex items-center">
+                                  <i className={`fas ${/\.(xlsx|xls|csv)$/i.test(officeToPdfFile.name) ? 'fa-file-excel text-emerald-600' : 'fa-file-word text-blue-600'} mr-2`}></i>
+                                  <span className="truncate">{officeToPdfFile.name}</span>
+                                </p>
+
+                                <div>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Hướng trang PDF (Khổ A4)</label>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOfficeToPdfOrientation('portrait')}
+                                      className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        officeToPdfOrientation === 'portrait'
+                                          ? 'bg-rose-600 text-white shadow-md shadow-rose-100'
+                                          : 'bg-white border border-slate-200 text-slate-600 hover:border-rose-300'
+                                      }`}
+                                    >
+                                      <i className="fas fa-file-lines mr-1.5"></i>Khổ Dọc
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setOfficeToPdfOrientation('landscape')}
+                                      className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        officeToPdfOrientation === 'landscape'
+                                          ? 'bg-rose-600 text-white shadow-md shadow-rose-100'
+                                          : 'bg-white border border-slate-200 text-slate-600 hover:border-rose-300'
+                                      }`}
+                                    >
+                                      <i className="fas fa-panorama mr-1.5"></i>Khổ Ngang
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleConvertOfficeToPdf}
+                                    disabled={isConvertingOfficeToPdf}
+                                    className="flex-1 py-3 bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-rose-700 hover:to-rose-800 transition-all disabled:opacity-50 shadow-lg shadow-rose-100"
+                                  >
+                                    {isConvertingOfficeToPdf ? (
+                                      <>
+                                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                                        Đang tạo PDF...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="fas fa-file-pdf mr-2"></i>
+                                        Chuyển sang PDF & Tải về
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handlePrintOfficeToPdf}
+                                    className="px-4 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                                    title="In hoặc Lưu PDF chất lượng Vector sắc nét"
+                                  >
+                                    <i className="fas fa-print mr-1.5"></i>In / Lưu PDF
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOfficeToPdfFile(null);
+                                      setOfficePreviewHtml(null);
+                                      setResult(null);
+                                    }}
+                                    className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <hr className="border-slate-200" />
+
                         <div>
                           <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <i className="fas fa-file-word text-blue-600"></i>
@@ -3033,7 +3377,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
               )}
             </div>
 
-            {!showHistory && (
+            {!showHistory && activeTab !== 'pdf_tools' && (
               <div className="flex flex-col space-y-2 mt-auto">
                 <button
                   onClick={() => {
@@ -3285,10 +3629,44 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                   ) : (
                     <div className="p-4">
                       {activeTab === 'pdf_tools' ? (
-                        <div className="text-center py-10 text-slate-400">
-                          <i className="fas fa-file-pdf text-4xl mb-3 opacity-30"></i>
-                          <p className="text-xs font-bold uppercase">File PDF đã được tải xuống máy của bạn.</p>
-                        </div>
+                        officePreviewHtml ? (
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200">
+                              <span className="text-xs font-black text-slate-700 flex items-center">
+                                <i className="fas fa-eye text-indigo-600 mr-2"></i>
+                                Xem trước tài liệu: {officeToPdfFile?.name}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleConvertOfficeToPdf}
+                                  disabled={isConvertingOfficeToPdf}
+                                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-md"
+                                >
+                                  <i className={`fas ${isConvertingOfficeToPdf ? 'fa-spinner fa-spin' : 'fa-download'} mr-1.5`}></i>
+                                  Tải PDF
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handlePrintOfficeToPdf}
+                                  className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                                >
+                                  <i className="fas fa-print mr-1.5"></i>
+                                  In / Lưu PDF sắc nét
+                                </button>
+                              </div>
+                            </div>
+                            <div
+                              className="p-6 bg-white border border-slate-200 rounded-2xl shadow-inner overflow-x-auto"
+                              dangerouslySetInnerHTML={{ __html: officePreviewHtml }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="text-center py-10 text-slate-400">
+                            <i className="fas fa-file-pdf text-4xl mb-3 opacity-30"></i>
+                            <p className="text-xs font-bold uppercase">File PDF đã được tải xuống máy của bạn.</p>
+                          </div>
+                        )
                       ) : (
                         <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 font-medium">
                           {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
