@@ -320,28 +320,48 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       }
 
       const formatted: ExamQuestion[] = result.questions.map((q: any, i: number) => {
-        const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
-          ? q.options.map((opt: any) => {
-            if (typeof opt === 'string') {
-              return { text: opt, image: '' };
-            }
-            return { text: opt.text || '', image: opt.image || '' };
-          })
+        const rawType = String(q?.type ?? '').toLowerCase();
+        const rawOptions = Array.isArray(q?.options)
+          ? q.options
+          : Array.isArray(q?.choices)
+            ? q.choices
+            : Array.isArray(q?.answers)
+              ? q.answers
+              : undefined;
+        const isEssay =
+          rawType.includes('tự luận') ||
+          rawType.includes('tu luan') ||
+          rawType === 'essay' ||
+          (!rawOptions && rawType !== '' && !rawType.includes('trắc nghiệm') && !rawType.includes('trac nghiem') && !rawType.includes('mcq'));
+
+        const normalizedOptions = (!isEssay && Array.isArray(rawOptions) && rawOptions.length > 0)
+          ? rawOptions.map((opt: any) => {
+              if (typeof opt === 'string' || typeof opt === 'number') {
+                return { text: String(opt), image: '' };
+              }
+              return {
+                text: String(opt?.text ?? opt?.content ?? opt?.label ?? opt?.value ?? ''),
+                image: String(opt?.image ?? '')
+              };
+            })
           : undefined;
+
+        const rawContent = q?.content ?? q?.question ?? q?.text ?? q?.prompt ?? q?.cauHoi ?? q?.cau_hoi ?? '';
+        const contentStr = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent ?? '');
 
         return {
           id: 'gen-' + Date.now().toString() + i,
-          type: q.type || 'Trắc nghiệm',
-          level: q.level || 'Thông hiểu',
-          content: q.content || q.question || '',
-          image: q.image || '',
+          type: isEssay ? 'Tự luận' : 'Trắc nghiệm',
+          level: q?.level || 'Thông hiểu',
+          content: contentStr,
+          image: typeof q?.image === 'string' ? q.image : '',
           options: normalizedOptions,
-          answer: q.answer || '',
-          explanation: q.explanation || '',
+          answer: typeof q?.answer === 'string' ? q.answer : String(q?.answer?.text ?? q?.answer ?? ''),
+          explanation: typeof q?.explanation === 'string' ? q.explanation : String(q?.explanation ?? ''),
         };
       });
 
-      const validQuestions = formatted.filter(q => q.content.trim() !== '' || q.image.trim() !== '');
+      const validQuestions = formatted.filter(q => String(q.content || '').trim() !== '' || String(q.image || '').trim() !== '');
 
       if (validQuestions.length === 0) {
         alert("⚠️ Không có câu hỏi hợp lệ nào được tạo.\n\nVui lòng thử lại với yêu cầu khác.");
@@ -349,12 +369,18 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       }
 
       setQuestions(validQuestions);
-      setReadingPassage(result.readingPassage || '');
-      if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${stats.total * 3} phút`);
+      setReadingPassage(typeof result.readingPassage === 'string' ? result.readingPassage : '');
+      if (!examHeader) setExamHeader(`ĐỀ KIỂM TRA ĐỊNH KỲ - MÔN ${config.subject.toUpperCase()} LỚP ${config.grade}\nThời gian làm bài: ${Math.max(validQuestions.length, stats.total) * 3} phút`);
       setViewMode('config');
 
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        setTimeout(() => {
+          document.getElementById('exam-questions-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }
+
       // Hiển thị thông báo thành công
-      if (validQuestions.length < stats.total) {
+      if (stats.total > 0 && validQuestions.length < stats.total) {
         alert(`✅ Đã tạo ${validQuestions.length}/${stats.total} câu hỏi.\n\nMột số câu không hợp lệ đã được lọc bỏ.`);
       }
     } catch (error: any) {
@@ -1008,6 +1034,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 <span className="text-[10px] font-black text-emerald-600 uppercase">{stats.total} câu</span>
               </div>
             </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mr-1">Chọn nhanh:</span>
+              {[5, 10, 15].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => applyQuickSetup(num)}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100 text-[10px] font-black hover:bg-indigo-100 active:scale-95 transition-all"
+                >
+                  {num} câu
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -1107,7 +1146,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden min-h-[500px] lg:min-h-0">
+      <div id="exam-questions-panel" className="w-full lg:flex-1 flex flex-col bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden min-h-[420px] lg:min-h-0 shrink-0">
         <div className="px-4 sm:px-8 py-3 sm:py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
           <div className="flex space-x-2">
             <button onClick={() => setViewMode('config')} className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem câu hỏi</button>
@@ -1176,9 +1215,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
+        <div className="flex-1 lg:overflow-y-auto p-4 sm:p-8 custom-scrollbar">
           {isGenerating ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-4 animate-pulse">
+            <div className="min-h-[280px] h-full flex flex-col items-center justify-center space-y-4 animate-pulse">
               <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-2xl"><i className="fas fa-brain"></i></div>
               <p className="text-sm font-black uppercase text-slate-400 tracking-widest">AI đang thiết kế đề thi...</p>
             </div>
@@ -1250,9 +1289,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                         </button>
                         <button onClick={() => removeQuestion(q.id)} className="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"><i className="fas fa-trash-alt"></i></button>
                       </div>
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
-                      <div className="flex-1 space-y-4">
-                        <div className="flex items-center space-x-2">
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shrink-0 ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
+                      <div className="flex-1 min-w-0 space-y-4">
+                        <div className="flex items-center space-x-2 pr-16 sm:pr-0">
                           <select
                             value={q.type}
                             onChange={(e) => updateQuestionField(q.id, 'type', e.target.value)}
@@ -1274,7 +1313,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                           value={q.content}
                           onChange={(e) => updateQuestionField(q.id, 'content', e.target.value)}
                           className={`w-full bg-transparent border-none focus:ring-0 text-[15px] font-bold text-slate-800 leading-relaxed resize-none p-0 transition-all ${editingId === q.id ? 'bg-white p-3 rounded-xl border border-indigo-200 shadow-sm focus:ring-2 focus:ring-indigo-500' : ''}`}
-                          rows={editingId === q.id ? 4 : 2}
+                          rows={editingId === q.id ? 4 : Math.max(2, Math.ceil((q.content || '').length / 45))}
                           placeholder="Nhập nội dung câu hỏi..."
                         />
 

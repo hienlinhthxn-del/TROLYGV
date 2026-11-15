@@ -3775,7 +3775,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             )}
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden flex flex-col min-h-[420px] lg:min-h-0 lg:h-full">
+          <div className="lg:col-span-2 bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden flex flex-col min-h-[420px] lg:min-h-0 lg:h-full shrink-0">
             <div className="px-4 sm:px-8 py-3 sm:py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
               {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
@@ -3851,9 +3851,9 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div className="flex-1 lg:overflow-y-auto p-4 sm:p-8 custom-scrollbar">
               {isProcessing ? (
-                <div className="h-full flex flex-col items-center justify-center space-y-6">
+                <div className="min-h-[280px] h-full flex flex-col items-center justify-center space-y-6">
                   <div className="relative">
                     <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
                     <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>

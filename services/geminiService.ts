@@ -440,17 +440,7 @@ class GeminiService {
   private async _generateExamQuestionsStructured(prompt: string, fileParts: FilePart[] = []): Promise<any> {
     await this.ensureInitialized();
 
-    if (!this.model) {
-      try {
-        const text = await this.fallbackToOtherProviders(prompt, true, fileParts);
-        return this.parseJSONSafely(text);
-      } catch (e: any) {
-        console.error("Fallback failed:", e);
-        return { error: e.message || "Lỗi kết nối AI Server" };
-      }
-    }
-
-    // Thêm hướng dẫn JSON rõ ràng vào prompt
+    // Thêm hướng dẫn JSON rõ ràng vào prompt TRƯỚC khi gọi bất kỳ nhánh nào (kể cả Server Fallback trên điện thoại)
     const enhancedPrompt = `${prompt}
 
 QUAN TRỌNG - YÊU CẦU ĐỊNH DẠNG:
@@ -470,7 +460,9 @@ CẤU TRÚC JSON BẮT BUỘC:
       "image": "",
       "options": [
         {"text": "Đáp án A", "image": ""},
-        {"text": "Đáp án B", "image": ""}
+        {"text": "Đáp án B", "image": ""},
+        {"text": "Đáp án C", "image": ""},
+        {"text": "Đáp án D", "image": ""}
       ],
       "answer": "Đáp án đúng",
       "explanation": "Giải thích"
@@ -478,6 +470,81 @@ CẤU TRÚC JSON BẮT BUỘC:
   ],
   "readingPassage": "Văn bản đọc hiểu (nếu có)"
 }`;
+
+    const normalizeExamParsed = (raw: any): any => {
+      if (!raw) return raw;
+      const obj = Array.isArray(raw)
+        ? { questions: raw, readingPassage: '' }
+        : typeof raw === 'object'
+          ? {
+              ...raw,
+              questions: Array.isArray(raw.questions)
+                ? raw.questions
+                : Array.isArray(raw.data)
+                  ? raw.data
+                  : Array.isArray(raw.cau_hoi)
+                    ? raw.cau_hoi
+                    : Array.isArray(raw.items)
+                      ? raw.items
+                      : []
+            }
+          : { questions: [], readingPassage: '' };
+
+      if (Array.isArray(obj.questions)) {
+        obj.questions = obj.questions.map((q: any, idx: number) => {
+          const rawType = String(q?.type ?? '').toLowerCase();
+          const rawOpts = Array.isArray(q?.options)
+            ? q.options
+            : Array.isArray(q?.choices)
+              ? q.choices
+              : Array.isArray(q?.answers)
+                ? q.answers
+                : [];
+          const isEssay =
+            rawType.includes('tự luận') ||
+            rawType.includes('tu luan') ||
+            rawType === 'essay' ||
+            (rawOpts.length === 0 && rawType !== '' && !rawType.includes('trắc nghiệm') && !rawType.includes('trac nghiem') && !rawType.includes('mcq'));
+
+          const contentVal = q?.content ?? q?.question ?? q?.text ?? q?.prompt ?? q?.cauHoi ?? q?.cau_hoi ?? '';
+          const contentStr = typeof contentVal === 'string' ? contentVal : JSON.stringify(contentVal ?? '');
+
+          const normOpts = !isEssay && rawOpts.length > 0
+            ? rawOpts.map((opt: any) => {
+                if (typeof opt === 'string' || typeof opt === 'number') {
+                  return { text: String(opt), image: '' };
+                }
+                return {
+                  text: String(opt?.text ?? opt?.content ?? opt?.label ?? opt?.value ?? ''),
+                  image: String(opt?.image ?? '')
+                };
+              })
+            : undefined;
+
+          return {
+            id: q?.id || `gen-${Date.now()}-${idx}`,
+            type: isEssay ? 'Tự luận' : 'Trắc nghiệm',
+            level: q?.level || 'Thông hiểu',
+            content: contentStr,
+            image: typeof q?.image === 'string' ? q.image : '',
+            options: normOpts,
+            answer: typeof q?.answer === 'string' ? q.answer : String(q?.answer?.text ?? q?.answer ?? ''),
+            explanation: typeof q?.explanation === 'string' ? q.explanation : String(q?.explanation ?? '')
+          };
+        });
+      }
+      return obj;
+    };
+
+    if (!this.model) {
+      try {
+        const text = await this.fallbackToOtherProviders(enhancedPrompt, true, fileParts);
+        return normalizeExamParsed(this.parseJSONSafely(text));
+      } catch (e: any) {
+        console.error("Fallback failed:", e);
+        return { error: e.message || "Lỗi kết nối AI Server" };
+      }
+    }
 
     const parts: any[] = [{ text: enhancedPrompt }];
     if (fileParts && fileParts.length > 0) {
@@ -508,9 +575,10 @@ CẤU TRÚC JSON BẮT BUỘC:
         result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 3000);
       }
 
-      return this.parseJSONSafely(result.response.text());
+      return normalizeExamParsed(this.parseJSONSafely(result.response.text()));
     } catch (error: any) {
-      return this.handleError(error, () => this._generateExamQuestionsStructured(prompt, fileParts), prompt);
+      const fallbackRes = await this.handleError(error, () => this._generateExamQuestionsStructured(prompt, fileParts), enhancedPrompt);
+      return normalizeExamParsed(fallbackRes);
     }
   }
 
@@ -633,10 +701,30 @@ QUAN TRỌNG:
 
 CHỈ XUẤT JSON THUẦN TÚY.`;
 
+    const normalizeWorksheetParsed = (parsed: any) => {
+      if (parsed && Array.isArray(parsed.questions)) {
+        parsed.questions = parsed.questions.map((q: any, idx: number) => ({
+          id: q.id ?? String(idx + 1),
+          type: q.type ?? 'essay',
+          question: typeof q.question === 'string' ? q.question
+            : (typeof q.content === 'string' ? q.content : JSON.stringify(q.question ?? q.content ?? '')),
+          imagePrompt: q.imagePrompt ?? q.image ?? '',
+          imageUrl: q.imageUrl,
+          options: Array.isArray(q.options)
+            ? q.options.map((o: any) => typeof o === 'string' ? o : (o?.text ?? JSON.stringify(o)))
+            : [],
+          answer: typeof q.answer === 'string' ? q.answer : (q.answer?.text ?? String(q.answer ?? '')),
+          numbers: q.numbers,
+          pairs: q.pairs,
+        }));
+      }
+      return parsed;
+    };
+
     if (!this.model) {
       try {
         const text = await this.fallbackToOtherProviders(prompt, true, fileParts);
-        return this.parseJSONSafely(text);
+        return normalizeWorksheetParsed(this.parseJSONSafely(text));
       } catch (e: any) {
         return { error: e.message || 'Lỗi kết nối AI Server' };
       }
@@ -668,30 +756,10 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
         result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 3000);
       }
 
-      const parsed = this.parseJSONSafely(result.response.text());
-
-      // Chuẩn hóa dữ liệu
-      if (parsed && Array.isArray(parsed.questions)) {
-        parsed.questions = parsed.questions.map((q: any, idx: number) => ({
-          id: q.id ?? String(idx + 1),
-          type: q.type ?? 'essay',
-          question: typeof q.question === 'string' ? q.question
-            : (typeof q.content === 'string' ? q.content : JSON.stringify(q.question ?? q.content ?? '')),
-          imagePrompt: q.imagePrompt ?? q.image ?? '',
-          imageUrl: q.imageUrl,
-          options: Array.isArray(q.options)
-            ? q.options.map((o: any) => typeof o === 'string' ? o : (o?.text ?? JSON.stringify(o)))
-            : [],
-          answer: typeof q.answer === 'string' ? q.answer : (q.answer?.text ?? String(q.answer ?? '')),
-          // Giữ nguyên các field đặc thù của từng dạng bài
-          numbers: q.numbers,
-          pairs: q.pairs,
-        }));
-      }
-
-      return parsed;
+      return normalizeWorksheetParsed(this.parseJSONSafely(result.response.text()));
     } catch (error: any) {
-      return this.handleError(error, () => this.generateWorksheetContentDetailed(topic, subject, config, fileParts), prompt);
+      const fallbackRes = await this.handleError(error, () => this.generateWorksheetContentDetailed(topic, subject, config, fileParts), prompt);
+      return normalizeWorksheetParsed(fallbackRes);
     }
   }
 
