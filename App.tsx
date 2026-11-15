@@ -724,7 +724,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white sm:bg-slate-50">
+    <div className="flex h-[100dvh] overflow-hidden bg-white sm:bg-slate-50">
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
 
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 transform transition-all duration-300 ease-out shadow-2xl lg:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
@@ -764,19 +764,24 @@ const App: React.FC = () => {
       </aside>
 
       <main className="flex-1 flex flex-col relative bg-white lg:bg-transparent overflow-hidden">
-        <header className="flex items-center justify-between h-16 px-6 border-b border-slate-200 lg:border-none bg-white lg:bg-transparent z-10">
-          <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><i className="fas fa-bars"></i></button>
-          <div className="flex items-center space-x-3">
-            <button onClick={() => setShowApiKeySettings(true)} title="Cài đặt API Key" className="w-10 h-10 flex items-center justify-center text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"><i className="fas fa-key"></i></button>
-            <button onClick={() => setView('security')} className="w-10 h-10 flex items-center justify-center text-emerald-500 hover:text-emerald-600 hover:bg-white rounded-xl transition-all"><i className="fas fa-shield-halved"></i></button>
+        <header className="flex items-center justify-between h-14 sm:h-16 px-4 sm:px-6 border-b border-slate-200 lg:border-none bg-white lg:bg-transparent z-10 shrink-0">
+          <div className="flex items-center space-x-2">
+            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"><i className="fas fa-bars text-lg"></i></button>
+            <span className="lg:hidden text-xs font-black text-slate-700 uppercase tracking-wider truncate">
+              {view === 'chat' ? 'Hỏi đáp AI' : view === 'utility' ? 'Tiện ích Sáng tạo' : view === 'exam' ? 'Soạn đề thi AI' : view === 'worksheet' ? 'Phiếu học tập Lớp 1' : view === 'workspace' ? 'Soạn thảo tài liệu' : view === 'classroom' ? 'Quản lý lớp học' : view === 'cloud' ? 'Thư viện của tôi' : 'Trung tâm Bảo mật'}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <button onClick={() => setShowApiKeySettings(true)} title="Cài đặt API Key" className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"><i className="fas fa-key"></i></button>
+            <button onClick={() => setView('security')} className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-emerald-500 hover:text-emerald-600 hover:bg-white rounded-xl transition-all"><i className="fas fa-shield-halved"></i></button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-0 sm:p-6 lg:pt-2 pb-[80px] lg:pb-0">
+        <div className="flex-1 overflow-y-auto p-0 sm:p-6 lg:pt-2 pb-[76px] lg:pb-0">
           <Suspense fallback={<LoadingView />}>
             {view === 'chat' && (
               <div className="h-full flex flex-col max-w-5xl mx-auto bg-white rounded-none sm:rounded-[40px] border-none sm:border border-slate-200 shadow-xl overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-6 py-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-8 custom-scrollbar">
                   {filteredMessages.map((msg) => (
                     <ChatMessage
                       key={msg.id}
@@ -788,7 +793,7 @@ const App: React.FC = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                <div className="p-6 bg-white border-t border-slate-100">
+                <div className="p-3 sm:p-6 bg-white border-t border-slate-100">
                   <div className="relative group max-w-4xl mx-auto">
                     {pendingAttachments.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
@@ -806,8 +811,8 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     )}
-                    <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
-                      <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600"><i className="fas fa-paperclip"></i></button>
+                    <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[24px] sm:rounded-[28px] p-1.5 sm:p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
+                      <button onClick={() => fileInputRef.current?.click()} className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600"><i className="fas fa-paperclip"></i></button>
                       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
                       <textarea
                         ref={textareaRef}
@@ -820,13 +825,13 @@ const App: React.FC = () => {
                           }
                         }}
                         placeholder={`Hỏi ${currentPersona.name}...`}
-                        className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
+                        className="flex-1 bg-transparent border-none focus:ring-0 py-2.5 sm:py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[160px] sm:max-h-[200px]"
                         rows={1}
                       />
                       <button
                         onClick={() => handleSendMessage()}
                         disabled={isLoading || (!input.trim() && pendingAttachments.length === 0)}
-                        className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${(input.trim() || pendingAttachments.length > 0) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                        className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl transition-all ${(input.trim() || pendingAttachments.length > 0) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                       >
                         <i className={`fas ${isLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'}`}></i>
                       </button>
@@ -847,25 +852,29 @@ const App: React.FC = () => {
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-between items-center z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-          <button onClick={() => setView('chat')} className={`flex flex-col items-center space-y-1 ${view === 'chat' ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <i className="fas fa-comment-dots text-xl"></i>
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex justify-around items-center z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <button onClick={() => setView('chat')} className={`flex flex-col items-center space-y-1 px-2 py-1 ${view === 'chat' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-comment-dots text-lg"></i>
             <span className="text-[9px] font-bold">Chat AI</span>
           </button>
-          <button onClick={() => setView('utility')} className={`flex flex-col items-center space-y-1 ${view === 'utility' ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <i className="fas fa-wand-magic-sparkles text-xl"></i>
+          <button onClick={() => setView('utility')} className={`flex flex-col items-center space-y-1 px-2 py-1 ${view === 'utility' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-wand-magic-sparkles text-lg"></i>
             <span className="text-[9px] font-bold">Tiện ích</span>
           </button>
-          <button onClick={() => setView('classroom')} className={`flex flex-col items-center space-y-1 ${view === 'classroom' ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <i className="fas fa-users-viewfinder text-xl"></i>
+          <button onClick={() => setView('exam')} className={`flex flex-col items-center space-y-1 px-2 py-1 ${view === 'exam' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-file-lines text-lg"></i>
+            <span className="text-[9px] font-bold">Đề thi</span>
+          </button>
+          <button onClick={() => setView('worksheet')} className={`flex flex-col items-center space-y-1 px-2 py-1 ${view === 'worksheet' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-child-reaching text-lg"></i>
+            <span className="text-[9px] font-bold">Phiếu BT</span>
+          </button>
+          <button onClick={() => setView('classroom')} className={`flex flex-col items-center space-y-1 px-2 py-1 ${view === 'classroom' ? 'text-indigo-600' : 'text-slate-400'}`}>
+            <i className="fas fa-users-viewfinder text-lg"></i>
             <span className="text-[9px] font-bold">Lớp học</span>
           </button>
-          <button onClick={() => setView('cloud')} className={`flex flex-col items-center space-y-1 ${view === 'cloud' ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <i className="fas fa-book-bookmark text-xl"></i>
-            <span className="text-[9px] font-bold">Thư viện</span>
-          </button>
-          <button onClick={() => setIsSidebarOpen(true)} className="flex flex-col items-center space-y-1 text-slate-400">
-            <i className="fas fa-bars text-xl"></i>
+          <button onClick={() => setIsSidebarOpen(true)} className="flex flex-col items-center space-y-1 px-2 py-1 text-slate-400">
+            <i className="fas fa-bars text-lg"></i>
             <span className="text-[9px] font-bold">Menu</span>
           </button>
         </div>

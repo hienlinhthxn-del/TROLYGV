@@ -1723,8 +1723,8 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       <input type="file" ref={studentFileInputRef} onChange={handleStudentListUpload} accept=".csv,.txt" className="hidden" />
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-100">
-        <div className="flex-1 min-w-0 mr-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-white border-b border-slate-100 gap-3">
+        <div className="flex-1 min-w-0 sm:mr-4">
           {isEditingName ? (
             <div className="flex items-center space-x-2 animate-in slide-in-from-left-2 duration-300">
               <input
@@ -1756,66 +1756,66 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           )}
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Hệ thống Quản lý Sư phạm</p>
         </div>
-        <div className="flex space-x-2 shrink-0">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           <button
             onClick={handleDownloadGradeSample}
-            className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-100 transition-all"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-slate-200 hover:bg-slate-100 transition-all"
             title="Tải mẫu nhập điểm (Excel)"
           >
             <i className="fas fa-download mr-1"></i>Mẫu
           </button>
           <button
             onClick={() => gradeFileInputRef.current?.click()}
-            className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:bg-amber-100 transition-all"
           >
-            <i className="fas fa-file-invoice mr-2"></i>Nhập điểm File
+            <i className="fas fa-file-invoice mr-1 sm:mr-2"></i>Nhập điểm File
           </button>
           <button
             onClick={() => setShowGradePasteModal(true)}
-            className="px-4 py-2 rounded-xl bg-sky-50 text-sky-700 text-[10px] font-black uppercase tracking-widest border border-sky-200 hover:bg-sky-100 transition-all"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-sky-50 text-sky-700 text-[10px] font-black uppercase tracking-widest border border-sky-200 hover:bg-sky-100 transition-all"
           >
-            <i className="fas fa-paste mr-2"></i>Dán Bảng điểm
+            <i className="fas fa-paste mr-1 sm:mr-2"></i>Dán Bảng điểm
           </button>
           <button
             onClick={() => setShowOnlineResultModal(true)}
-            className="px-4 py-2 rounded-xl bg-purple-50 text-purple-700 text-[10px] font-black uppercase tracking-widest border border-purple-200 hover:bg-purple-100 transition-all"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-purple-50 text-purple-700 text-[10px] font-black uppercase tracking-widest border border-purple-200 hover:bg-purple-100 transition-all"
           >
-            <i className="fas fa-globe mr-2"></i>Nhập KQ Online
+            <i className="fas fa-globe mr-1 sm:mr-2"></i>Nhập KQ Online
           </button>
           <button
             onClick={handleExportSMAS}
             disabled={isExportingSMAS}
-            className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-100 transition-all"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest border border-emerald-200 hover:bg-emerald-100 transition-all"
           >
-            <i className={`fas ${isExportingSMAS ? 'fa-spinner fa-spin' : 'fa-file-excel'} mr-2`}></i>Xuất SMAS
+            <i className={`fas ${isExportingSMAS ? 'fa-spinner fa-spin' : 'fa-file-excel'} mr-1 sm:mr-2`}></i>Xuất SMAS
           </button>
-          <button onClick={() => setActiveTab('reports')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest border border-indigo-200 hover:bg-indigo-100 transition-all">
-            <i className="fas fa-chart-pie mr-2"></i>Báo cáo AI
+          <button onClick={() => setActiveTab('reports')} className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest border border-indigo-200 hover:bg-indigo-100 transition-all">
+            <i className="fas fa-chart-pie mr-1 sm:mr-2"></i>Báo cáo AI
           </button>
         </div>
       </div>
 
       {/* Section Toggle */}
-      <div className="flex p-2 bg-slate-100 border-y border-slate-200">
+      <div className="flex p-1.5 sm:p-2 bg-slate-100 border-y border-slate-200">
         <button
           onClick={() => setSection('daily')}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${section === 'daily' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
+          className={`flex-1 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${section === 'daily' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
         >
           <i className="fas fa-sun"></i>
-          Hoạt động Hàng ngày
+          <span>Hoạt động Hàng ngày</span>
         </button>
         <button
           onClick={() => setSection('periodic')}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 ${section === 'periodic' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
+          className={`flex-1 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${section === 'periodic' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-slate-200/50'}`}
         >
           <i className="fas fa-award"></i>
-          Đánh giá & Soạn đề
+          <span>Đánh giá & Soạn đề</span>
         </button>
       </div>
 
       {/* Daily Tabs */}
       {section === 'daily' && (
-        <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
+        <div className="flex overflow-x-auto custom-scrollbar border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
           {[
             { id: 'students', label: 'Học sinh', icon: 'fa-users' },
             { id: 'logbook', label: 'Nhật ký lớp', icon: 'fa-book' },
@@ -1826,9 +1826,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 min-w-fit px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <i className={`fas ${tab.icon} mr-2`}></i>
+              <i className={`fas ${tab.icon} mr-1.5 sm:mr-2`}></i>
               {tab.label}
             </button>
           ))}
@@ -1836,7 +1836,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       )}
 
       {section === 'periodic' && (
-        <div className="flex border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
+        <div className="flex overflow-x-auto custom-scrollbar border-b border-slate-100 p-2 space-x-1 bg-slate-50/50">
           {[
             { id: 'quiz-creator', label: 'Tạo Quiz từ File', icon: 'fa-file-import' },
             { id: 'reports', label: 'Báo cáo Phổ điểm', icon: 'fa-chart-pie' },
@@ -1846,16 +1846,16 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
             <button
               key={tab.id}
               onClick={() => setReportViewMode(tab.id as any)}
-              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${reportViewMode === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 min-w-fit px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl whitespace-nowrap transition-all ${reportViewMode === tab.id ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <i className={`fas ${tab.icon} mr-2`}></i>
+              <i className={`fas ${tab.icon} mr-1.5 sm:mr-2`}></i>
               {tab.label}
             </button>
           ))}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 custom-scrollbar">
         {section === 'periodic' && reportViewMode === 'quiz-creator' && (
           <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
             <h3 className="text-xl font-black text-slate-800">Tạo Quiz từ File (Violympic, Trạng Nguyên...)</h3>

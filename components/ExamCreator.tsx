@@ -998,9 +998,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full gap-6 animate-in fade-in duration-500 overflow-hidden relative">
-      <div className="lg:w-[400px] flex-shrink-0 flex flex-col space-y-4 overflow-y-auto custom-scrollbar pb-6 pr-2">
-        <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
+    <div className="flex flex-col lg:flex-row lg:h-full gap-4 sm:gap-6 animate-in fade-in duration-500 overflow-y-auto lg:overflow-hidden p-3 sm:p-0 relative">
+      <div className="w-full lg:w-[400px] lg:flex-shrink-0 flex flex-col space-y-4 lg:overflow-y-auto custom-scrollbar pb-2 lg:pb-6 lg:pr-2">
+        <div className="bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[32px] border border-slate-200 shadow-sm space-y-5 sm:space-y-6">
           <div className="flex flex-col space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Ma trận & Cấu hình</h3>
@@ -1107,13 +1107,13 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden min-h-0">
-        <div className="px-8 py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
+      <div className="flex-1 flex flex-col bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden min-h-[500px] lg:min-h-0">
+        <div className="px-4 sm:px-8 py-3 sm:py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
           <div className="flex space-x-2">
-            <button onClick={() => setViewMode('config')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem câu hỏi</button>
-            <button onClick={() => setViewMode('matrix')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'matrix' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem ma trận</button>
+            <button onClick={() => setViewMode('config')} className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem câu hỏi</button>
+            <button onClick={() => setViewMode('matrix')} className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'matrix' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Xem ma trận</button>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {questions.length > 0 && (
               <>
                 <button onClick={handleShuffleQuestions} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-slate-100 transition-all" title="Xáo trộn thứ tự các câu hỏi">
@@ -1176,16 +1176,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar">
           {isGenerating ? (
             <div className="h-full flex flex-col items-center justify-center space-y-4 animate-pulse">
               <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 text-2xl"><i className="fas fa-brain"></i></div>
               <p className="text-sm font-black uppercase text-slate-400 tracking-widest">AI đang thiết kế đề thi...</p>
             </div>
           ) : viewMode === 'matrix' ? (
-            <div className="space-y-6 animate-in fade-in zoom-in-95">
+            <div className="space-y-6 animate-in fade-in zoom-in-95 overflow-x-auto">
               <h4 className="text-center text-lg font-black uppercase tracking-widest text-slate-800">Ma trận đặc tả chi tiết</h4>
-              <table className="w-full border-collapse border border-slate-200 text-[11px] font-bold">
+              <table className="w-full min-w-[560px] border-collapse border border-slate-200 text-[11px] font-bold">
                 <thead>
                   <tr className="bg-slate-900 text-white">
                     <th className="border border-slate-700 p-3 text-left">Nội dung / Mạch</th>
@@ -1217,7 +1217,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
           ) : (
             <div className="space-y-6">
               {questions.length > 0 && (
-                <div className="p-6 bg-slate-50 border border-slate-200 rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-2xl sm:rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
                   <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tiêu đề đề thi</h5>
                   <textarea
                     value={examHeader}
@@ -1229,7 +1229,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                 </div>
               )}
               {readingPassage && (
-                <div className="p-8 bg-amber-50/30 border border-amber-100 rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="p-4 sm:p-8 bg-amber-50/30 border border-amber-100 rounded-2xl sm:rounded-[32px] animate-in fade-in slide-in-from-top-4 duration-500">
                   <h5 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center">
                     <i className="fas fa-book-open mr-2"></i> Văn bản đọc hiểu (Có thể chỉnh sửa)
                   </h5>
@@ -1243,8 +1243,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
               {questions.length > 0 ? (
                 <>
                   {questions.map((q, idx) => (
-                    <div key={q.id} className={`p-6 border rounded-[32px] transition-all flex items-start space-x-5 ${q.type === 'Tự luận' ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'} hover:bg-white hover:shadow-xl animate-in slide-in-from-bottom-4 duration-300 relative group`}>
-                      <div className="absolute top-6 right-6 flex space-x-2 opacity-0 group-hover:opacity-100 transition-all">
+                    <div key={q.id} className={`p-4 sm:p-6 border rounded-2xl sm:rounded-[32px] transition-all flex items-start space-x-3 sm:space-x-5 ${q.type === 'Tự luận' ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'} hover:bg-white hover:shadow-xl animate-in slide-in-from-bottom-4 duration-300 relative group`}>
+                      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex space-x-1 sm:space-x-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
                         <button onClick={() => setEditingId(editingId === q.id ? null : q.id)} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${editingId === q.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}>
                           <i className={`fas ${editingId === q.id ? 'fa-check' : 'fa-pen'}`}></i>
                         </button>

@@ -2344,16 +2344,16 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
   };
 
   return (
-    <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-500 overflow-hidden">
+    <div className="h-full flex flex-col space-y-4 sm:space-y-6 animate-in fade-in duration-500 overflow-y-auto lg:overflow-hidden p-3 sm:p-0">
       {showCropper && <ImageCropper onClose={() => { setShowCropper(false); setCroppingContext(null); }} initialSrc={croppingContext?.src} onCropComplete={croppingContext ? handleCropComplete : undefined} />}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
-          <p className="text-sm text-slate-500 font-medium">Biến bài giảng trở nên sinh động và cuốn hút hơn.</p>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Kho Tiện ích Sáng tạo</h2>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium">Biến bài giảng trở nên sinh động và cuốn hút hơn.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1 rounded-2xl shadow-sm h-fit">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 bg-white p-1.5 sm:p-1 rounded-2xl shadow-sm h-fit shrink-0">
         <button
           onClick={() => { setActiveTab('lesson_plan'); setResult(null); setAudioUrl(null); }}
           className={`flex items-center justify-center space-x-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lesson_plan' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
@@ -2415,8 +2415,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       })()}
 
       {activeTab === 'assistant' ? (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
-          <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
+        <div className="lg:flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:overflow-hidden lg:min-h-0">
+          <div className={`lg:col-span-1 bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[32px] border border-slate-200 shadow-sm space-y-4 sm:space-y-5 flex-col lg:h-full lg:overflow-y-auto custom-scrollbar ${activeAssistant ? 'hidden lg:flex' : 'flex'}`}>
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Chọn Trợ lý Thông minh</h3>
             <div className="space-y-3">
               {ASSISTANT_PERSONAS.map(persona => (
@@ -2436,18 +2436,18 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
               ))}
             </div>
           </div>
-          <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+          <div className={`lg:col-span-2 bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex-col min-h-[460px] lg:min-h-0 lg:h-full ${activeAssistant ? 'flex h-[calc(100dvh-230px)]' : 'hidden lg:flex'}`}>
             {activeAssistant ? (
               <>
-                <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trò chuyện với: {activeAssistant.name}</span>
-                  <button onClick={() => setActiveAssistant(null)} className="text-xs font-bold text-slate-400 hover:text-rose-500">Đổi trợ lý</button>
+                <div className="px-4 sm:px-8 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate mr-2">Trò chuyện với: {activeAssistant.name}</span>
+                  <button onClick={() => setActiveAssistant(null)} className="text-xs font-bold text-indigo-600 lg:text-slate-400 hover:text-rose-500 shrink-0"><i className="fas fa-arrow-left mr-1 lg:hidden"></i>Đổi trợ lý</button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-6 custom-scrollbar">
                   {assistantMessages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
                   <div ref={assistantMessagesEndRef} />
                 </div>
-                <div className="p-6 bg-white border-t border-slate-100">
+                <div className="p-3 sm:p-6 bg-white border-t border-slate-100">
                   {pendingAttachments.length > 0 && (
                     <div className="flex gap-2 mb-3 overflow-x-auto pb-2 custom-scrollbar">
                       {pendingAttachments.map((att, idx) => (
@@ -2465,10 +2465,10 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       ))}
                     </div>
                   )}
-                  <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
+                  <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[24px] sm:rounded-[28px] p-1.5 sm:p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-10 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-xl hover:bg-indigo-50 mr-1"
+                      className="w-10 h-10 sm:h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-xl hover:bg-indigo-50 mr-1"
                       title="Đính kèm tệp (Ảnh, PDF...)"
                     >
                       <i className="fas fa-paperclip"></i>
@@ -2480,13 +2480,13 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       onChange={e => setAssistantInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendAssistantMessage(); } }}
                       placeholder={`Hỏi ${activeAssistant.name}...`}
-                      className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
+                      className="flex-1 bg-transparent border-none focus:ring-0 py-2.5 sm:py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[160px] sm:max-h-[200px]"
                       rows={1}
                     />
                     <button
                       onClick={handleSendAssistantMessage}
                       disabled={isAssistantLoading}
-                      className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                      className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl transition-all ${assistantInput.trim() || pendingAttachments.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                     >
                       <i className={`fas ${isAssistantLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'} `}></i>
                     </button>
@@ -2504,8 +2504,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
           </div>
         </div>
       ) : (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
-          <div className="lg:col-span-1 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col h-full overflow-y-auto custom-scrollbar">
+        <div className="lg:flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:overflow-hidden lg:min-h-0">
+          <div className="lg:col-span-1 bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[32px] border border-slate-200 shadow-sm space-y-5 flex flex-col lg:h-full lg:overflow-y-auto custom-scrollbar">
             <div className="space-y-4 flex-1 flex flex-col">
               {(activeTab === 'games' || activeTab === 'lesson_plan' || activeTab === 'pdf_tools') && (
                 <>
@@ -3059,8 +3059,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             )}
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-            <div className="px-8 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="lg:col-span-2 bg-white rounded-3xl sm:rounded-[40px] border border-slate-200 shadow-sm lg:overflow-hidden flex flex-col min-h-[420px] lg:min-h-0 lg:h-full">
+            <div className="px-4 sm:px-8 py-3 sm:py-4 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between bg-slate-50/50">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kết quả sáng tạo AI</span>
               {result && (activeTab === 'games' || activeTab === 'lesson_plan') && (
                 <div className="flex flex-wrap items-center gap-2">

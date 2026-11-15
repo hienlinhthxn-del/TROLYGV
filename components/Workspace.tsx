@@ -272,7 +272,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ initialContent, onSave, onSaveToC
       {showAnalysis && (
         <>
           <div className="fixed inset-0 z-40 bg-slate-900/10 backdrop-blur-[2px]" onClick={() => setShowAnalysis(false)}></div>
-          <div className="absolute right-0 top-0 bottom-0 w-96 bg-white border-l border-slate-200 shadow-2xl z-50 p-7 flex flex-col animate-in slide-in-from-right duration-500 rounded-l-[40px]">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-96 bg-white border-l border-slate-200 shadow-2xl z-50 p-5 sm:p-7 flex flex-col animate-in slide-in-from-right duration-500 sm:rounded-l-[40px]">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
@@ -390,8 +390,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ initialContent, onSave, onSaveToC
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-inner overflow-hidden flex flex-col relative group">
-        <div className="p-8 md:p-12 flex-1 relative bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]">
+      <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-inner overflow-hidden flex flex-col relative group min-h-[360px]">
+        <div className="p-4 sm:p-8 md:p-12 flex-1 relative bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]">
           <textarea
             value={content}
             onChange={handleChange}

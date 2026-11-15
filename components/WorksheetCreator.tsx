@@ -478,11 +478,11 @@ const WorksheetCreator: React.FC = () => {
 
     return (
         <div style={{ padding: '0px', maxWidth: '1200px', margin: '0 auto', background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column' }} className="custom-scrollbar w-full">
-            <div style={{ background: 'white', borderRadius: '0px', padding: '30px', boxShadow: 'none', flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                    <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h1 style={{ color: '#FF6B9D', margin: 0 }}>📚 Tạo Phiếu Học Tập Lớp 1</h1>
-                        <p>Thông minh - Đa dạng - Visual đẹp</p>
+            <div style={{ background: 'white', borderRadius: '0px', boxShadow: 'none', flex: 1 }} className="p-3 sm:p-7">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: '200px' }}>
+                        <h1 style={{ color: '#FF6B9D', margin: 0 }} className="text-xl sm:text-2xl font-black">📚 Tạo Phiếu Học Tập Lớp 1</h1>
+                        <p className="text-xs sm:text-sm text-slate-500">Thông minh - Đa dạng - Visual đẹp</p>
                     </div>
                     <button
                         onClick={() => setShowHistory(!showHistory)}
@@ -627,14 +627,15 @@ const WorksheetCreator: React.FC = () => {
 
                 {worksheet && (
                     <div style={{ marginTop: '20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #eee', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
                             <input
                                 type="text"
                                 value={worksheet.title}
                                 onChange={(e) => setWorksheet({ ...worksheet, title: e.target.value })}
-                                style={{ fontSize: '24px', fontWeight: 'bold', color: '#1976D2', border: 'none', background: 'transparent', flex: 1 }}
+                                style={{ fontWeight: 'bold', color: '#1976D2', border: 'none', background: 'transparent', flex: '1 1 240px', minWidth: '200px' }}
+                                className="text-lg sm:text-2xl"
                             />
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
                                 <button
                                     onClick={() => { forceStopRef.current = false; generateImages(worksheet); }}
                                     disabled={isGeneratingImages}
