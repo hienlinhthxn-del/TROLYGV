@@ -1868,6 +1868,252 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
   };
 
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [videoScenes, setVideoScenes] = useState<Array<{
+    sceneTitle: string;
+    narration: string;
+    visualPrompt: string;
+    effect: string;
+    motion: string;
+    imageUrl: string;
+  }>>([]);
+  const [videoNarration, setVideoNarration] = useState<string>('');
+  const [currentSceneIdx, setCurrentSceneIdx] = useState<number>(0);
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const sceneTimerRef = useRef<any>(null);
+
+  const drawVideoSceneFrame = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    nextImg: HTMLImageElement | null,
+    crossfadeAlpha: number,
+    sceneProgress: number,
+    motion: string,
+    effect: string,
+    sceneBadge: string,
+    subtitleText: string,
+    overallProgress: number,
+    tickMs: number
+  ) => {
+    ctx.clearRect(0, 0, 1280, 720);
+
+    const drawTransformedImage = (image: HTMLImageElement, prog: number, mot: string, alpha: number) => {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      let scale = 1.08;
+      let tx = 0;
+      let ty = 0;
+      if (mot === 'zoom-in') {
+        scale = 1.0 + prog * 0.18;
+      } else if (mot === 'zoom-out') {
+        scale = 1.18 - prog * 0.16;
+      } else if (mot === 'pan-right') {
+        scale = 1.14;
+        tx = -45 + prog * 90;
+      } else if (mot === 'pan-left') {
+        scale = 1.14;
+        tx = 45 - prog * 90;
+      }
+      const drawW = 1280 * scale;
+      const drawH = 720 * scale;
+      const offsetX = (1280 - drawW) / 2 + tx;
+      const offsetY = (720 - drawH) / 2 + ty;
+      ctx.drawImage(image, offsetX, offsetY, drawW, drawH);
+      ctx.restore();
+    };
+
+    drawTransformedImage(img, sceneProgress, motion, 1);
+    if (nextImg && crossfadeAlpha > 0) {
+      drawTransformedImage(nextImg, 0, 'zoom-in', crossfadeAlpha);
+    }
+
+    // Hiệu ứng hoạt họa trực tiếp trên Canvas (mây trôi, đom đóm lấp lánh, lá bay, bong bóng...)
+    ctx.save();
+    const t = tickMs / 1000;
+    for (let i = 0; i < 18; i++) {
+      const px = ((i * 97 + t * (28 + (i % 4) * 12)) % 1320) - 20;
+      const py = ((i * 67 + t * (effect === 'bubbles' ? -35 : 22)) % 680 + 680) % 680;
+      if (effect === 'bubbles') {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 8 + (i % 4) * 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (effect === 'leaves') {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(t * 1.5 + i);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(250, 204, 21, 0.7)' : 'rgba(74, 222, 128, 0.7)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        // Sparkles / ánh sáng hoạt hình
+        const pulse = 0.35 + 0.55 * Math.abs(Math.sin(t * 2.5 + i));
+        ctx.fillStyle = `rgba(254, 240, 138, ${pulse.toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 3 + (i % 3) * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // Nhãn phân cảnh góc trên bên trái
+    if (sceneBadge) {
+      ctx.save();
+      ctx.font = 'bold 20px "Be Vietnam Pro", Arial, sans-serif';
+      const badgeW = Math.min(560, ctx.measureText(sceneBadge).width + 36);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+      ctx.fillRect(28, 24, badgeW, 42);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(28, 24, 6, 42);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(sceneBadge, 46, 51);
+      ctx.restore();
+    }
+
+    // Phụ đề thuyết minh ở phía dưới
+    if (subtitleText) {
+      ctx.save();
+      ctx.font = 'bold 26px "Be Vietnam Pro", Arial, sans-serif';
+      const words = subtitleText.trim().split(/\s+/);
+      const lines: string[] = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (ctx.measureText(test).width > 1080) {
+          if (cur) lines.push(cur);
+          cur = w;
+        } else {
+          cur = test;
+        }
+      }
+      if (cur) lines.push(cur);
+      const subLines = lines.slice(0, 3);
+      const boxH = subLines.length * 38 + 26;
+      const boxY = 720 - boxH - 26;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.fillRect(60, boxY, 1160, boxH);
+      ctx.fillStyle = '#fef08a';
+      ctx.textAlign = 'center';
+      subLines.forEach((line, idx) => {
+        ctx.fillText(line, 640, boxY + 38 + idx * 36);
+      });
+      ctx.restore();
+    }
+
+    // Thanh tiến trình video dưới đáy
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(0, 712, 1280, 8);
+    ctx.fillStyle = '#a855f7';
+    ctx.fillRect(0, 712, Math.max(0, Math.min(1280, 1280 * overallProgress)), 8);
+    ctx.restore();
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'video' || !result) return;
+    const canvas = videoCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const scenesToPlay = videoScenes.length > 0
+      ? videoScenes
+      : [{
+          sceneTitle: 'Cảnh 1',
+          narration: videoNarration || geminiService.stripCommandPrefix(topic),
+          visualPrompt: '',
+          effect: 'sparkles',
+          motion: 'zoom-in',
+          imageUrl: typeof result === 'string' ? result : ''
+        }];
+
+    let isCancelled = false;
+    let rafId = 0;
+    const loadedImages: HTMLImageElement[] = [];
+
+    Promise.all(
+      scenesToPlay.map(
+        (sc) =>
+          new Promise<HTMLImageElement>((resolve) => {
+            const im = new Image();
+            im.crossOrigin = 'anonymous';
+            im.onload = () => resolve(im);
+            im.onerror = () => resolve(im);
+            im.src = sc.imageUrl || (typeof result === 'string' ? result : '');
+          })
+      )
+    ).then((imgs) => {
+      if (isCancelled) return;
+      loadedImages.push(...imgs);
+      const startTick = performance.now();
+      const sceneDurationMs = 5500;
+      const totalDurationMs = scenesToPlay.length * sceneDurationMs;
+
+      const renderLoop = (now: number) => {
+        if (isCancelled) return;
+        const elapsed = now - startTick;
+
+        let activeIdx = currentSceneIdx;
+        let sceneProg = ((elapsed % sceneDurationMs) / sceneDurationMs);
+        let overallProg = 0;
+        let crossfade = 0;
+
+        if (isPlaying) {
+          if (audioRef.current && audioRef.current.duration && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
+            overallProg = Math.min(1, audioRef.current.currentTime / audioRef.current.duration);
+          } else {
+            overallProg = (elapsed % totalDurationMs) / totalDurationMs;
+          }
+          const exactScene = overallProg * scenesToPlay.length;
+          activeIdx = Math.min(scenesToPlay.length - 1, Math.floor(exactScene));
+          sceneProg = exactScene - activeIdx;
+          if (sceneProg > 0.85 && activeIdx < scenesToPlay.length - 1) {
+            crossfade = (sceneProg - 0.85) / 0.15;
+          }
+          if (activeIdx !== currentSceneIdx) {
+            setCurrentSceneIdx(activeIdx);
+          }
+        } else {
+          overallProg = (activeIdx + 0.3) / scenesToPlay.length;
+        }
+
+        const sc = scenesToPlay[activeIdx] || scenesToPlay[0];
+        const curImg = loadedImages[activeIdx] || loadedImages[0];
+        const nxtImg = activeIdx + 1 < loadedImages.length ? loadedImages[activeIdx + 1] : null;
+
+        if (curImg && curImg.complete && curImg.naturalWidth > 0) {
+          drawVideoSceneFrame(
+            ctx,
+            curImg,
+            nxtImg && nxtImg.complete && nxtImg.naturalWidth > 0 ? nxtImg : null,
+            crossfade,
+            sceneProg,
+            sc.motion || 'zoom-in',
+            sc.effect || 'sparkles',
+            `🎬 ${sc.sceneTitle} (${activeIdx + 1}/${scenesToPlay.length})`,
+            sc.narration,
+            overallProg,
+            now
+          );
+        }
+
+        rafId = requestAnimationFrame(renderLoop);
+      };
+
+      rafId = requestAnimationFrame(renderLoop);
+    });
+
+    return () => {
+      isCancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [activeTab, result, videoScenes, videoNarration, isPlaying, currentSceneIdx, topic]);
 
   const handlePlayWithVoiceover = () => {
     if (!result || !topic) return;
@@ -1880,9 +2126,16 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
+      if (sceneTimerRef.current) {
+        clearInterval(sceneTimerRef.current);
+        sceneTimerRef.current = null;
+      }
       setIsPlaying(false);
       return;
     }
+
+    const scriptToSpeak = (videoNarration || geminiService.stripCommandPrefix(topic)).trim();
+    setCurrentSceneIdx(0);
 
     if (audioUrl && audioRef.current) {
       const isChildVoice = voiceName === 'Boy' || voiceName === 'Girl';
@@ -1909,7 +2162,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       window.speechSynthesis.cancel();
       setIsPlaying(true);
 
-      const utterance = new SpeechSynthesisUtterance(topic);
+      const utterance = new SpeechSynthesisUtterance(scriptToSpeak);
       utterance.lang = 'vi-VN';
       if (voiceName === 'Boy') {
         utterance.pitch = 1.45;
@@ -1949,36 +2202,80 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     if (!result || isRecordingVideo) return;
     setIsRecordingVideo(true);
     try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Không thể tải hình ảnh nền để xuất video.'));
-        img.src = result;
-      });
+      const scenesToRecord = videoScenes.length > 0
+        ? videoScenes
+        : [{
+            sceneTitle: 'Cảnh 1',
+            narration: videoNarration || geminiService.stripCommandPrefix(topic),
+            visualPrompt: '',
+            effect: 'sparkles',
+            motion: 'zoom-in',
+            imageUrl: typeof result === 'string' ? result : ''
+          }];
+
+      const loadedImgs = await Promise.all(
+        scenesToRecord.map(
+          (sc) =>
+            new Promise<HTMLImageElement>((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => resolve(img);
+              img.onerror = () => reject(new Error('Không thể tải hình ảnh phân cảnh.'));
+              img.src = sc.imageUrl || (typeof result === 'string' ? result : '');
+            })
+        )
+      );
 
       const canvas = document.createElement('canvas');
       canvas.width = 1280;
       canvas.height = 720;
       const ctx = canvas.getContext('2d');
       if (!ctx || typeof (canvas as any).captureStream !== 'function' || typeof MediaRecorder === 'undefined') {
-        // Fallback: tải ảnh nền nếu trình duyệt không hỗ trợ MediaRecorder
         const link = document.createElement('a');
-        link.href = result;
+        link.href = scenesToRecord[0].imageUrl;
         link.download = `Video_Scene_${Date.now()}.png`;
         link.click();
         return;
       }
 
-      const stream: MediaStream = (canvas as any).captureStream(30);
+      const canvasStream: MediaStream = (canvas as any).captureStream(30);
+      let combinedStream = canvasStream;
+      let audioCtx: AudioContext | null = null;
+      let audioSource: AudioBufferSourceNode | null = null;
+      let totalDurationMs = scenesToRecord.length * 4500;
+
+      // Nhúng luôn âm thanh giọng đọc thuyết minh AI vào file Video nếu có
+      if (audioUrl) {
+        try {
+          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtxClass) {
+            const resp = await fetch(audioUrl);
+            const arrBuf = await resp.arrayBuffer();
+            audioCtx = new AudioCtxClass();
+            const decodedAudio = await audioCtx.decodeAudioData(arrBuf);
+            const dest = audioCtx.createMediaStreamDestination();
+            audioSource = audioCtx.createBufferSource();
+            audioSource.buffer = decodedAudio;
+            audioSource.connect(dest);
+            totalDurationMs = Math.max(4000, Math.round(decodedAudio.duration * 1000));
+            combinedStream = new MediaStream([
+              ...canvasStream.getVideoTracks(),
+              ...dest.stream.getAudioTracks(),
+            ]);
+          }
+        } catch (audioErr) {
+          console.warn('Could not mux audio into video stream:', audioErr);
+        }
+      }
+
       const mimeTypes = [
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
         'video/webm',
         'video/mp4'
       ];
       const supportedMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
-      const recorder = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
+      const recorder = supportedMime ? new MediaRecorder(combinedStream, { mimeType: supportedMime }) : new MediaRecorder(combinedStream);
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -1991,61 +2288,52 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       });
 
       recorder.start();
-      const durationMs = 6000;
-      const fps = 30;
-      const totalFrames = Math.round((durationMs / 1000) * fps);
-
-      // Tách phụ đề thành các dòng gọn gàng
-      ctx.font = 'bold 28px "Be Vietnam Pro", Arial, sans-serif';
-      const words = (topic || '').trim().split(/\s+/);
-      const lines: string[] = [];
-      let cur = '';
-      for (const w of words) {
-        const test = cur ? `${cur} ${w}` : w;
-        if (ctx.measureText(test).width > 1080) {
-          if (cur) lines.push(cur);
-          cur = w;
-        } else {
-          cur = test;
-        }
+      if (audioSource) {
+        try { audioSource.start(0); } catch {}
       }
-      if (cur) lines.push(cur);
-      const subtitleLines = lines.slice(0, 3);
+
+      const fps = 30;
+      const totalFrames = Math.round((totalDurationMs / 1000) * fps);
 
       for (let f = 0; f <= totalFrames; f++) {
-        const progress = f / totalFrames;
-        const scale = 1 + progress * 0.16; // Ken Burns zoom
-        const drawW = 1280 * scale;
-        const drawH = 720 * scale;
-        const offsetX = (1280 - drawW) / 2;
-        const offsetY = (720 - drawH) / 2;
+        const overallProg = f / totalFrames;
+        const exactScene = overallProg * scenesToRecord.length;
+        const sIdx = Math.min(scenesToRecord.length - 1, Math.floor(exactScene));
+        const sProg = exactScene - sIdx;
+        const crossfade = (sProg > 0.85 && sIdx < scenesToRecord.length - 1) ? (sProg - 0.85) / 0.15 : 0;
+        const sc = scenesToRecord[sIdx];
 
-        ctx.clearRect(0, 0, 1280, 720);
-        ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-
-        if (subtitleLines.length > 0) {
-          const boxH = subtitleLines.length * 40 + 28;
-          const boxY = 720 - boxH - 28;
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-          ctx.fillRect(60, boxY, 1160, boxH);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 28px "Be Vietnam Pro", Arial, sans-serif';
-          ctx.textAlign = 'center';
-          subtitleLines.forEach((line, idx) => {
-            ctx.fillText(line, 640, boxY + 42 + idx * 38);
-          });
-        }
+        drawVideoSceneFrame(
+          ctx,
+          loadedImgs[sIdx],
+          sIdx + 1 < loadedImgs.length ? loadedImgs[sIdx + 1] : null,
+          crossfade,
+          sProg,
+          sc.motion || 'zoom-in',
+          sc.effect || 'sparkles',
+          `🎬 ${sc.sceneTitle} (${sIdx + 1}/${scenesToRecord.length})`,
+          sc.narration,
+          overallProg,
+          f * (1000 / fps)
+        );
 
         await new Promise(r => setTimeout(r, 1000 / fps));
       }
 
       recorder.stop();
+      if (audioSource) {
+        try { audioSource.stop(); } catch {}
+      }
+      if (audioCtx) {
+        try { await audioCtx.close(); } catch {}
+      }
+
       const videoBlob = await donePromise;
       const ext = (supportedMime && supportedMime.includes('mp4')) ? 'mp4' : 'webm';
       const url = URL.createObjectURL(videoBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Video_AI_${Date.now()}.${ext}`;
+      a.download = `Video_Bai_Giang_AI_${Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2060,41 +2348,33 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
   const generateVideo = async () => {
     if (!topic.trim()) {
-      alert("Vui lòng nhập kịch bản hoặc mô tả video!");
+      alert("Vui lòng nhập yêu cầu hoặc chủ đề video!");
       return;
     }
     setIsProcessing(true);
     setResult(null);
+    setVideoScenes([]);
+    setVideoNarration('');
+    setCurrentSceneIdx(0);
     setAudioUrl(null);
     setIsPlaying(false);
 
-    let optimizedPrompt = `${topic}, ${videoStyle}, cute cartoon animation for kids`;
-
-    // Bước 1: Dịch sang prompt tiếng Anh ngắn gọn (nếu AI rảnh, không chặn nếu lỗi)
     try {
-      const translationPrompt = `Convert this Vietnamese educational script into a short 25-word English visual scene description. Style: ${videoStyle}, cute cartoon animation for kids, educational. Script: "${topic}"`;
-      const translation = await geminiService.generateText(translationPrompt);
-      const cleaned = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
-      if (cleaned) optimizedPrompt = cleaned;
-    } catch (err: any) {
-      console.warn("Translation failed, using original topic. Error:", err);
-    }
+      // Bước 1: Tạo kịch bản phân cảnh (3 cảnh) + hình ảnh minh họa riêng cho từng cảnh
+      // Lời thuyết minh (fullNarration) chỉ chứa nội dung kể chuyện/bài giảng cho học sinh, TUYỆT ĐỐI KHÔNG đọc lại câu lệnh của giáo viên!
+      const storyboard = await geminiService.generateVideoStoryboard(topic, videoStyle);
+      setVideoScenes(storyboard.scenes);
+      setVideoNarration(storyboard.fullNarration);
+      setResult(storyboard.scenes[0]?.imageUrl || '');
 
-    // Bước 2: Tạo cảnh video + tạo luôn giọng đọc thuyết minh AI song song
-    try {
-      const [videoRes, speechRes] = await Promise.allSettled([
-        geminiService.generateVideo(optimizedPrompt, topic, videoStyle),
-        geminiService.generateSpeech(topic, voiceName)
-      ]);
-
-      if (videoRes.status === 'fulfilled' && videoRes.value) {
-        setResult(videoRes.value);
-      } else {
-        throw new Error(videoRes.status === 'rejected' ? videoRes.reason?.message : 'Không thể tạo cảnh video');
-      }
-
-      if (speechRes.status === 'fulfilled' && speechRes.value) {
-        setAudioUrl(speechRes.value);
+      // Bước 2: Tạo giọng đọc thuyết minh AI từ kịch bản bài giảng (KHÔNG đọc câu lệnh gốc topic)
+      try {
+        const speechUrl = await geminiService.generateSpeech(storyboard.fullNarration, voiceName);
+        if (speechUrl) {
+          setAudioUrl(speechUrl);
+        }
+      } catch (ttsErr) {
+        console.warn('Video voiceover TTS fallback:', ttsErr);
       }
     } catch (error: any) {
       console.error("Video Gen Error:", error);
@@ -2137,13 +2417,14 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
   };
 
   const handleDownloadAudio = async () => {
-    if (!topic.trim()) return;
+    const textForSpeech = activeTab === 'video' ? (videoNarration || geminiService.stripCommandPrefix(topic)) : topic;
+    if (!textForSpeech.trim()) return;
     let targetUrl = audioUrl;
 
     if (!targetUrl) {
       setIsProcessing(true);
       try {
-        targetUrl = await geminiService.generateSpeech(topic, voiceName);
+        targetUrl = await geminiService.generateSpeech(textForSpeech, voiceName);
         if (targetUrl) {
           setAudioUrl(targetUrl);
         }
@@ -4069,7 +4350,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       </div>
                     </div>
                   ) : activeTab === 'video' ? (
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-center w-full">
                       <audio
                         ref={audioRef}
                         src={audioUrl || ''}
@@ -4078,26 +4359,67 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                         onPlay={() => setIsPlaying(true)}
                         className="hidden"
                       />
-                      <div className="relative group w-full max-w-2xl aspect-video bg-black rounded-[28px] sm:rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
-                        <img
-                          src={result}
-                          alt="Video Scene"
-                          className={`w-full h-full object-cover transition-transform duration-[15s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
+                      <div className="relative group w-full max-w-2xl aspect-video bg-slate-950 rounded-[24px] sm:rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
+                        <canvas
+                          ref={videoCanvasRef}
+                          width={1280}
+                          height={720}
+                          className="w-full h-full object-contain block cursor-pointer"
+                          onClick={handlePlayWithVoiceover}
                         />
-                        {topic && (
-                          <div className="absolute bottom-3 left-3 right-3 bg-slate-900/75 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl text-center text-xs sm:text-sm font-bold leading-snug shadow-lg pointer-events-none line-clamp-2">
-                            {topic}
-                          </div>
-                        )}
                         {!isPlaying && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
-                            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm text-indigo-600 pl-1">
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/15 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
+                            <div className="w-16 h-16 bg-white/95 rounded-full flex items-center justify-center shadow-xl backdrop-blur-sm text-purple-600 pl-1 hover:scale-105 transition-transform">
                               <i className="fas fa-play text-2xl"></i>
                             </div>
                           </div>
                         )}
                       </div>
-                      <div className="mt-6 flex flex-col items-center space-y-3 w-full">
+
+                      {videoScenes.length > 0 && (
+                        <div className="w-full max-w-2xl mt-4 space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            {videoScenes.map((sc, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setCurrentSceneIdx(idx)}
+                                className={`p-2 rounded-2xl border text-left transition-all flex items-center gap-2 ${
+                                  currentSceneIdx === idx
+                                    ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200'
+                                    : 'bg-slate-50 border-slate-200 hover:border-purple-300'
+                                }`}
+                              >
+                                <img src={sc.imageUrl} alt={sc.sceneTitle} className="w-12 h-8 object-cover rounded-lg shrink-0 border border-white shadow-sm" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-black text-purple-700 truncate">{sc.sceneTitle}</p>
+                                  <p className="text-[9px] text-slate-500 truncate">{sc.narration}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                <i className="fas fa-microphone-lines text-purple-600 mr-1.5"></i>
+                                Lời thuyết minh AI (Chỉ đọc nội dung bài giảng, có thể chỉnh sửa)
+                              </span>
+                            </div>
+                            <textarea
+                              value={videoNarration}
+                              onChange={(e) => {
+                                setVideoNarration(e.target.value);
+                                setAudioUrl(null);
+                              }}
+                              rows={2}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-5 flex flex-col items-center space-y-3 w-full">
                         <div className="flex flex-wrap justify-center gap-2.5">
                           <button onClick={handlePlayWithVoiceover} className={`px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
                             <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
@@ -4108,21 +4430,19 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                             className="px-6 py-3.5 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 shadow-xl shadow-emerald-100 active:scale-95 transition-all flex items-center disabled:opacity-50"
                           >
                             <i className={`fas ${isRecordingVideo ? 'fa-spinner fa-spin' : 'fa-film'} mr-2`}></i>
-                            {isRecordingVideo ? 'Đang xuất Video...' : 'Tải Video (.WEBM)'}
+                            {isRecordingVideo ? 'Đang kết xuất Video...' : 'Tải Video (.WEBM)'}
                           </button>
-                          <a href={result} download="Video_Scene.png" className="px-6 py-3.5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
-                            <i className="fas fa-download mr-2"></i>Tải Ảnh nền (.PNG)
+                          <a href={videoScenes[currentSceneIdx]?.imageUrl || result} download={`Canh_${currentSceneIdx + 1}_Video.png`} className="px-6 py-3.5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
+                            <i className="fas fa-download mr-2"></i>Tải Ảnh cảnh (.PNG)
                           </a>
-                          {audioUrl && (
-                            <button
-                              onClick={handleDownloadAudio}
-                              className="px-6 py-3.5 bg-sky-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-xl shadow-sky-100 active:scale-95 transition-all flex items-center"
-                            >
-                              <i className="fas fa-volume-high mr-2"></i>Tải Thuyết minh
-                            </button>
-                          )}
+                          <button
+                            onClick={handleDownloadAudio}
+                            className="px-6 py-3.5 bg-sky-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-xl shadow-sky-100 active:scale-95 transition-all flex items-center"
+                          >
+                            <i className="fas fa-volume-high mr-2"></i>Tải Thuyết minh
+                          </button>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium text-center">Video hoạt họa kết hợp chuyển động Ken Burns, phụ đề tiếng Việt và giọng đọc thuyết minh AI.</p>
+                        <p className="text-[10px] text-slate-400 font-medium text-center">Video đa phân cảnh (Storyboard 3 cảnh) kèm hiệu ứng chuyển cảnh, hoạt cảnh hạt, phụ đề và giọng thuyết minh AI.</p>
                       </div>
                     </div>
                   ) : activeTab === 'tts' ? (

@@ -1168,39 +1168,38 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     console.log('[Image] Toàn bộ fetch thất bại. Trả về URL trực tiếp làm phương án cuối.');
     return endpoints[0]; // Trả về URL Flux trực tiếp
   }
-  private renderFallbackSceneDataUrl(titleText: string, styleName: string = 'Hoạt hình'): string {
+  private renderFallbackSceneDataUrl(titleText: string, styleName: string = 'Hoạt hình', sceneIdx: number = 0): string {
     const canvas = document.createElement('canvas');
     canvas.width = 1280;
     canvas.height = 720;
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Nền bầu trời chuyển sắc theo phong cách
+    const palettes = [
+      ['#38bdf8', '#e0f2fe', '#fef9c3'],
+      ['#60a5fa', '#dbeafe', '#dcfce7'],
+      ['#f472b6', '#fce7f3', '#fef3c7'],
+      ['#818cf8', '#e0e7ff', '#d1fae5']
+    ];
+    const pal = palettes[sceneIdx % palettes.length];
+
+    // Nền bầu trời chuyển sắc theo phân cảnh
     const skyGrad = ctx.createLinearGradient(0, 0, 0, 720);
-    if (styleName.includes('màu nước')) {
-      skyGrad.addColorStop(0, '#bae6fd');
-      skyGrad.addColorStop(0.65, '#fef3c7');
-      skyGrad.addColorStop(1, '#dcfce7');
-    } else if (styleName.includes('3D')) {
-      skyGrad.addColorStop(0, '#1e3a8a');
-      skyGrad.addColorStop(0.6, '#3b82f6');
-      skyGrad.addColorStop(1, '#93c5fd');
-    } else {
-      skyGrad.addColorStop(0, '#38bdf8');
-      skyGrad.addColorStop(0.65, '#e0f2fe');
-      skyGrad.addColorStop(1, '#fef9c3');
-    }
+    skyGrad.addColorStop(0, pal[0]);
+    skyGrad.addColorStop(0.65, pal[1]);
+    skyGrad.addColorStop(1, pal[2]);
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, 1280, 720);
 
     // Mặt trời
-    const sunGrad = ctx.createRadialGradient(1080, 140, 20, 1080, 140, 110);
+    const sunX = 1060 - (sceneIdx * 180) % 700;
+    const sunGrad = ctx.createRadialGradient(sunX, 135, 20, sunX, 135, 110);
     sunGrad.addColorStop(0, '#fde047');
     sunGrad.addColorStop(0.6, '#facc15');
     sunGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
     ctx.fillStyle = sunGrad;
     ctx.beginPath();
-    ctx.arc(1080, 140, 110, 0, Math.PI * 2);
+    ctx.arc(sunX, 135, 110, 0, Math.PI * 2);
     ctx.fill();
 
     // Đám mây
@@ -1217,9 +1216,9 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
       ctx.fill();
       ctx.restore();
     };
-    drawCloud(180, 130, 1.1);
-    drawCloud(520, 95, 0.85);
-    drawCloud(820, 160, 0.95);
+    drawCloud(180 + sceneIdx * 40, 130, 1.1);
+    drawCloud(520 - sceneIdx * 30, 95, 0.85);
+    drawCloud(840 + sceneIdx * 20, 160, 0.95);
 
     // Đồi cỏ xanh phía xa và gần
     ctx.fillStyle = '#86efac';
@@ -1266,7 +1265,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
     ctx.strokeStyle = '#6366f1';
     ctx.lineWidth = 8;
-    const bx = 220, by = 180, bw = 840, bh = 320, br = 36;
+    const bx = 220, by = 170, bw = 840, bh = 310, br = 36;
     ctx.beginPath();
     ctx.moveTo(bx + br, by);
     ctx.lineTo(bx + bw - br, by);
@@ -1284,10 +1283,10 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     ctx.fillStyle = '#4f46e5';
     ctx.font = 'bold 24px "Be Vietnam Pro", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🎬 BÀI GIẢNG MINH HỌA AI', 640, 240);
+    ctx.fillText(`🎬 CẢNH ${sceneIdx + 1} • BÀI GIẢNG HOẠT HÌNH AI`, 640, 230);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 34px "Be Vietnam Pro", Arial, sans-serif';
+    ctx.font = 'bold 32px "Be Vietnam Pro", Arial, sans-serif';
     const words = (titleText || 'Bài học sáng tạo').trim().split(/\s+/);
     const lines: string[] = [];
     let currentLine = '';
@@ -1302,16 +1301,163 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     }
     if (currentLine) lines.push(currentLine);
     const displayLines = lines.slice(0, 4);
-    const startY = 315 - ((displayLines.length - 1) * 22);
+    const startY = 305 - ((displayLines.length - 1) * 20);
     displayLines.forEach((line, idx) => {
-      ctx.fillText(line, 640, startY + idx * 48);
+      ctx.fillText(line, 640, startY + idx * 46);
     });
     ctx.restore();
 
     return canvas.toDataURL('image/png');
   }
 
-  public async generateVideo(prompt: string, originalTopic?: string, styleName?: string): Promise<string> {
+  public stripCommandPrefix(rawInput: string): string {
+    return (rawInput || '')
+      .trim()
+      .replace(/^(xin chào[,.\s]*)?(thầy cô|bạn|ai|hệ thống)?[,.\s]*(hãy|vui lòng|giúp tôi|giúp mình|làm ơn)?\s*(tạo|làm|xây dựng|viết|soạn|vẽ|thiết kế|cho tôi|cho mình)\s*(một\s+|1\s+)?(video|clip|bài giảng|phim|hoạt hình|câu chuyện|kịch bản)\s*(ngắn\s+|hoạt hình\s+|giáo dục\s+|minh họa\s+)*(về\s+|cho\s+|chủ đề\s+|nội dung\s+|kể chuyện\s+|bài\s+|môn\s+)?/i, '')
+      .replace(/\s+(giúp tôi|giúp mình|nhé|nha|với ạ|ạ)\s*[.!?]*$/i, '')
+      .trim() || rawInput.trim();
+  }
+
+  public async generateVideoStoryboard(
+    userInput: string,
+    styleName: string = 'Hoạt hình đơn giản'
+  ): Promise<{
+    title: string;
+    fullNarration: string;
+    scenes: Array<{
+      sceneTitle: string;
+      narration: string;
+      visualPrompt: string;
+      effect: 'sparkles' | 'clouds' | 'rain' | 'bubbles' | 'leaves';
+      motion: 'zoom-in' | 'pan-right' | 'pan-left' | 'zoom-out';
+      imageUrl: string;
+    }>;
+  }> {
+    const cleanSubject = this.stripCommandPrefix(userInput);
+    const motions: Array<'zoom-in' | 'pan-right' | 'pan-left' | 'zoom-out'> = ['zoom-in', 'pan-right', 'pan-left', 'zoom-out'];
+    const effects: Array<'sparkles' | 'clouds' | 'rain' | 'bubbles' | 'leaves'> = ['sparkles', 'clouds', 'leaves', 'bubbles'];
+
+    let rawScenes: Array<{
+      sceneTitle: string;
+      narration: string;
+      visualPrompt: string;
+      effect?: 'sparkles' | 'clouds' | 'rain' | 'bubbles' | 'leaves';
+    }> = [];
+    let videoTitle = cleanSubject;
+
+    try {
+      const prompt = `Người dùng vừa nhập yêu cầu tạo video giáo dục: "${userInput}".
+Hãy đóng vai biên kịch phim hoạt hình giáo dục cho học sinh Việt Nam, viết kịch bản video gồm ĐÚNG 3 phân cảnh liên tiếp (Mở đầu - Khám phá - Bài học/Kết thúc).
+
+QUY TẮC TUYỆT ĐỐI QUAN TRỌNG:
+1. Trường "narration" (Lời thuyết minh):
+   - Phải là lời kể chuyện hoặc lời giảng bài truyền cảm, thân thiện trực tiếp dành cho học sinh (Ví dụ: "Các em thân mến! Hôm nay chúng mình cùng khám phá...", "Ngày xửa ngày xưa...").
+   - TUYỆT ĐỐI KHÔNG đọc lại hay nhắc lại câu lệnh của giáo viên (CẤM dùng các cụm từ như "Tạo video về...", "Hãy làm video...", "Video này nói về...", "Theo yêu cầu của bạn...").
+   - Mỗi cảnh chỉ 1-2 câu ngắn gọn, súc tích, dễ hiểu (khoảng 18-30 chữ mỗi cảnh).
+2. Trường "visualPrompt": Mô tả chi tiết bối cảnh hình ảnh bằng tiếng Anh (khoảng 20-30 từ) theo phong cách "${styleName}, cute 2D/3D educational animation for kids, vibrant colors, no text" để AI vẽ từng phân cảnh khác nhau.
+3. Trường "effect": Chọn 1 trong các hiệu ứng hạt chuyển động phù hợp với cảnh: "sparkles" | "clouds" | "rain" | "bubbles" | "leaves".
+
+CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
+{
+  "title": "Tên bài học / câu chuyện",
+  "scenes": [
+    {
+      "sceneTitle": "Cảnh 1: Mở đầu",
+      "narration": "Lời thuyết minh cảnh 1...",
+      "visualPrompt": "English visual description for scene 1...",
+      "effect": "clouds"
+    },
+    {
+      "sceneTitle": "Cảnh 2: Khám phá",
+      "narration": "Lời thuyết minh cảnh 2...",
+      "visualPrompt": "English visual description for scene 2...",
+      "effect": "sparkles"
+    },
+    {
+      "sceneTitle": "Cảnh 3: Bài học bổ ích",
+      "narration": "Lời thuyết minh cảnh 3...",
+      "visualPrompt": "English visual description for scene 3...",
+      "effect": "leaves"
+    }
+  ]
+}`;
+
+      const responseText = await this.generateText(prompt);
+      const parsed = this.parseJSONSafely(responseText);
+      const candidateScenes = Array.isArray(parsed?.scenes)
+        ? parsed.scenes
+        : Array.isArray(parsed)
+          ? parsed
+          : [];
+
+      if (parsed?.title && typeof parsed.title === 'string') {
+        videoTitle = parsed.title;
+      }
+
+      if (candidateScenes.length > 0) {
+        rawScenes = candidateScenes.slice(0, 4).map((sc: any, idx: number) => ({
+          sceneTitle: sc.sceneTitle || sc.title || `Cảnh ${idx + 1}`,
+          narration: this.stripCommandPrefix(String(sc.narration || sc.text || sc.script || '')),
+          visualPrompt: String(sc.visualPrompt || sc.imagePrompt || `${cleanSubject} scene ${idx + 1}, ${styleName}`),
+          effect: ['sparkles', 'clouds', 'rain', 'bubbles', 'leaves'].includes(sc.effect) ? sc.effect : effects[idx % effects.length],
+        })).filter((sc: any) => sc.narration.length > 0);
+      }
+    } catch (e) {
+      console.warn('[VideoStoryboard] AI script generation fallback:', e);
+    }
+
+    if (rawScenes.length === 0) {
+      rawScenes = [
+        {
+          sceneTitle: 'Cảnh 1: Mở đầu',
+          narration: `Các em học sinh thân mến! Hôm nay chúng mình cùng khám phá bài học thú vị về ${cleanSubject} nhé!`,
+          visualPrompt: `Happy elementary school kids and teacher exploring ${cleanSubject}, wide shot, sunny outdoor background, ${styleName}`,
+          effect: 'clouds',
+        },
+        {
+          sceneTitle: 'Cảnh 2: Tìm hiểu kiến thức',
+          narration: `Qua những hình ảnh trực quan sinh động, chúng ta thấy ${cleanSubject} gắn liền với nhiều điều kỳ diệu trong cuộc sống xung quanh.`,
+          visualPrompt: `Detailed educational close up illustration showing how ${cleanSubject} works in nature and daily life, colorful cartoon, ${styleName}`,
+          effect: 'sparkles',
+        },
+        {
+          sceneTitle: 'Cảnh 3: Tổng kết bài học',
+          narration: `Các em hãy ghi nhớ những kiến thức bổ ích hôm nay và cùng chia sẻ với bạn bè, người thân nhé!`,
+          visualPrompt: `Joyful children smiling and celebrating learning achievement about ${cleanSubject} in a bright colorful classroom, ${styleName}`,
+          effect: 'leaves',
+        }
+      ];
+    }
+
+    // Tạo hình ảnh minh họa riêng biệt cho từng phân cảnh song song
+    const scenesWithImages = await Promise.all(
+      rawScenes.map(async (sc, idx) => {
+        const imgUrl = await this.generateVideo(
+          `${sc.visualPrompt}, scene ${idx + 1}`,
+          `${sc.sceneTitle}: ${sc.narration}`,
+          styleName,
+          idx
+        );
+        return {
+          sceneTitle: sc.sceneTitle,
+          narration: sc.narration,
+          visualPrompt: sc.visualPrompt,
+          effect: sc.effect || effects[idx % effects.length],
+          motion: motions[idx % motions.length],
+          imageUrl: imgUrl,
+        };
+      })
+    );
+
+    const fullNarration = scenesWithImages.map(s => s.narration).join(' ');
+    return {
+      title: videoTitle,
+      fullNarration,
+      scenes: scenesWithImages,
+    };
+  }
+
+  public async generateVideo(prompt: string, originalTopic?: string, styleName?: string, sceneIdx: number = 0): Promise<string> {
     const shortPrompt = prompt.length > 380 ? prompt.substring(0, 380) : prompt;
     const enhancedPrompt = `${shortPrompt}, cinematic 16:9, ${styleName || 'animation style'}, cute illustration for kids, educational, vibrant colors`;
     const seed = Math.floor(Math.random() * 999999);
@@ -1390,7 +1536,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     }
 
     // 3. Fallback an toàn tuyệt đối bằng Canvas 2D HD (không bao giờ lỗi mạng)
-    return this.renderFallbackSceneDataUrl(originalTopic || prompt, styleName);
+    return this.renderFallbackSceneDataUrl(originalTopic || prompt, styleName, sceneIdx);
   }
 
   public async generateSuggestions(history: any[], personaName: string) {
