@@ -2432,16 +2432,30 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
       workbook.SheetNames.forEach((sheetName, idx) => {
         const worksheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
+        const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '', raw: false });
         const nonEmptyRows = rows.filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''));
         if (nonEmptyRows.length === 0) return;
 
-        const maxCols = Math.max(...nonEmptyRows.map(r => r.length), 1);
+        let firstCol = Infinity;
+        let lastCol = 0;
+        nonEmptyRows.forEach(r => {
+          r.forEach((cell, cIdx) => {
+            if (String(cell ?? '').trim() !== '') {
+              if (cIdx < firstCol) firstCol = cIdx;
+              if (cIdx > lastCol) lastCol = cIdx;
+            }
+          });
+        });
+        if (firstCol === Infinity) {
+          firstCol = 0;
+          lastCol = 0;
+        }
+
         const tableRows = nonEmptyRows
           .map((row, rIdx) => {
             const tag = rIdx === 0 ? 'th' : 'td';
             const cells: string[] = [];
-            for (let c = 0; c < maxCols; c++) {
+            for (let c = firstCol; c <= lastCol; c++) {
               const val = String(row[c] ?? '')
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -2454,7 +2468,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
         sheetsHtml += `
           <div style="${idx > 0 ? 'page-break-before: always;' : ''}">
-            ${workbook.SheetNames.length > 1 ? `<div class="excel-sheet-title">Bảng: ${sheetName}</div>` : ''}
+            <div class="excel-sheet-title">Sheet: ${sheetName}</div>
             <table>${tableRows}</table>
           </div>
         `;
@@ -2515,32 +2529,390 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       setOfficePreviewHtml(htmlContent);
       setResult(htmlContent);
 
-      const html2pdfMod = await import('html2pdf.js');
-      const html2pdfLib = (html2pdfMod as any).default || html2pdfMod;
+      const isLandscape = officeToPdfOrientation === 'landscape';
+      const pageW = isLandscape ? 1754 : 1240;
+      const pageH = isLandscape ? 1240 : 1754;
+      const pdfW = isLandscape ? 841.89 : 595.28;
+      const pdfH = isLandscape ? 595.28 : 841.89;
+      const margin = 56;
+      const bottomLimit = pageH - margin - 24;
+      const contentW = pageW - margin * 2;
+      const fontFamily = "'Be Vietnam Pro', 'Times New Roman', Arial, sans-serif";
 
-      const wrapper = document.createElement('div');
-      wrapper.style.padding = '12mm';
-      wrapper.style.backgroundColor = '#ffffff';
-      wrapper.style.color = '#0f172a';
-      wrapper.style.width = officeToPdfOrientation === 'landscape' ? '273mm' : '186mm';
-      wrapper.innerHTML = htmlContent;
+      const pages: HTMLCanvasElement[] = [];
+      let currentCanvas = document.createElement('canvas');
+      let ctx = currentCanvas.getContext('2d')!;
+      let cursorY = margin;
 
-      const baseName = officeToPdfFile.name
-        .replace(/\.[^/.]+$/, '')
-        .replace(/[<>:"/\\|?*]/g, '_')
-        .trim() || 'Tai_lieu';
-
-      const opt = {
-        margin: [10, 10, 10, 10] as [number, number, number, number],
-        filename: `${baseName}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: officeToPdfOrientation },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      const startNewPage = () => {
+        const c = document.createElement('canvas');
+        c.width = pageW;
+        c.height = pageH;
+        const context = c.getContext('2d')!;
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, pageW, pageH);
+        pages.push(c);
+        currentCanvas = c;
+        ctx = context;
+        cursorY = margin;
       };
 
-      await html2pdfLib().set(opt).from(wrapper).save();
-      alert(`✅ Đã chuyển đổi "${officeToPdfFile.name}" sang PDF và tải về máy thành công!`);
+      startNewPage();
+
+      const wrapText = (text: string, maxWidth: number, font: string): string[] => {
+        ctx.font = font;
+        const rawParagraphs = String(text ?? '').replace(/\r/g, '').split('\n');
+        const lines: string[] = [];
+        const safeMax = Math.max(24, maxWidth);
+
+        for (const para of rawParagraphs) {
+          const trimmed = para.trim();
+          if (!trimmed) {
+            lines.push('');
+            continue;
+          }
+          const words = trimmed.split(/\s+/);
+          let currentLine = '';
+
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(testLine).width <= safeMax) {
+              currentLine = testLine;
+            } else {
+              if (currentLine) {
+                lines.push(currentLine);
+                currentLine = '';
+              }
+              if (ctx.measureText(word).width <= safeMax) {
+                currentLine = word;
+              } else {
+                let chunk = '';
+                for (const ch of word) {
+                  if (ctx.measureText(chunk + ch).width <= safeMax) {
+                    chunk += ch;
+                  } else {
+                    if (chunk) lines.push(chunk);
+                    chunk = ch;
+                  }
+                }
+                currentLine = chunk;
+              }
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+        }
+        return lines.length > 0 ? lines : [''];
+      };
+
+      const drawTableRows = (rows: string[][], sheetTitle?: string) => {
+        const nonEmpty = rows.filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''));
+        if (nonEmpty.length === 0) return;
+
+        let firstCol = Infinity;
+        let lastCol = 0;
+        nonEmpty.forEach(r => {
+          r.forEach((cell, idx) => {
+            if (String(cell ?? '').trim() !== '') {
+              if (idx < firstCol) firstCol = idx;
+              if (idx > lastCol) lastCol = idx;
+            }
+          });
+        });
+        if (firstCol === Infinity) return;
+
+        const trimmedRows = nonEmpty.map(r => r.slice(firstCol, lastCol + 1).map(c => String(c ?? '').trim()));
+        const numCols = Math.max(1, lastCol - firstCol + 1);
+
+        if (sheetTitle) {
+          const titleFont = `bold 20px ${fontFamily}`;
+          if (cursorY + 40 > bottomLimit) startNewPage();
+          ctx.font = titleFont;
+          ctx.fillStyle = '#0f766e';
+          ctx.fillText(sheetTitle, margin, cursorY + 20);
+          cursorY += 32;
+        }
+
+        // Compute smart column widths
+        const weights = new Array(numCols).fill(4);
+        trimmedRows.forEach(r => {
+          const nonBlankCount = r.filter(c => c !== '').length;
+          if (nonBlankCount <= 1 && numCols > 2) return; // Ignore full-width title rows when sizing columns
+          r.forEach((cell, cIdx) => {
+            const len = Math.min(60, Math.max(4, cell.length));
+            if (len > weights[cIdx]) weights[cIdx] = len;
+          });
+        });
+        const adjustedWeights = weights.map(w => Math.max(45, Math.pow(w, 0.65) * 28));
+        const totalWeight = adjustedWeights.reduce((a, b) => a + b, 0) || 1;
+        const colWidths = adjustedWeights.map(w => (w / totalWeight) * contentW);
+
+        const fontSize = numCols > 10 ? 12 : numCols > 7 ? 13 : 15;
+        const lineHeight = Math.round(fontSize * 1.4);
+        const cellPadX = numCols > 8 ? 5 : 8;
+        const cellPadY = 6;
+
+        let headerRow: string[] | null = null;
+        let hasPassedHeader = false;
+
+        const renderSingleRow = (row: string[], isHeader: boolean, rowIdx: number) => {
+          const font = `${isHeader ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
+          const cellLines = row.map((cell, cIdx) => wrapText(cell, colWidths[cIdx] - cellPadX * 2, font));
+          const maxLines = Math.max(1, ...cellLines.map(lines => lines.length));
+          const rowH = maxLines * lineHeight + cellPadY * 2;
+
+          if (cursorY + rowH > bottomLimit) {
+            startNewPage();
+            if (!isHeader && headerRow) {
+              renderSingleRow(headerRow, true, 0);
+            }
+          }
+
+          let curX = margin;
+          for (let c = 0; c < numCols; c++) {
+            const cw = colWidths[c];
+            ctx.fillStyle = isHeader ? '#e2e8f0' : rowIdx % 2 === 1 ? '#f8fafc' : '#ffffff';
+            ctx.fillRect(curX, cursorY, cw, rowH);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(curX, cursorY, cw, rowH);
+
+            ctx.font = font;
+            ctx.fillStyle = '#0f172a';
+            const lines = cellLines[c] || [''];
+            lines.forEach((line, lIdx) => {
+              ctx.fillText(line, curX + cellPadX, cursorY + cellPadY + (lIdx + 0.82) * lineHeight);
+            });
+            curX += cw;
+          }
+          cursorY += rowH;
+        };
+
+        trimmedRows.forEach((row, rIdx) => {
+          const nonBlankCells = row.filter(c => c !== '');
+          if (!hasPassedHeader && nonBlankCells.length === 1 && numCols > 2) {
+            // Title/banner row above the table
+            const bannerFont = `bold ${fontSize + 3}px ${fontFamily}`;
+            const lines = wrapText(nonBlankCells[0], contentW - 12, bannerFont);
+            const bannerH = lines.length * (lineHeight + 4) + 10;
+            if (cursorY + bannerH > bottomLimit) startNewPage();
+            ctx.font = bannerFont;
+            ctx.fillStyle = '#1e293b';
+            lines.forEach((l, lIdx) => {
+              ctx.fillText(l, margin, cursorY + (lIdx + 0.85) * (lineHeight + 4));
+            });
+            cursorY += bannerH;
+            return;
+          }
+
+          if (!hasPassedHeader) {
+            hasPassedHeader = true;
+            headerRow = row;
+            renderSingleRow(row, true, rIdx);
+          } else {
+            renderSingleRow(row, false, rIdx);
+          }
+        });
+
+        cursorY += 20;
+      };
+
+      const ext = officeToPdfFile.name.split('.').pop()?.toLowerCase() || '';
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        const XLSX = await import('xlsx');
+        const arrayBuffer = await officeToPdfFile.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+        workbook.SheetNames.forEach((sheetName, sIdx) => {
+          const ws = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '', raw: false });
+          const nonEmpty = rows.filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''));
+          if (nonEmpty.length === 0) return;
+          if (sIdx > 0 && cursorY > margin + 20) {
+            startNewPage();
+          }
+          drawTableRows(
+            nonEmpty.map(r => r.map(c => String(c ?? ''))),
+            workbook.SheetNames.length > 1 ? `Bảng: ${sheetName}` : undefined
+          );
+        });
+      } else {
+        // Parse HTML from Word (.docx / .txt / .doc)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+        const root = doc.querySelector('.office-pdf-doc') || doc.body;
+
+        const loadImageElement = (src: string): Promise<HTMLImageElement | null> =>
+          new Promise(resolve => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = src;
+          });
+
+        const renderNode = async (node: Node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const txt = (node.textContent || '').trim();
+            if (!txt) return;
+            const font = `17px ${fontFamily}`;
+            const lines = wrapText(txt, contentW, font);
+            for (const line of lines) {
+              if (cursorY + 26 > bottomLimit) startNewPage();
+              ctx.font = font;
+              ctx.fillStyle = '#0f172a';
+              ctx.fillText(line, margin, cursorY + 20);
+              cursorY += 26;
+            }
+            return;
+          }
+
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          const el = node as HTMLElement;
+          const tag = el.tagName.toUpperCase();
+
+          if (tag === 'STYLE' || tag === 'SCRIPT') return;
+
+          if (tag === 'TABLE') {
+            const trs = Array.from(el.querySelectorAll('tr'));
+            const tableMatrix = trs.map(tr =>
+              Array.from(tr.querySelectorAll('th, td')).map(cell => (cell.textContent || '').trim())
+            );
+            drawTableRows(tableMatrix);
+            return;
+          }
+
+          if (tag === 'IMG') {
+            const src = el.getAttribute('src') || '';
+            if (src) {
+              const img = await loadImageElement(src);
+              if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                const maxW = contentW * 0.85;
+                const maxH = (pageH - margin * 2) * 0.55;
+                const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+                const drawW = Math.round(img.naturalWidth * scale);
+                const drawH = Math.round(img.naturalHeight * scale);
+                if (cursorY + drawH + 16 > bottomLimit) startNewPage();
+                const drawX = margin + Math.round((contentW - drawW) / 2);
+                ctx.drawImage(img, drawX, cursorY + 6, drawW, drawH);
+                cursorY += drawH + 18;
+              }
+            }
+            return;
+          }
+
+          if (/^H[1-6]$/.test(tag)) {
+            const txt = (el.textContent || '').trim();
+            if (!txt) return;
+            const level = parseInt(tag.substring(1), 10) || 2;
+            const fSize = level === 1 ? 24 : level === 2 ? 21 : 19;
+            const lh = Math.round(fSize * 1.4);
+            const font = `bold ${fSize}px ${fontFamily}`;
+            const lines = wrapText(txt, contentW, font);
+            cursorY += 8;
+            for (const line of lines) {
+              if (cursorY + lh > bottomLimit) startNewPage();
+              ctx.font = font;
+              ctx.fillStyle = '#0f172a';
+              ctx.fillText(line, margin, cursorY + Math.round(fSize * 0.9));
+              cursorY += lh;
+            }
+            cursorY += 6;
+            return;
+          }
+
+          if (tag === 'P' || tag === 'LI') {
+            const imgs = Array.from(el.querySelectorAll('img'));
+            for (const imgEl of imgs) {
+              await renderNode(imgEl);
+            }
+            const rawText = (el.textContent || '').trim();
+            if (!rawText) {
+              cursorY += 8;
+              return;
+            }
+            const prefix = tag === 'LI' ? '• ' : '';
+            const isBold =
+              el.querySelector('strong, b') !== null &&
+              (el.querySelector('strong, b')?.textContent || '').trim().length >= rawText.length * 0.8;
+            const fSize = 17;
+            const lh = 26;
+            const font = `${isBold ? 'bold ' : ''}${fSize}px ${fontFamily}`;
+            const lines = wrapText(prefix + rawText, contentW, font);
+            for (const line of lines) {
+              if (cursorY + lh > bottomLimit) startNewPage();
+              ctx.font = font;
+              ctx.fillStyle = '#0f172a';
+              ctx.fillText(line, margin, cursorY + 20);
+              cursorY += lh;
+            }
+            cursorY += 6;
+            return;
+          }
+
+          const children = Array.from(el.childNodes);
+          for (const child of children) {
+            await renderNode(child);
+          }
+        };
+
+        const children = Array.from(root.childNodes);
+        for (const child of children) {
+          await renderNode(child);
+        }
+      }
+
+      // Draw page numbers on footer
+      const totalPages = pages.length;
+      pages.forEach((canvasPage, idx) => {
+        const pCtx = canvasPage.getContext('2d')!;
+        pCtx.font = `12px ${fontFamily}`;
+        pCtx.fillStyle = '#64748b';
+        const footerText = `Trang ${idx + 1} / ${totalPages}`;
+        const tw = pCtx.measureText(footerText).width;
+        pCtx.fillText(footerText, Math.round((pageW - tw) / 2), pageH - 22);
+      });
+
+      // Assemble multi-page PDF using pdf-lib
+      // @ts-ignore
+      const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+      const pdfDoc = await PDFDocument.create();
+
+      for (const canvasPage of pages) {
+        const dataUrl = canvasPage.toDataURL('image/jpeg', 0.92);
+        const base64 = dataUrl.split(',')[1];
+        const binaryStr = atob(base64);
+        const imgBytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          imgBytes[i] = binaryStr.charCodeAt(i);
+        }
+        const jpgImage = await pdfDoc.embedJpg(imgBytes);
+        const page = pdfDoc.addPage([pdfW, pdfH]);
+        page.drawImage(jpgImage, {
+          x: 0,
+          y: 0,
+          width: pdfW,
+          height: pdfH
+        });
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const baseName =
+        officeToPdfFile.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[<>:"/\\|?*]/g, '_')
+          .trim() || 'Tai_lieu';
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      alert(`✅ Đã chuyển đổi "${officeToPdfFile.name}" sang PDF (${totalPages} trang) và tải về thành công!`);
     } catch (error: any) {
       console.error('Office to PDF Error:', error);
       alert(`Lỗi khi chuyển sang PDF: ${error.message || 'Không xác định'}`);
