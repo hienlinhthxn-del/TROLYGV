@@ -1867,37 +1867,195 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
   };
 
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+
   const handlePlayWithVoiceover = () => {
     if (!result || !topic) return;
 
     if (isPlaying) {
-      window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
       setIsPlaying(false);
       return;
     }
 
-    // Dừng mọi giọng nói đang phát
-    window.speechSynthesis.cancel();
-    setIsPlaying(true);
-
-    const utterance = new SpeechSynthesisUtterance(topic);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.9;
-
-    const voices = window.speechSynthesis.getVoices();
-    const viVoices = voices.filter(v => v.lang.includes('vi'));
-    if (viVoices.length > 0) {
-      // Cố gắng tìm một giọng nữ chuẩn
-      utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google')) || viVoices[0];
+    if (audioUrl && audioRef.current) {
+      const isChildVoice = voiceName === 'Boy' || voiceName === 'Girl';
+      const isMp3Fallback = audioUrl.startsWith('data:audio/mpeg');
+      if (isChildVoice && isMp3Fallback) {
+        (audioRef.current as any).preservesPitch = false;
+        (audioRef.current as any).mozPreservesPitch = false;
+        (audioRef.current as any).webkitPreservesPitch = false;
+        audioRef.current.playbackRate = voiceName === 'Girl' ? 1.24 : 1.18;
+      } else {
+        (audioRef.current as any).preservesPitch = true;
+        audioRef.current.playbackRate = 1.0;
+      }
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(() => {
+        setIsPlaying(false);
+      });
+      return;
     }
 
-    utterance.onend = () => {
-      setIsPlaying(false);
-    };
-    utterance.onerror = () => {
-      setIsPlaying(false);
-    };
-    window.speechSynthesis.speak(utterance);
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(true);
+
+      const utterance = new SpeechSynthesisUtterance(topic);
+      utterance.lang = 'vi-VN';
+      if (voiceName === 'Boy') {
+        utterance.pitch = 1.45;
+        utterance.rate = 1.02;
+      } else if (voiceName === 'Girl') {
+        utterance.pitch = 1.65;
+        utterance.rate = 1.05;
+      } else if (voiceName === 'Kore') {
+        utterance.pitch = 0.85;
+        utterance.rate = 0.92;
+      } else {
+        utterance.pitch = 1.05;
+        utterance.rate = 0.92;
+      }
+
+      const voices = window.speechSynthesis.getVoices();
+      const viVoices = voices.filter(v => v.lang.includes('vi'));
+      if (viVoices.length > 0) {
+        if (voiceName === 'Kore' || voiceName === 'Boy') {
+          utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('nam') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('minh') || v.name.toLowerCase().includes('khang')) || viVoices[0];
+        } else {
+          utterance.voice = viVoices.find(v => v.name.toLowerCase().includes('hoai') || v.name.toLowerCase().includes('my') || v.name.toLowerCase().includes('nu') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('thao') || v.name.toLowerCase().includes('linh')) || viVoices[0];
+        }
+      }
+
+      utterance.onend = () => {
+        setIsPlaying(false);
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleDownloadVideoWebm = async () => {
+    if (!result || isRecordingVideo) return;
+    setIsRecordingVideo(true);
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Không thể tải hình ảnh nền để xuất video.'));
+        img.src = result;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || typeof (canvas as any).captureStream !== 'function' || typeof MediaRecorder === 'undefined') {
+        // Fallback: tải ảnh nền nếu trình duyệt không hỗ trợ MediaRecorder
+        const link = document.createElement('a');
+        link.href = result;
+        link.download = `Video_Scene_${Date.now()}.png`;
+        link.click();
+        return;
+      }
+
+      const stream: MediaStream = (canvas as any).captureStream(30);
+      const mimeTypes = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+        'video/mp4'
+      ];
+      const supportedMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+      const recorder = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const donePromise = new Promise<Blob>((resolve) => {
+        recorder.onstop = () => {
+          resolve(new Blob(chunks, { type: supportedMime || 'video/webm' }));
+        };
+      });
+
+      recorder.start();
+      const durationMs = 6000;
+      const fps = 30;
+      const totalFrames = Math.round((durationMs / 1000) * fps);
+
+      // Tách phụ đề thành các dòng gọn gàng
+      ctx.font = 'bold 28px "Be Vietnam Pro", Arial, sans-serif';
+      const words = (topic || '').trim().split(/\s+/);
+      const lines: string[] = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (ctx.measureText(test).width > 1080) {
+          if (cur) lines.push(cur);
+          cur = w;
+        } else {
+          cur = test;
+        }
+      }
+      if (cur) lines.push(cur);
+      const subtitleLines = lines.slice(0, 3);
+
+      for (let f = 0; f <= totalFrames; f++) {
+        const progress = f / totalFrames;
+        const scale = 1 + progress * 0.16; // Ken Burns zoom
+        const drawW = 1280 * scale;
+        const drawH = 720 * scale;
+        const offsetX = (1280 - drawW) / 2;
+        const offsetY = (720 - drawH) / 2;
+
+        ctx.clearRect(0, 0, 1280, 720);
+        ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+
+        if (subtitleLines.length > 0) {
+          const boxH = subtitleLines.length * 40 + 28;
+          const boxY = 720 - boxH - 28;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+          ctx.fillRect(60, boxY, 1160, boxH);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 28px "Be Vietnam Pro", Arial, sans-serif';
+          ctx.textAlign = 'center';
+          subtitleLines.forEach((line, idx) => {
+            ctx.fillText(line, 640, boxY + 42 + idx * 38);
+          });
+        }
+
+        await new Promise(r => setTimeout(r, 1000 / fps));
+      }
+
+      recorder.stop();
+      const videoBlob = await donePromise;
+      const ext = (supportedMime && supportedMime.includes('mp4')) ? 'mp4' : 'webm';
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Video_AI_${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e: any) {
+      console.error('Export video error:', e);
+      alert('Không thể xuất file video: ' + (e.message || 'Lỗi không xác định'));
+    } finally {
+      setIsRecordingVideo(false);
+    }
   };
 
   const generateVideo = async () => {
@@ -1908,27 +2066,36 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     setIsProcessing(true);
     setResult(null);
     setAudioUrl(null);
+    setIsPlaying(false);
 
-    let optimizedPrompt = topic;
+    let optimizedPrompt = `${topic}, ${videoStyle}, cute cartoon animation for kids`;
 
-    // Bước 1: Dịch (Có thể lỗi Key, nhưng không nên chặn quy trình)
+    // Bước 1: Dịch sang prompt tiếng Anh ngắn gọn (nếu AI rảnh, không chặn nếu lỗi)
     try {
-      const translationPrompt = `Convert this Vietnamese educational script into a descriptive English video prompt.Style: ${videoStyle}, short animation, simple, for kids, educational.Script: "${topic}"`;
+      const translationPrompt = `Convert this Vietnamese educational script into a short 25-word English visual scene description. Style: ${videoStyle}, cute cartoon animation for kids, educational. Script: "${topic}"`;
       const translation = await geminiService.generateText(translationPrompt);
-      optimizedPrompt = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
+      const cleaned = translation.replace(/^(Prompt:|Translation:|Description:)/i, '').replace(/["']/g, '').trim();
+      if (cleaned) optimizedPrompt = cleaned;
     } catch (err: any) {
       console.warn("Translation failed, using original topic. Error:", err);
-      // Nếu lỗi do hết Key, thông báo nhẹ nhưng vẫn tiếp tục
-      if (err.message && (err.message.includes("429") || err.message.includes("quota"))) {
-        // Không làm gì cả, silent fallback
-      }
-      optimizedPrompt = `${topic}, ${videoStyle}, animation for kids`; // Fallback
     }
 
-    // Bước 2: Tạo video (Quan trọng)
+    // Bước 2: Tạo cảnh video + tạo luôn giọng đọc thuyết minh AI song song
     try {
-      const videoUrl = await geminiService.generateVideo(optimizedPrompt);
-      setResult(videoUrl);
+      const [videoRes, speechRes] = await Promise.allSettled([
+        geminiService.generateVideo(optimizedPrompt, topic, videoStyle),
+        geminiService.generateSpeech(topic, voiceName)
+      ]);
+
+      if (videoRes.status === 'fulfilled' && videoRes.value) {
+        setResult(videoRes.value);
+      } else {
+        throw new Error(videoRes.status === 'rejected' ? videoRes.reason?.message : 'Không thể tạo cảnh video');
+      }
+
+      if (speechRes.status === 'fulfilled' && speechRes.value) {
+        setAudioUrl(speechRes.value);
+      }
     } catch (error: any) {
       console.error("Video Gen Error:", error);
       alert(`⚠️ Không thể tạo video: ${error.message || "Lỗi kết nối"} `);
@@ -3685,9 +3852,11 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                 </div>
               )}
 
-              {activeTab === 'tts' && (
+              {(activeTab === 'tts' || activeTab === 'video') && (
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Giọng đọc</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    {activeTab === 'video' ? 'Giọng thuyết minh Video' : 'Giọng đọc'}
+                  </label>
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <button
                       onClick={() => { setVoiceName('Kore'); setAudioUrl(null); setIsPlaying(false); }}
@@ -3901,12 +4070,25 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                     </div>
                   ) : activeTab === 'video' ? (
                     <div className="flex flex-col items-center">
-                      <div className="relative group w-full max-w-lg aspect-video bg-black rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
+                      <audio
+                        ref={audioRef}
+                        src={audioUrl || ''}
+                        onEnded={() => setIsPlaying(false)}
+                        onPause={() => setIsPlaying(false)}
+                        onPlay={() => setIsPlaying(true)}
+                        className="hidden"
+                      />
+                      <div className="relative group w-full max-w-2xl aspect-video bg-black rounded-[28px] sm:rounded-[32px] shadow-2xl border-4 border-white overflow-hidden">
                         <img
                           src={result}
                           alt="Video Scene"
-                          className={`w-full h-full object-cover transition-transform duration-[20s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
+                          className={`w-full h-full object-cover transition-transform duration-[15s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
                         />
+                        {topic && (
+                          <div className="absolute bottom-3 left-3 right-3 bg-slate-900/75 backdrop-blur-sm text-white px-4 py-2.5 rounded-2xl text-center text-xs sm:text-sm font-bold leading-snug shadow-lg pointer-events-none line-clamp-2">
+                            {topic}
+                          </div>
+                        )}
                         {!isPlaying && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
                             <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm text-indigo-600 pl-1">
@@ -3915,16 +4097,32 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                           </div>
                         )}
                       </div>
-                      <div className="mt-8 flex flex-col items-center space-y-3">
-                        <div className="flex space-x-3">
-                          <button onClick={handlePlayWithVoiceover} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
+                      <div className="mt-6 flex flex-col items-center space-y-3 w-full">
+                        <div className="flex flex-wrap justify-center gap-2.5">
+                          <button onClick={handlePlayWithVoiceover} className={`px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isPlaying ? 'bg-rose-500 text-white shadow-rose-100' : 'bg-purple-600 text-white shadow-purple-100 hover:bg-purple-700'}`}>
                             <i className={`fas ${isPlaying ? 'fa-stop' : 'fa-play'} mr-2`}></i>{isPlaying ? 'Dừng phát' : 'Phát Video AI'}
                           </button>
-                          <a href={result} download="Video_Scene.png" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
-                            <i className="fas fa-download mr-2"></i>Tải Ảnh nền
+                          <button
+                            onClick={handleDownloadVideoWebm}
+                            disabled={isRecordingVideo}
+                            className="px-6 py-3.5 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 shadow-xl shadow-emerald-100 active:scale-95 transition-all flex items-center disabled:opacity-50"
+                          >
+                            <i className={`fas ${isRecordingVideo ? 'fa-spinner fa-spin' : 'fa-film'} mr-2`}></i>
+                            {isRecordingVideo ? 'Đang xuất Video...' : 'Tải Video (.WEBM)'}
+                          </button>
+                          <a href={result} download="Video_Scene.png" className="px-6 py-3.5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center">
+                            <i className="fas fa-download mr-2"></i>Tải Ảnh nền (.PNG)
                           </a>
+                          {audioUrl && (
+                            <button
+                              onClick={handleDownloadAudio}
+                              className="px-6 py-3.5 bg-sky-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-xl shadow-sky-100 active:scale-95 transition-all flex items-center"
+                            >
+                              <i className="fas fa-volume-high mr-2"></i>Tải Thuyết minh
+                            </button>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium">Video được tạo từ công nghệ biến ảnh tĩnh thành động (Ken Burns Effect).</p>
+                        <p className="text-[10px] text-slate-400 font-medium text-center">Video hoạt họa kết hợp chuyển động Ken Burns, phụ đề tiếng Việt và giọng đọc thuyết minh AI.</p>
                       </div>
                     </div>
                   ) : activeTab === 'tts' ? (

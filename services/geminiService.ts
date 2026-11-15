@@ -1168,24 +1168,172 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     console.log('[Image] Toàn bộ fetch thất bại. Trả về URL trực tiếp làm phương án cuối.');
     return endpoints[0]; // Trả về URL Flux trực tiếp
   }
-  public async generateVideo(prompt: string): Promise<string> {
-    const enhancedPrompt = `${prompt}, cinematic, animation style, for kids, educational`;
+  private renderFallbackSceneDataUrl(titleText: string, styleName: string = 'Hoạt hình'): string {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
 
-    for (let i = 0; i < 3; i++) {
-      const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?nologo=true&seed=${seed}&width=1280&height=720`;
+    // Nền bầu trời chuyển sắc theo phong cách
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, 720);
+    if (styleName.includes('màu nước')) {
+      skyGrad.addColorStop(0, '#bae6fd');
+      skyGrad.addColorStop(0.65, '#fef3c7');
+      skyGrad.addColorStop(1, '#dcfce7');
+    } else if (styleName.includes('3D')) {
+      skyGrad.addColorStop(0, '#1e3a8a');
+      skyGrad.addColorStop(0.6, '#3b82f6');
+      skyGrad.addColorStop(1, '#93c5fd');
+    } else {
+      skyGrad.addColorStop(0, '#38bdf8');
+      skyGrad.addColorStop(0.65, '#e0f2fe');
+      skyGrad.addColorStop(1, '#fef9c3');
+    }
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, 1280, 720);
 
+    // Mặt trời
+    const sunGrad = ctx.createRadialGradient(1080, 140, 20, 1080, 140, 110);
+    sunGrad.addColorStop(0, '#fde047');
+    sunGrad.addColorStop(0.6, '#facc15');
+    sunGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+    ctx.fillStyle = sunGrad;
+    ctx.beginPath();
+    ctx.arc(1080, 140, 110, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Đám mây
+    const drawCloud = (cx: number, cy: number, scale: number) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, 0, Math.PI * 2);
+      ctx.arc(35, -10, 50, 0, Math.PI * 2);
+      ctx.arc(75, 0, 40, 0, Math.PI * 2);
+      ctx.arc(35, 15, 45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    drawCloud(180, 130, 1.1);
+    drawCloud(520, 95, 0.85);
+    drawCloud(820, 160, 0.95);
+
+    // Đồi cỏ xanh phía xa và gần
+    ctx.fillStyle = '#86efac';
+    ctx.beginPath();
+    ctx.moveTo(0, 540);
+    ctx.quadraticCurveTo(340, 430, 720, 520);
+    ctx.quadraticCurveTo(1040, 590, 1280, 490);
+    ctx.lineTo(1280, 720);
+    ctx.lineTo(0, 720);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath();
+    ctx.moveTo(0, 590);
+    ctx.quadraticCurveTo(420, 500, 860, 580);
+    ctx.quadraticCurveTo(1100, 620, 1280, 560);
+    ctx.lineTo(1280, 720);
+    ctx.lineTo(0, 720);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cây xanh trang trí
+    const drawTree = (tx: number, ty: number, s: number) => {
+      ctx.save();
+      ctx.translate(tx, ty);
+      ctx.scale(s, s);
+      ctx.fillStyle = '#854d0e';
+      ctx.fillRect(-12, 0, 24, 70);
+      ctx.fillStyle = '#16a34a';
+      ctx.beginPath();
+      ctx.arc(0, -25, 48, 0, Math.PI * 2);
+      ctx.arc(-32, 5, 38, 0, Math.PI * 2);
+      ctx.arc(32, 5, 38, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    drawTree(150, 510, 1.15);
+    drawTree(1130, 485, 1.25);
+    drawTree(1020, 535, 0.85);
+
+    // Khung bảng bài học ở trung tâm
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 8;
+    const bx = 220, by = 180, bw = 840, bh = 320, br = 36;
+    ctx.beginPath();
+    ctx.moveTo(bx + br, by);
+    ctx.lineTo(bx + bw - br, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+    ctx.lineTo(bx + bw, by + bh - br);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+    ctx.lineTo(bx + br, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+    ctx.lineTo(bx, by + br);
+    ctx.quadraticCurveTo(bx, by, bx + br, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#4f46e5';
+    ctx.font = 'bold 24px "Be Vietnam Pro", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎬 BÀI GIẢNG MINH HỌA AI', 640, 240);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 34px "Be Vietnam Pro", Arial, sans-serif';
+    const words = (titleText || 'Bài học sáng tạo').trim().split(/\s+/);
+    const lines: string[] = [];
+    let currentLine = '';
+    for (const w of words) {
+      const test = currentLine ? `${currentLine} ${w}` : w;
+      if (ctx.measureText(test).width > 740) {
+        if (currentLine) lines.push(currentLine);
+        currentLine = w;
+      } else {
+        currentLine = test;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    const displayLines = lines.slice(0, 4);
+    const startY = 315 - ((displayLines.length - 1) * 22);
+    displayLines.forEach((line, idx) => {
+      ctx.fillText(line, 640, startY + idx * 48);
+    });
+    ctx.restore();
+
+    return canvas.toDataURL('image/png');
+  }
+
+  public async generateVideo(prompt: string, originalTopic?: string, styleName?: string): Promise<string> {
+    const shortPrompt = prompt.length > 380 ? prompt.substring(0, 380) : prompt;
+    const enhancedPrompt = `${shortPrompt}, cinematic 16:9, ${styleName || 'animation style'}, cute illustration for kids, educational, vibrant colors`;
+    const seed = Math.floor(Math.random() * 999999);
+
+    const endpoints = [
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=960&height=540&nologo=true&seed=${seed}`,
+      `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?width=960&height=540&model=flux&nologo=true&seed=${seed}`,
+      `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?width=960&height=540&model=turbo&nologo=true&seed=${seed}`
+    ];
+
+    // 1. Thử tải ảnh 16:9 từ các nguồn Pollinations với timeout ngắn (12s)
+    for (let i = 0; i < endpoints.length; i++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        const response = await fetch(url, { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const response = await fetch(endpoints[i], { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
           const blob = await response.blob();
-          if (blob.type.startsWith('video/') || blob.type.startsWith('image/')) {
-            return new Promise((resolve, reject) => {
+          if (blob.size > 1000 && (blob.type.startsWith('video/') || blob.type.startsWith('image/'))) {
+            return await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();
               reader.onloadend = () => resolve(reader.result as string);
               reader.onerror = reject;
@@ -1193,20 +1341,56 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
             });
           }
         }
-        console.warn(`Video gen attempt ${i + 1} failed with status: ${response.status}`);
-        if (i === 2) {
-          throw new Error(`Máy chủ tạo video đang quá tải (Lỗi ${response.status}). Thầy/Cô vui lòng thử lại sau giây lát.`);
-        }
       } catch (error: any) {
-        if (error.name === 'AbortError') console.warn("Video generation timeout reached.");
-        console.warn(`Lỗi tạo video lần ${i + 1}:`, error);
-        if (i === 2) {
-          throw new Error("Không thể kết nối đến dịch vụ tạo video. Vui lòng kiểm tra kết nối mạng.");
-        }
+        console.warn(`[Video] Nguồn ${i + 1} lỗi hoặc timeout:`, error?.message || error);
       }
-      await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error("Không thể tạo video sau nhiều lần thử. Dịch vụ có thể đang bảo trì.");
+
+    // 2. Nếu nguồn ảnh bên ngoài bị chặn/quá tải, dùng Gemini vẽ tranh minh họa SVG 16:9 chất lượng cao
+    try {
+      const svgPrompt = `Hãy tạo một bức tranh minh họa định dạng SVG (tỉ lệ 16:9, viewBox="0 0 1280 720", width="1280", height="720") thật đẹp, sinh động, nhiều màu sắc tươi sáng dành cho học sinh tiểu học để minh họa cho kịch bản video: "${originalTopic || prompt}".
+      Phong cách: ${styleName || 'Hoạt hình thiếu nhi'}.
+      YÊU CẦU BẮT BUỘC:
+      - Chỉ trả về duy nhất mã <svg ...>...</svg>, không có markdown, không giải thích.
+      - Sử dụng màu chuyển sắc (linearGradient/radialGradient), vẽ bối cảnh bầu trời, thiên nhiên/lớp học, nhân vật hoặc vật thể chính rõ ràng, dễ thương.`;
+      const svgRes = await this.generateText(svgPrompt);
+      const svgMatch = svgRes.match(/<svg[\s\S]*?<\/svg>/i);
+      if (svgMatch) {
+        const svgString = svgMatch[0];
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        const pngDataUrl = await new Promise<string>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1280;
+            canvas.height = 720;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              URL.revokeObjectURL(svgUrl);
+              reject(new Error('No canvas context'));
+              return;
+            }
+            ctx.fillStyle = '#e0f2fe';
+            ctx.fillRect(0, 0, 1280, 720);
+            ctx.drawImage(img, 0, 0, 1280, 720);
+            URL.revokeObjectURL(svgUrl);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.onerror = (err) => {
+            URL.revokeObjectURL(svgUrl);
+            reject(err);
+          };
+          img.src = svgUrl;
+        });
+        if (pngDataUrl) return pngDataUrl;
+      }
+    } catch (svgErr) {
+      console.warn('[Video] Tạo SVG minh họa dự phòng không thành công:', svgErr);
+    }
+
+    // 3. Fallback an toàn tuyệt đối bằng Canvas 2D HD (không bao giờ lỗi mạng)
+    return this.renderFallbackSceneDataUrl(originalTopic || prompt, styleName);
   }
 
   public async generateSuggestions(history: any[], personaName: string) {
