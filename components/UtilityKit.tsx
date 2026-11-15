@@ -1942,24 +1942,58 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     setIsPlaying(false);
 
     try {
-      // Kiểm tra tính khả dụng của SpeechSynthesis
-      if ('speechSynthesis' in window) {
+      const url = await geminiService.generateSpeech(topic, voiceName);
+      if (url) {
+        setAudioUrl(url);
+        setResult("Đã tạo xong giọng đọc AI! Thầy Cô nhấn Phát để nghe hoặc Tải tệp về máy.");
+      } else if ('speechSynthesis' in window) {
         setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
       } else {
-        const url = await geminiService.generateSpeech(topic, voiceName);
-        if (url) {
-          setAudioUrl(url);
-          setResult("Đã tạo xong giọng đọc từ máy chủ. Thầy Cô nhấn Phát để nghe.");
-        } else {
-          alert("Trình duyệt và máy chủ hiện không hỗ trợ giọng nói.");
-        }
+        alert("Trình duyệt và máy chủ hiện không hỗ trợ giọng nói.");
       }
     } catch (error: any) {
       console.error("TTS error:", error);
-      alert("Lỗi khi chuẩn bị giọng đọc: " + (error.message || "Lỗi không xác định"));
+      if ('speechSynthesis' in window) {
+        setResult("Hệ thống đã sẵn sàng. Thầy Cô nhấn Phát để bắt đầu.");
+      } else {
+        alert("Lỗi khi chuẩn bị giọng đọc: " + (error.message || "Lỗi không xác định"));
+      }
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleDownloadAudio = async () => {
+    if (!topic.trim()) return;
+    let targetUrl = audioUrl;
+
+    if (!targetUrl) {
+      setIsProcessing(true);
+      try {
+        targetUrl = await geminiService.generateSpeech(topic, voiceName);
+        if (targetUrl) {
+          setAudioUrl(targetUrl);
+        }
+      } catch (e) {
+        console.error("Download TTS error:", e);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+
+    if (!targetUrl) {
+      alert("⚠️ Không thể tạo tệp âm thanh để tải xuống. Vui lòng kiểm tra kết nối mạng hoặc cài đặt API Key.");
+      return;
+    }
+
+    const ext = targetUrl.includes('audio/wav') ? 'wav' : 'mp3';
+    const voiceLabel = voiceName === 'Kore' ? 'Giong_Nam' : 'Giong_Nu';
+    const link = document.createElement('a');
+    link.href = targetUrl;
+    link.download = `Giong_doc_AI_${voiceLabel}_${Date.now()}.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleSaveLesson = () => {
@@ -3168,7 +3202,14 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                         <p className="text-lg font-bold text-slate-700">{result}</p>
                         {(audioUrl || result) && (
                           <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 shadow-inner w-full max-w-sm">
-                            <audio ref={audioRef} src={audioUrl || ''} className="hidden" />
+                            <audio
+                              ref={audioRef}
+                              src={audioUrl || ''}
+                              onEnded={() => setIsPlaying(false)}
+                              onPause={() => setIsPlaying(false)}
+                              onPlay={() => setIsPlaying(true)}
+                              className="hidden"
+                            />
                             <div className="flex items-center justify-center space-x-4">
                               <button
                                 onClick={() => {
@@ -3199,6 +3240,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   }
                                 }}
                                 className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                title="Phát giọng đọc"
                               >
                                 <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text-xl ${!isPlaying && 'ml-1'}`}></i>
                               </button>
@@ -3211,13 +3253,31 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   setIsPlaying(false);
                                 }}
                                 className="w-12 h-12 bg-white text-slate-400 border border-slate-200 rounded-full flex items-center justify-center hover:text-indigo-600 transition-all"
+                                title="Tạm dừng"
                               >
                                 <i className="fas fa-pause"></i>
                               </button>
+                              <button
+                                onClick={handleDownloadAudio}
+                                className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center shadow-md hover:bg-emerald-700 active:scale-95 transition-all"
+                                title="Tải tệp âm thanh về máy"
+                              >
+                                <i className="fas fa-download"></i>
+                              </button>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
-                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'Máy chủ' : 'Hệ thống'} `}
+                              {isPlaying ? 'Đang phát giọng đọc...' : `Giọng ${voiceName === 'Kore' ? 'Nam' : 'Nữ'} • ${audioUrl ? 'AI Audio' : 'Hệ thống'}`}
                             </p>
+                            <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-center">
+                              <button
+                                onClick={handleDownloadAudio}
+                                disabled={isProcessing}
+                                className="w-full py-3 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                              >
+                                <i className="fas fa-download"></i>
+                                <span>Tải tệp âm thanh về máy ({audioUrl?.includes('audio/wav') ? '.WAV' : '.MP3'})</span>
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>

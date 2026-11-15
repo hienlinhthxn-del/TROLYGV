@@ -869,8 +869,111 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
 
   // --- HÌNH ẢNH & GỢI Ý ---
 
+  private pcmBase64ToWavDataUrl(base64Pcm: string, sampleRate: number = 24000): string {
+    const binaryString = atob(base64Pcm);
+    const dataSize = binaryString.length;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // PCM chunk size
+    view.setUint16(20, 1, true);  // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < dataSize; i++) {
+      bytes[44 + i] = binaryString.charCodeAt(i);
+    }
+
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+    }
+    return `data:audio/wav;base64,${btoa(binary)}`;
+  }
+
   public async generateSpeech(text: string, voice: string): Promise<string | null> {
-    // Hiện tại ưu tiên dùng Web Speech API của trình duyệt
+    this.refreshKeys();
+    const geminiVoice = voice === 'Kore' ? 'Orus' : 'Aoede'; // Kore = Giọng Nam (Orus), Puck = Giọng Nữ (Aoede)
+
+    // 1. Thử tạo giọng đọc qua Gemini 2.5 Flash TTS nếu có API Key cá nhân
+    for (const key of this.allApiKeys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text }] }],
+              generationConfig: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: geminiVoice,
+                    },
+                  },
+                },
+              },
+            }),
+          }
+        );
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const inlineData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+          if (inlineData?.data) {
+            const mimeType: string = inlineData.mimeType || '';
+            if (mimeType.includes('pcm') || mimeType.includes('L16')) {
+              return this.pcmBase64ToWavDataUrl(inlineData.data, 24000);
+            }
+            return `data:${mimeType || 'audio/wav'};base64,${inlineData.data}`;
+          }
+        }
+      } catch (e) {
+        console.warn('[TTS] Gemini client TTS failed, trying server fallback...', e);
+      }
+    }
+
+    // 2. Fallback qua Serverless API /api/tts (trả về file .wav hoặc .mp3 tiếng Việt)
+    try {
+      const serverRes = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice }),
+      });
+      if (serverRes.ok) {
+        const data = await serverRes.json();
+        if (data?.audioUrl) {
+          return data.audioUrl;
+        }
+      }
+    } catch (e) {
+      console.warn('[TTS] Server /api/tts failed:', e);
+    }
+
     return null;
   }
 
