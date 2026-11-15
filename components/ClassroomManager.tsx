@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Classroom, Student, Grade, DailyLogEntry, Attachment, PeriodicEvaluation, ExamQuestion } from '../types';
+import { DEFAULT_STUDENTS } from '../constants';
 import { geminiService, FilePart } from '../services/geminiService';
 
 interface ClassroomManagerProps {
@@ -61,9 +62,10 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [activeTab, setActiveTab] = useState<string>('students');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentCode, setNewStudentCode] = useState('');
+  const [newStudentDob, setNewStudentDob] = useState('');
   const [newStudentGender, setNewStudentGender] = useState<'Nam' | 'Nữ'>('Nam');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [studentSortBy, setStudentSortBy] = useState<'name' | 'code'>('name');
+  const [studentSortBy, setStudentSortBy] = useState<'name' | 'code'>('code');
   const [isImporting, setIsImporting] = useState(false);
   const [isExportingSMAS, setIsExportingSMAS] = useState(false);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
@@ -312,9 +314,13 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     }
     result.sort((a, b) => {
       if (studentSortBy === 'name') {
+        const givenA = a.name.trim().split(/\s+/).pop() || a.name;
+        const givenB = b.name.trim().split(/\s+/).pop() || b.name;
+        const cmp = givenA.localeCompare(givenB, 'vi');
+        if (cmp !== 0) return cmp;
         return a.name.localeCompare(b.name, 'vi');
       }
-      return a.code.localeCompare(b.code);
+      return a.code.localeCompare(b.code, undefined, { numeric: true });
     });
     return result;
   }, [classroom.students, studentSearchQuery, studentSortBy]);
@@ -857,11 +863,13 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
       id: Date.now().toString(),
       name: newStudentName,
       code,
-      gender: newStudentGender
+      gender: newStudentGender,
+      ...(newStudentDob.trim() ? { dob: newStudentDob.trim() } : {})
     };
     onUpdate({ ...classroom, students: [...classroom.students, newStudent] });
     setNewStudentName('');
     setNewStudentCode('');
+    setNewStudentDob('');
     setNewStudentGender('Nam');
   };
 
@@ -2402,10 +2410,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   />
                   <input
                     type="text"
-                    placeholder="Mã số (Để trống để tự tạo)"
+                    placeholder="Ngày sinh (VD: 09/07/2020)"
+                    value={newStudentDob}
+                    onChange={e => setNewStudentDob(e.target.value)}
+                    className="w-full sm:w-44 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Mã số (Tự tạo nếu trống)"
                     value={newStudentCode}
                     onChange={e => setNewStudentCode(e.target.value)}
-                    className="w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                    className="w-full sm:w-40 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                   />
                   <button onClick={addStudent} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all active:scale-95">Thêm</button>
                 </div>
@@ -2427,8 +2442,17 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                     <i className="fas fa-paste mr-2"></i>Dán Text
                   </button>
                 </div>
-                <div className="flex items-center justify-between px-1">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase">Định dạng: Mã HS, Tên, Giới tính</p>
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Khôi phục danh sách 28 học sinh mặc định của lớp?')) {
+                        onUpdate({ ...classroom, students: DEFAULT_STUDENTS });
+                      }
+                    }}
+                    className="text-[8px] text-emerald-600 hover:text-emerald-700 font-black uppercase underline decoration-dotted underline-offset-2"
+                  >
+                    Khôi phục DS 28 HS
+                  </button>
                   <button onClick={handleDownloadSample} className="text-[8px] text-indigo-500 hover:text-indigo-700 font-black uppercase underline decoration-dotted underline-offset-2">Tải file mẫu</button>
                 </div>
               </div>
@@ -2496,10 +2520,12 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                       </div>
                       <div>
                         <p className="text-[13px] font-black text-slate-800 leading-tight">{s.name}</p>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{s.code}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                          {s.code}{s.dob ? ` • NS: ${s.dob}` : ''}
+                        </p>
                       </div>
                     </div>
-                    <button onClick={() => removeStudent(s.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all rounded-xl hover:bg-rose-50">
+                    <button onClick={() => removeStudent(s.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all rounded-xl hover:bg-rose-50">
                       <i className="fas fa-trash-alt text-xs"></i>
                     </button>
                   </div>

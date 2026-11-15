@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { Message, TeacherPersona, GroundingSource, Classroom, CloudDocument, Attachment, ViewType, ExamQuestion, Assignment } from './types';
-import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS } from './constants';
+import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS, DEFAULT_STUDENTS } from './constants';
 import { geminiService, FilePart } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
 import ApiKeySettings from './components/ApiKeySettings';
@@ -65,12 +65,8 @@ const App: React.FC = () => {
 
   const [classroom, setClassroom] = useState<Classroom>({
     id: 'class-1',
-    name: 'Lớp 10A1',
-    students: [
-      { id: '1', name: 'Nguyễn Văn An', code: 'HS001', gender: 'Nam' },
-      { id: '2', name: 'Trần Thị Bình', code: 'HS002', gender: 'Nữ' },
-      { id: '3', name: 'Lê Hoàng Long', code: 'HS003', gender: 'Nam' }
-    ],
+    name: 'Lớp 1',
+    students: DEFAULT_STUDENTS,
     assignments: [],
     attendance: []
   });
@@ -448,8 +444,34 @@ const App: React.FC = () => {
     const savedHistory = localStorage.getItem('edu_search_history');
     if (savedHistory) setSearchHistory(JSON.parse(savedHistory));
 
+    const ROSTER_VERSION = '2026_28hs_v1';
     const savedClass = localStorage.getItem('edu_classroom_data');
-    if (savedClass) setClassroom(JSON.parse(savedClass));
+    const savedRosterVersion = localStorage.getItem('edu_roster_version');
+    if (savedClass) {
+      try {
+        const parsedClass = JSON.parse(savedClass);
+        const isOldSample =
+          !parsedClass.students ||
+          parsedClass.students.length === 0 ||
+          parsedClass.students.some((s: any) => s.name === 'Nguyễn Văn An' && s.code === 'HS001');
+        if (savedRosterVersion !== ROSTER_VERSION || isOldSample) {
+          const updatedClass: Classroom = {
+            ...parsedClass,
+            name: (!parsedClass.name || parsedClass.name === 'Lớp 10A1') ? 'Lớp 1' : parsedClass.name,
+            students: DEFAULT_STUDENTS
+          };
+          setClassroom(updatedClass);
+          localStorage.setItem('edu_classroom_data', JSON.stringify(updatedClass));
+          localStorage.setItem('edu_roster_version', ROSTER_VERSION);
+        } else {
+          setClassroom(parsedClass);
+        }
+      } catch {
+        localStorage.setItem('edu_roster_version', ROSTER_VERSION);
+      }
+    } else {
+      localStorage.setItem('edu_roster_version', ROSTER_VERSION);
+    }
 
     const savedWorkspace = localStorage.getItem('edu_workspace_content');
     if (savedWorkspace) setWorkspaceContent(savedWorkspace);

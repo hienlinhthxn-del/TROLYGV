@@ -68,6 +68,7 @@ export interface Student {
   name: string;
   code: string;
   gender: 'Nam' | 'Nữ';
+  dob?: string;
 }
 
 export interface Grade {

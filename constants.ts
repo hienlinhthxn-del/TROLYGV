@@ -1,5 +1,36 @@
 
-import { TeacherPersona } from './types';
+import { TeacherPersona, Student } from './types';
+
+export const DEFAULT_STUDENTS: Student[] = [
+  { id: '1', name: 'Tòng Hoài An', code: 'HS01', gender: 'Nữ', dob: '09/07/2020' },
+  { id: '2', name: 'Lò Huyền Anh', code: 'HS02', gender: 'Nữ', dob: '15/07/2020' },
+  { id: '3', name: 'Nguyễn Hoàng Tú Anh', code: 'HS03', gender: 'Nữ', dob: '23/10/2020' },
+  { id: '4', name: 'Nguyễn Phương Anh', code: 'HS04', gender: 'Nữ', dob: '14/08/2020' },
+  { id: '5', name: 'Mùa Ngọc Bích', code: 'HS05', gender: 'Nữ', dob: '21/09/2020' },
+  { id: '6', name: 'Nguyễn Ngọc Diệp', code: 'HS06', gender: 'Nữ', dob: '28/02/2020' },
+  { id: '7', name: 'Lê Nguyễn Linh Đan', code: 'HS07', gender: 'Nữ', dob: '28/07/2020' },
+  { id: '8', name: 'Nguyễn Hải Đăng', code: 'HS08', gender: 'Nam', dob: '16/10/2020' },
+  { id: '9', name: 'Tô Hải Đăng', code: 'HS09', gender: 'Nam', dob: '08/03/2020' },
+  { id: '10', name: 'Giàng Hương Giang', code: 'HS10', gender: 'Nữ', dob: '11/03/2020' },
+  { id: '11', name: 'Lò Thị Ngọc Hân', code: 'HS11', gender: 'Nữ', dob: '16/01/2020' },
+  { id: '12', name: 'Giàng Ngọc Bảo Hân', code: 'HS12', gender: 'Nữ', dob: '27/04/2020' },
+  { id: '13', name: 'Nguyễn Văn Khải', code: 'HS13', gender: 'Nam', dob: '24/12/2020' },
+  { id: '14', name: 'Nguyễn Khang', code: 'HS14', gender: 'Nam', dob: '22/09/2020' },
+  { id: '15', name: 'Tòng Minh Khôi', code: 'HS15', gender: 'Nam', dob: '23/05/2020' },
+  { id: '16', name: 'Đặng Anh Khôi', code: 'HS16', gender: 'Nam', dob: '31/10/2020' },
+  { id: '17', name: 'Khoàng Trang Lê', code: 'HS17', gender: 'Nữ', dob: '31/07/2020' },
+  { id: '18', name: 'Đoàn Khánh Linh', code: 'HS18', gender: 'Nữ', dob: '06/06/2020' },
+  { id: '19', name: 'Nguyễn Hoàng Long', code: 'HS19', gender: 'Nam', dob: '14/03/2020' },
+  { id: '20', name: 'Nông Ngọc Khải Minh', code: 'HS20', gender: 'Nam', dob: '25/10/2020' },
+  { id: '21', name: 'Phạm Hải Nam', code: 'HS21', gender: 'Nam', dob: '11/08/2020' },
+  { id: '22', name: 'Tòng Thị Kim Ngân', code: 'HS22', gender: 'Nữ', dob: '07/01/2020' },
+  { id: '23', name: 'Trần Bảo Ngân', code: 'HS23', gender: 'Nữ', dob: '19/11/2020' },
+  { id: '24', name: 'Cao Đăng Phúc', code: 'HS24', gender: 'Nam', dob: '03/02/2020' },
+  { id: '25', name: 'Nguyễn Ngọc Anh Tú', code: 'HS25', gender: 'Nam', dob: '13/07/2020' },
+  { id: '26', name: 'Vừ Chí Thiện', code: 'HS26', gender: 'Nam', dob: '09/04/2020' },
+  { id: '27', name: 'Sùng Minh Thư', code: 'HS27', gender: 'Nữ', dob: '18/09/2020' },
+  { id: '28', name: 'Lò Nhã Uyên', code: 'HS28', gender: 'Nữ', dob: '16/11/2020' }
+];
 
 export const PERSONAS: TeacherPersona[] = [
   {
