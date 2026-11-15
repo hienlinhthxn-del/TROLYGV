@@ -314,6 +314,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                 if (!qImage.trim().startsWith('<svg')) {
                     const imageBuffer = await fetchImageAsArrayBuffer(qImage);
                     if (imageBuffer) {
+                        const imgType = (qImage.includes('image/jpeg') || qImage.includes('image/jpg') || /\.jpe?g($|\?)/i.test(qImage)) ? "jpg" : "png";
                         children.push(new Paragraph({
                             alignment: AlignmentType.CENTER,
                             children: [
@@ -323,7 +324,7 @@ export async function exportWorksheetToDocx(worksheet: any, options?: { skipImag
                                         width: 300,
                                         height: 200,
                                     },
-                                    type: "png"
+                                    type: imgType
                                 })
                             ],
                             spacing: { before: 120, after: 120 }

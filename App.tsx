@@ -352,7 +352,7 @@ const App: React.FC = () => {
 
                   return {
                     id: `share-${Date.now()}-${idx}`,
-                    type: item[0] === 2 ? 'Tự luận' : 'Trắc nghiệm', // 2: Tự luận, 1: Trắc nghiệm
+                    type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận', // 1: Trắc nghiệm, 0 hoặc 2: Tự luận
                     content: item[1] || '',
                     options: options,
                     answer: item[3] || '',
@@ -375,7 +375,7 @@ const App: React.FC = () => {
                   return {
                     ...q,
                     id: q.id || `share-old-${idx}`,
-                    type: q.type || (q[0] === 2 ? 'Tự luận' : 'Trắc nghiệm'),
+                    type: q.type || (q[0] === 1 ? 'Trắc nghiệm' : 'Tự luận'),
                     content: q.content || q[1] || '',
                     options: options,
                     answer: q.answer || q[3] || '',
@@ -790,6 +790,22 @@ const App: React.FC = () => {
 
                 <div className="p-6 bg-white border-t border-slate-100">
                   <div className="relative group max-w-4xl mx-auto">
+                    {pendingAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {pendingAttachments.map((att, idx) => (
+                          <div key={idx} className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100">
+                            <i className={`fas ${att.type === 'image' ? 'fa-image' : 'fa-file-lines'}`}></i>
+                            <span className="truncate max-w-[180px]">{att.name}</span>
+                            <button
+                              onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-indigo-400 hover:text-rose-500 ml-1"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="relative flex items-end bg-slate-50 border-2 border-slate-100 rounded-[28px] p-2 focus-within:border-indigo-400 focus-within:bg-white transition-all">
                       <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-indigo-600"><i className="fas fa-paperclip"></i></button>
                       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
@@ -797,14 +813,20 @@ const App: React.FC = () => {
                         ref={textareaRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
                         placeholder={`Hỏi ${currentPersona.name}...`}
                         className="flex-1 bg-transparent border-none focus:ring-0 py-3 px-2 text-[14px] font-medium text-slate-700 resize-none max-h-[200px]"
                         rows={1}
                       />
                       <button
                         onClick={() => handleSendMessage()}
-                        disabled={isLoading}
-                        className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${input.trim() ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                        disabled={isLoading || (!input.trim() && pendingAttachments.length === 0)}
+                        className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${(input.trim() || pendingAttachments.length > 0) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
                       >
                         <i className={`fas ${isLoading ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'}`}></i>
                       </button>

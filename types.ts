@@ -117,6 +117,8 @@ export interface DailyLog {
 
 export interface PeriodicEvaluation {
   subject?: string;
+  score?: string;
+  feedback?: string;
   competencies?: Record<number, string>;
   qualities?: Record<number, string>;
   compComment?: string;

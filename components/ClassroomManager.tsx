@@ -87,7 +87,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const [selectedPeriodicSubject, setSelectedPeriodicSubject] = useState<string>('Toán');
   const [reviewPasteContent, setReviewPasteContent] = useState('');
   const [reviewAttachments, setReviewAttachments] = useState<Attachment[]>([]);
-  const [reportViewMode, setReportViewMode] = useState<'subjects' | 'competencies'>('competencies');
+  const [reportViewMode, setReportViewMode] = useState<'quiz-creator' | 'reports' | 'subjects' | 'competencies'>('subjects');
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentLogEntries, setCurrentLogEntries] = useState<Record<string, { comment: string; type: 'praise' | 'mistake' }>>({});
   const [notificationTitle, setNotificationTitle] = useState('Thông báo từ Giáo viên Chủ nhiệm');
@@ -127,7 +127,9 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
 
   // Reset active tab when switching sections
   useEffect(() => {
-    setActiveTab(section === 'daily' ? 'students' : 'quiz-creator');
+    if (section === 'daily') {
+      setActiveTab('students');
+    }
   }, [section]);
 
   // Reset detail view when switching tabs
@@ -1895,7 +1897,7 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
           </div>
         )}
 
-        {section === 'periodic' && reportViewMode !== 'quiz-creator' && (
+        {section === 'periodic' && reportViewMode === 'reports' && (
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-100">
@@ -1998,12 +2000,20 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
+        {section === 'periodic' && (reportViewMode === 'subjects' || reportViewMode === 'competencies') && (
+          <div className="space-y-8 animate-in fade-in duration-500">
             <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-lg font-black text-slate-800">Đánh giá Môn học (TT27)</h4>
-                  <p className="text-xs text-slate-400 font-medium">Chọn môn học để nhập điểm hoặc đánh giá mức độ.</p>
+                  <h4 className="text-lg font-black text-slate-800">
+                    {reportViewMode === 'subjects' ? 'Đánh giá Môn học (TT27)' : 'Đánh giá Năng lực & Phẩm chất (TT27)'}
+                  </h4>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {reportViewMode === 'subjects' ? 'Chọn môn học để nhập điểm hoặc đánh giá mức độ.' : 'Đánh giá mức đạt được và nhận xét năng lực, phẩm chất.'}
+                  </p>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Kỳ:</span>
@@ -2018,19 +2028,21 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                   </select>
                 </div>
               </div>
-              <div className="border-b border-slate-100 -mx-8 px-8 pb-4">
-                <div className="flex space-x-2 overflow-x-auto custom-scrollbar pb-2">
-                  {SUBJECTS_LIST.map(subj => (
-                    <button
-                      key={subj}
-                      onClick={() => setSelectedPeriodicSubject(subj)}
-                      className={`px-4 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border ${selectedPeriodicSubject === subj ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                    >
-                      {subj}
-                    </button>
-                  ))}
+              {reportViewMode === 'subjects' && (
+                <div className="border-b border-slate-100 -mx-8 px-8 pb-4">
+                  <div className="flex space-x-2 overflow-x-auto custom-scrollbar pb-2">
+                    {SUBJECTS_LIST.map(subj => (
+                      <button
+                        key={subj}
+                        onClick={() => setSelectedPeriodicSubject(subj)}
+                        className={`px-4 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border ${selectedPeriodicSubject === subj ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        {subj}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="overflow-x-auto">
                 {reportViewMode === 'subjects' ? (

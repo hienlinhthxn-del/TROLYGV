@@ -19,13 +19,12 @@ class GeminiService {
 
   // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found" và "Rate Limit"
   private static readonly MODEL_CANDIDATES = [
-    'gemini-1.5-flash',
+    'gemini-2.5-flash',
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
-    'gemini-1.5-flash-8b',
-    'gemini-2.0-flash-exp',
+    'gemini-2.5-pro',
+    'gemini-1.5-flash',
     'gemini-1.5-pro',
-    'gemini-pro',
   ];
 
   private allApiKeys: string[] = [];
@@ -44,7 +43,7 @@ class GeminiService {
   }
 
   private static supportsJsonResponseMimeType(modelName: string): boolean {
-    return /^(gemini-(2\.0-(flash|flash-lite)|1\.5-(flash|pro)))$/.test(modelName);
+    return /^gemini-(2\.5|2\.0|1\.5)-(flash|pro)/.test(modelName);
   }
 
   private currentVersion: 'v1' | 'v1beta' = 'v1beta';
@@ -90,8 +89,9 @@ class GeminiService {
 
       const singleManualKey = localStorage.getItem('manually_entered_api_key');
       const defaultKey = localStorage.getItem('google_api_key');
+      const envKey = typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_GEMINI_API_KEY : undefined;
 
-      const combined = [singleManualKey, defaultKey].filter(Boolean) as string[];
+      const combined = [singleManualKey, defaultKey, envKey].filter(Boolean) as string[];
       this.allApiKeys = [...new Set(combined)];
     } catch (e) {
       this.allApiKeys = [];
@@ -269,6 +269,13 @@ class GeminiService {
 
   public getApiKeySource(): string {
     if (typeof window === 'undefined') return 'Server';
+    const manualKeysStr = localStorage.getItem('manually_entered_api_keys');
+    if (manualKeysStr) {
+      try {
+        const arr = JSON.parse(manualKeysStr);
+        if (Array.isArray(arr) && arr.length > 0) return `Manual (${arr.length})`;
+      } catch {}
+    }
     if (localStorage.getItem('manually_entered_api_key')) return 'Manual';
     if (localStorage.getItem('google_api_key')) return 'Legacy';
     return 'Env/Default';
@@ -281,26 +288,31 @@ class GeminiService {
     this.rateLimitSwitchCount = 0;
   }
 
-  public async generateText(prompt: string): Promise<string> {
+  public async generateText(prompt: string, fileParts: FilePart[] = []): Promise<string> {
     this.resetRetryCounters();
-    return this._generateText(prompt);
+    return this._generateText(prompt, fileParts);
   }
 
-  private async _generateText(prompt: string): Promise<string> {
+  private async _generateText(prompt: string, fileParts: FilePart[] = []): Promise<string> {
     await this.ensureInitialized();
 
     if (!this.model) {
-      return this.fallbackToOtherProviders(prompt, false);
+      return this.fallbackToOtherProviders(prompt, false, fileParts);
+    }
+
+    const parts: any[] = [{ text: prompt }];
+    if (fileParts && fileParts.length > 0) {
+      fileParts.forEach(p => parts.push(p));
     }
 
     try {
       (window as any).ai_status = `Đang gọi AI (${this.currentModelName})...`;
       // Tăng số lần retry và delay ban đầu để xử lý tốt hơn lỗi 429
-      const result = await this.retryWithBackoff(() => this.model!.generateContent(prompt), 5, 2000);
+      const result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 2000);
       (window as any).ai_status = "Thành công";
       return result.response.text();
     } catch (error: any) {
-      return this.handleError(error, () => this._generateText(prompt), prompt);
+      return this.handleError(error, () => this._generateText(prompt, fileParts), prompt);
     }
   }
 
@@ -333,7 +345,7 @@ class GeminiService {
       if (message) {
         console.warn("🚨 [Stream] No AI chat available. Using Server Fallback...");
         try {
-          const text = await this.fallbackToOtherProviders(message, false);
+          const text = await this.fallbackToOtherProviders(message, false, fileParts);
           yield { text };
           return;
         } catch (e) {
@@ -383,7 +395,7 @@ class GeminiService {
         if (is429Error && message) {
           console.warn("🚨 [Stream Fallback] Attempting server rescue...");
           try {
-            const text = await this.fallbackToOtherProviders(message, false);
+            const text = await this.fallbackToOtherProviders(message, false, fileParts);
             yield { text };
             return;
           } catch (e) {
@@ -430,7 +442,7 @@ class GeminiService {
 
     if (!this.model) {
       try {
-        const text = await this.fallbackToOtherProviders(prompt, true);
+        const text = await this.fallbackToOtherProviders(prompt, true, fileParts);
         return this.parseJSONSafely(text);
       } catch (e: any) {
         console.error("Fallback failed:", e);
@@ -623,7 +635,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
 
     if (!this.model) {
       try {
-        const text = await this.fallbackToOtherProviders(prompt, true);
+        const text = await this.fallbackToOtherProviders(prompt, true, fileParts);
         return this.parseJSONSafely(text);
       } catch (e: any) {
         return { error: e.message || 'Lỗi kết nối AI Server' };
@@ -756,15 +768,19 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     throw lastError;
   }
 
-  private async fallbackToOtherProviders(prompt: string, isJson: boolean): Promise<string> {
+  private async fallbackToOtherProviders(prompt: string, isJson: boolean, fileParts: FilePart[] = []): Promise<string> {
     console.log("🚀 [Fallback] Calling Server API...");
     try {
+      const files = fileParts?.map(fp => ({
+        data: fp.inlineData.data,
+        mimeType: fp.inlineData.mimeType
+      }));
       // Dùng model ổn định nhất của server
-      const result = await generateWithAI({ prompt, provider: 'gemini', model: 'gemini-1.5-flash' });
+      const result = await generateWithAI({ prompt, files, provider: 'gemini', model: 'gemini-2.5-flash' });
       return result.text || '';
     } catch (error: any) {
       console.error("❌ [Fallback] Server also failed:", error);
-      throw new Error(`⚠️ HẾT HẠN MỨC (429): Toàn bộ kênh trực tiếp và dự phòng đều đang quá tải. \n\n👉 GIẢI PHÁP: Thầy/Cô vui lòng đợi 1 phút rồi thử lại, hoặc dùng một API Key khác.`);
+      throw new Error(`⚠️ HẾT HẠN MỨC (429) HOẶC CHƯA CẤU HÌNH API KEY: Toàn bộ kênh trực tiếp và dự phòng đều đang quá tải hoặc chưa có Key. \n\n👉 GIẢI PHÁP: Thầy/Cô vui lòng bấm vào nút "API Key" (biểu tượng 🔑 góc dưới bên trái) để nhập Gemini API Key cá nhân miễn phí nhé.`);
     }
   }
 

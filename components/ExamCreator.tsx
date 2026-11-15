@@ -643,7 +643,10 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       mcqs.forEach((q, i) => {
         text += `Câu ${i + 1}: ${q.content}\n`;
         if (q.image) text += `[HÌNH ẢNH: ${q.image.substring(0, 100)}...]\n`;
-        q.options?.forEach((o, j) => text += `${String.fromCharCode(65 + j)}. ${o}\n`);
+        q.options?.forEach((o, j) => {
+          const optText = typeof o === 'string' ? o : (o?.text || '');
+          text += `${String.fromCharCode(65 + j)}. ${optText}\n`;
+        });
         text += "\n";
       });
     }
@@ -752,7 +755,6 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const handleCreateAssignment = () => {
     if (onCreateAssignment) {
       const title = examHeader.split('\n')[0] || `Bài kiểm tra ${config.subject}`;
-      onCreateAssignment(title);
       const newId = onCreateAssignment(title);
       setCreatedAssignmentId(newId);
     }

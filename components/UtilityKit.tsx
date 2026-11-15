@@ -1772,7 +1772,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
         const img = await normalizeSharedImage(q.image);
         const opts = await Promise.all((q.options || []).map(async (o: any) => ({ ...o, image: await normalizeSharedImage(o.image) })));
-        return [1, q.question || '', opts, q.answer || '', q.explanation || '', img];
+        const qType = q.type === 'Tự luận' ? 0 : 1;
+        return [qType, q.question || q.content || '', opts, q.answer || '', q.explanation || '', img];
       }));
 
       const quizData = { s: subject, g: grade, q: normalizedQuestions };
@@ -2024,33 +2025,33 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       }
     });
 
-    let gridHtml = `< div class="grid" style = "grid-template-columns: repeat(${size}, 1fr);" > `;
+    let gridHtml = `<div class="grid" style="grid-template-columns: repeat(${size}, 1fr);">`;
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const isActive = gridMap[r][c];
-        gridHtml += `< div class="cell ${isActive ? 'active' : 'black'}" ></div > `;
+        gridHtml += `<div class="cell ${isActive ? 'active' : 'black'}"></div>`;
       }
     }
-    gridHtml += `</div > `;
+    gridHtml += `</div>`;
 
     const html = `
-  < !DOCTYPE html >
+  <!DOCTYPE html>
     <html>
       <head>
         <title>Ô chữ: ${topic}</title>
         <style>
-          body {font - family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-          h1 {text - align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
-          .sub-title {text - align: center; margin-bottom: 30px; font-style: italic; color: #666; }
-          .container {display: flex; flex-direction: column; align-items: center; gap: 30px; }
-          .grid {display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
-          .cell {background: #fff; position: relative; }
-          .cell.black {background: #333; }
-          .clues-container {width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-          .clues-col h3 {border - bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-          ul {list - style: none; padding: 0; }
-          li {margin - bottom: 10px; line-height: 1.4; }
-          .footer {margin - top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+          body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          h1 { text-align: center; text-transform: uppercase; color: #333; margin-bottom: 10px; }
+          .sub-title { text-align: center; margin-bottom: 30px; font-style: italic; color: #666; }
+          .container { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+          .grid { display: grid; border: 2px solid #333; width: 100%; max-width: 500px; aspect-ratio: 1/1; background: #333; gap: 1px; }
+          .cell { background: #fff; position: relative; }
+          .cell.black { background: #333; }
+          .clues-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+          .clues-col h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+          ul { list-style: none; padding: 0; }
+          li { margin-bottom: 10px; line-height: 1.4; }
+          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
         </style>
       </head>
       <body>
@@ -2418,7 +2419,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                       {pendingAttachments.map((att, idx) => (
                         <div key={idx} className="relative shrink-0 group">
                           {att.type === 'image' ? (
-                            <img src={`data:${att.mimeType}; base64, ${att.data} `} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
+                            <img src={`data:${att.mimeType};base64,${att.data}`} className="h-16 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" alt={att.name} />
                           ) : (
                             <div className="h-16 w-16 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 p-1">
                               <i className={`fas ${att.mimeType?.includes('pdf') ? 'fa-file-pdf text-rose-500' : 'fa-file-lines text-blue-500'} text-xl mb-1`}></i>
@@ -2535,7 +2536,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                         onClick={() => setUseTemplateMode(!useTemplateMode)}
                         className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${useTemplateMode ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}
                       >
-                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr - 1`}></i>
+                        <i className={`fas ${useTemplateMode ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>
                         {useTemplateMode ? 'Theo Mẫu & Kế hoạch' : 'Soạn nhanh'}
                       </button>
                       <button
@@ -3136,7 +3137,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                         <img
                           src={result}
                           alt="Video Scene"
-                          className={`w - full h - full object - cover transition - transform duration - [20s] ease - linear ${isPlaying ? 'scale-125' : 'scale-100'} `}
+                          className={`w-full h-full object-cover transition-transform duration-[20s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`}
                         />
                         {!isPlaying && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-all cursor-pointer" onClick={handlePlayWithVoiceover}>
@@ -3197,9 +3198,9 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                     window.speechSynthesis.speak(utterance);
                                   }
                                 }}
-                                className={`w - 16 h - 16 rounded - full flex items - center justify - center shadow - lg active: scale - 90 transition - all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'} `}
+                                className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all ${isPlaying ? 'bg-emerald-500 text-white animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                               >
-                                <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text - xl ${!isPlaying && 'ml-1'} `}></i>
+                                <i className={`fas ${isPlaying ? 'fa-waveform' : 'fa-play'} text-xl ${!isPlaying && 'ml-1'}`}></i>
                               </button>
                               <button
                                 onClick={() => {
@@ -3239,7 +3240,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
                   <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-6">
-                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text - 5xl text - slate - 300`}></i>
+                    <i className={`fas ${activeTab === 'games' ? (gameType === 'crossword' ? 'fa-puzzle-piece' : 'fa-gamepad') : activeTab === 'images' ? 'fa-image' : activeTab === 'video' ? 'fa-film' : activeTab === 'pdf_tools' ? 'fa-scissors' : 'fa-microphone'} text-5xl text-slate-300`}></i>
                   </div>
                   <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Đang chờ ý tưởng của Thầy Cô</p>
                 </div>
