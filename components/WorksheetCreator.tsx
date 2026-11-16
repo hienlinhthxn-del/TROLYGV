@@ -679,10 +679,21 @@ const WorksheetCreator: React.FC = () => {
 
                             return (
                                 <div key={index} style={{ padding: '20px', background: '#f9f9f9', borderRadius: '15px', marginBottom: '20px', border: `1px solid #eee`, borderLeft: `4px solid ${tl.color}`, position: 'relative' }}>
-                                    {/* Header: số câu + badge loại */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                                    {/* Header: số câu + badge loại + nút AI đọc câu hỏi */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
                                         <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#1976D2' }}>Câu {index + 1}</span>
                                         <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: tl.color, color: 'white', fontWeight: 'bold' }}>{tl.icon} {tl.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const speechText = geminiService.formatQuestionForSpeech(q.question, q.options, index + 1);
+                                                geminiService.speakQuestionText(speechText, 'Puck');
+                                            }}
+                                            style={{ background: '#FFF8E1', color: '#F57F17', border: '1px solid #FFE082', borderRadius: '8px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            title="AI đọc to câu hỏi và đáp án cho học sinh"
+                                        >
+                                            🔊 Đọc câu hỏi
+                                        </button>
                                         <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px' }}>
                                             <button onClick={() => {
                                                 const updated = worksheet.questions.filter((_, i) => i !== index);

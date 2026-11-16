@@ -872,6 +872,7 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     CẤU TRÚC JSON:
     [
       {
+        "type": "Trắc nghiệm",
         "question": "Câu hỏi ở đây? CHỈ dùng [IMAGE] nếu thật sự cần hình minh họa.",
         "image": "Chỉ điền mô tả ảnh nếu câu hỏi CẦN hình vẽ, đồ thị. Nếu chỉ có chữ thì ĐỂ TRỐNG.",
         "options": [
@@ -879,7 +880,9 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
           { "text": "Đáp án B", "image": "" },
           { "text": "Đáp án C", "image": "" },
           { "text": "Đáp án D", "image": "" }
-        ]
+        ],
+        "answer": "A",
+        "explanation": "Giải thích ngắn gọn, dễ hiểu cho học sinh"
       }
     ]
     QUAN TRỌNG: 
@@ -1065,6 +1068,148 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     }
 
     return null;
+  }
+
+  private currentSpeechAudio: HTMLAudioElement | null = null;
+  private speechAudioCache: Map<string, string> = new Map();
+
+  public cleanMathAndSymbolsForSpeech(rawText: string): string {
+    if (!rawText) return '';
+    return String(rawText)
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' hình minh họa ')
+      .replace(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):?.*?\]/gi, '')
+      .replace(/[*_#`~]+/g, ' ')
+      .replace(/\.{2,}|_{2,}|…+/g, ' chỗ trống ')
+      .replace(/(\d+)\s*\+\s*(\d+)/g, '$1 cộng $2')
+      .replace(/(\d+)\s*-\s*(\d+)/g, '$1 trừ $2')
+      .replace(/(\d+)\s*[x×\*]\s*(\d+)/g, '$1 nhân $2')
+      .replace(/(\d+)\s*[:÷]\s*(\d+)/g, '$1 chia $2')
+      .replace(/=\s*\?/g, ' bằng mấy? ')
+      .replace(/=/g, ' bằng ')
+      .replace(/</g, ' bé hơn ')
+      .replace(/>/g, ' lớn hơn ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  public formatQuestionForSpeech(questionText: string, options?: any[], questionNumber?: number): string {
+    const cleanQ = this.cleanMathAndSymbolsForSpeech(questionText);
+    const prefix = typeof questionNumber === 'number' ? `Câu ${questionNumber}: ` : '';
+    const optList = Array.isArray(options) ? options : [];
+    const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const spokenOptions: string[] = [];
+
+    optList.forEach((opt, idx) => {
+      const rawOpt = typeof opt === 'string' || typeof opt === 'number'
+        ? String(opt)
+        : String(opt?.text || opt?.label || opt?.content || '');
+      const strippedOpt = rawOpt.replace(/^[A-F][\.\:\)]\s*/i, '').trim();
+      const cleanOpt = this.cleanMathAndSymbolsForSpeech(strippedOpt);
+      if (cleanOpt) {
+        spokenOptions.push(`Đáp án ${labels[idx] || idx + 1}: ${cleanOpt}`);
+      }
+    });
+
+    if (spokenOptions.length > 0) {
+      return `${prefix}${cleanQ}. ${spokenOptions.join('. ')}.`;
+    }
+    return `${prefix}${cleanQ}`;
+  }
+
+  public stopSpeakingQuestion(): void {
+    if (this.currentSpeechAudio) {
+      try {
+        this.currentSpeechAudio.pause();
+        this.currentSpeechAudio.currentTime = 0;
+      } catch {}
+      this.currentSpeechAudio = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+  }
+
+  public async speakQuestionText(
+    rawText: string,
+    voice: 'Kore' | 'Puck' | 'Boy' | 'Girl' = 'Puck',
+    onStart?: () => void,
+    onEnd?: () => void
+  ): Promise<void> {
+    this.stopSpeakingQuestion();
+    const cleaned = this.cleanMathAndSymbolsForSpeech(rawText);
+    if (!cleaned) {
+      onEnd?.();
+      return;
+    }
+
+    const cacheKey = `${voice}::${cleaned}`;
+    let audioDataUrl = this.speechAudioCache.get(cacheKey) || null;
+
+    if (!audioDataUrl) {
+      try {
+        audioDataUrl = await this.generateSpeech(cleaned, voice);
+        if (audioDataUrl) {
+          this.speechAudioCache.set(cacheKey, audioDataUrl);
+        }
+      } catch (e) {
+        console.warn('[speakQuestionText] generateSpeech fallback:', e);
+      }
+    }
+
+    if (audioDataUrl) {
+      try {
+        const audio = new Audio(audioDataUrl);
+        this.currentSpeechAudio = audio;
+        const isChildVoice = voice === 'Boy' || voice === 'Girl';
+        const isMp3Fallback = audioDataUrl.startsWith('data:audio/mpeg');
+        if (isChildVoice && isMp3Fallback) {
+          (audio as any).preservesPitch = false;
+          (audio as any).mozPreservesPitch = false;
+          (audio as any).webkitPreservesPitch = false;
+          audio.playbackRate = voice === 'Girl' ? 1.24 : 1.18;
+        } else {
+          (audio as any).preservesPitch = true;
+          audio.playbackRate = 0.96; // Đọc chậm rãi, rõ ràng cho học sinh Lớp 1
+        }
+        audio.onplay = () => onStart?.();
+        audio.onended = () => {
+          this.currentSpeechAudio = null;
+          onEnd?.();
+        };
+        audio.onerror = () => {
+          this.currentSpeechAudio = null;
+          onEnd?.();
+        };
+        await audio.play();
+        return;
+      } catch (playErr) {
+        console.warn('[speakQuestionText] Audio play failed, using speechSynthesis:', playErr);
+      }
+    }
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleaned);
+        utterance.lang = 'vi-VN';
+        utterance.rate = 0.88;
+        utterance.pitch = voice === 'Girl' ? 1.55 : voice === 'Boy' ? 1.38 : voice === 'Kore' ? 0.88 : 1.08;
+        const voices = window.speechSynthesis.getVoices();
+        const viVoices = voices.filter(v => v.lang.includes('vi'));
+        if (viVoices.length > 0) {
+          utterance.voice = viVoices[0];
+        }
+        utterance.onstart = () => onStart?.();
+        utterance.onend = () => onEnd?.();
+        utterance.onerror = () => onEnd?.();
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch {}
+    }
+
+    onEnd?.();
   }
 
   public async generateImage(prompt: string): Promise<string> {

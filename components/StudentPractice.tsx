@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ExamQuestion } from '../types';
 import { geminiService } from '../services/geminiService';
 
@@ -24,9 +24,72 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
   const [aiResults, setAiResults] = useState<Record<string, { isCorrect: boolean, feedback: string }>>({});
   const [isGrading, setIsGrading] = useState(false);
   const [strictness, setStrictness] = useState<'easy' | 'strict'>('easy');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [autoRead, setAutoRead] = useState(true);
+  const [readVoice, setReadVoice] = useState<'Puck' | 'Kore' | 'Girl' | 'Boy'>('Puck');
 
   const currentQuestion = questions[currentIdx];
   const progress = ((currentIdx + 1) / questions.length) * 100;
+
+  const handleReadCurrentQuestion = async (forceRead = false) => {
+    if (!currentQuestion) return;
+    if (isSpeaking && !forceRead) {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeaking(false);
+      return;
+    }
+    const speechText = geminiService.formatQuestionForSpeech(
+      currentQuestion.content,
+      currentQuestion.type === 'Trắc nghiệm' ? currentQuestion.options : [],
+      currentIdx + 1
+    );
+    setIsSpeaking(true);
+    await geminiService.speakQuestionText(
+      speechText,
+      readVoice,
+      () => setIsSpeaking(true),
+      () => setIsSpeaking(false)
+    );
+  };
+
+  const handleReadSingleOption = async (e: React.MouseEvent, label: string, optText: string) => {
+    e.stopPropagation();
+    const cleaned = geminiService.cleanMathAndSymbolsForSpeech(optText.replace(/^[A-F][\.\:\)]\s*/i, '').trim());
+    setIsSpeaking(true);
+    await geminiService.speakQuestionText(
+      `Đáp án ${label}: ${cleaned}`,
+      readVoice,
+      () => setIsSpeaking(true),
+      () => setIsSpeaking(false)
+    );
+  };
+
+  useEffect(() => {
+    if (isSubmitted) {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeaking(false);
+      return;
+    }
+    if (autoRead && currentQuestion) {
+      const timer = setTimeout(() => {
+        handleReadCurrentQuestion(true);
+      }, 250);
+      return () => {
+        clearTimeout(timer);
+        geminiService.stopSpeakingQuestion();
+        setIsSpeaking(false);
+      };
+    } else {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeaking(false);
+    }
+  }, [currentIdx, isSubmitted, autoRead, readVoice]);
+
+  useEffect(() => {
+    return () => {
+      geminiService.stopSpeakingQuestion();
+    };
+  }, []);
 
   const handleSelectOption = (optionIdx: number) => {
     if (isSubmitted) return;
@@ -406,11 +469,54 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
           <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-200 space-y-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-full -mr-16 -mt-16 blur-2xl"></div>
 
-            <div className="flex items-center space-x-3 relative z-10">
-              <div className="w-10 h-10 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-sm">
-                {currentIdx + 1}
+            <div className="flex flex-wrap items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-sm">
+                  {currentIdx + 1}
+                </div>
+                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">{currentQuestion.type}</span>
               </div>
-              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">{currentQuestion.type}</span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleReadCurrentQuestion(false)}
+                  className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95 ${
+                    isSpeaking
+                      ? 'bg-rose-500 text-white animate-pulse shadow-rose-100'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-100'
+                  }`}
+                >
+                  <i className={`fas ${isSpeaking ? 'fa-stop-circle' : 'fa-volume-high'} text-base`}></i>
+                  <span>{isSpeaking ? 'Dừng đọc' : 'Đọc câu hỏi'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAutoRead(!autoRead)}
+                  className={`px-3 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+                    autoRead
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-slate-50 text-slate-400 border-slate-200'
+                  }`}
+                  title="Tự động đọc to câu hỏi khi chuyển câu (hỗ trợ học sinh Lớp 1)"
+                >
+                  <i className={`fas ${autoRead ? 'fa-check-circle' : 'fa-circle-pause'}`}></i>
+                  <span>Tự đọc: {autoRead ? 'Bật' : 'Tắt'}</span>
+                </button>
+
+                <select
+                  value={readVoice}
+                  onChange={(e) => setReadVoice(e.target.value as any)}
+                  className="bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl px-3 py-2 text-[11px] font-black outline-none cursor-pointer"
+                  title="Chọn giọng đọc câu hỏi"
+                >
+                  <option value="Puck">👩‍🏫 Giọng Cô giáo</option>
+                  <option value="Kore">👨‍🏫 Giọng Thầy giáo</option>
+                  <option value="Girl">👧 Giọng Bé gái</option>
+                  <option value="Boy">👦 Giọng Bé trai</option>
+                </select>
+              </div>
             </div>
 
             <p className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed relative z-10">
@@ -428,21 +534,35 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
                   const optImg = typeof opt === 'string' ? '' : opt.image;
 
                   return (
-                    <button
+                    <div
                       key={i}
                       onClick={() => handleSelectOption(i)}
-                      className={`flex flex-col p-5 rounded-3xl border-2 text-left transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50/30'}`}
+                      role="button"
+                      tabIndex={0}
+                      className={`flex flex-col p-4 sm:p-5 rounded-3xl border-2 text-left transition-all cursor-pointer ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.01]' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50/30'}`}
                     >
-                      <div className="flex items-center w-full">
-                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black mr-4 ${isSelected ? 'bg-white/20' : 'bg-slate-50'}`}>{label}</span>
+                      <div className="flex items-center w-full gap-3">
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'}`}>{label}</span>
                         <span className="text-[17px] font-bold flex-1">{optText}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleReadSingleOption(e, label, optText)}
+                          className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all shadow-sm ${
+                            isSelected
+                              ? 'bg-white/20 text-white hover:bg-white/30'
+                              : 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100'
+                          }`}
+                          title={`Nghe đáp án ${label}`}
+                        >
+                          <i className="fas fa-volume-high text-sm"></i>
+                        </button>
                       </div>
                       {optImg && (
                         <div className="mt-4 w-full">
                           {renderQuestionImage(optImg)}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

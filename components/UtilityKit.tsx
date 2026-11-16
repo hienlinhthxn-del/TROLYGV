@@ -213,14 +213,74 @@ const QuizPlayer: React.FC<{
   const [showScore, setShowScore] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [timeLeft, setTimeLeft] = useState(45);
+  const [timerEnabled, setTimerEnabled] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [isBatchEditing, setIsBatchEditing] = useState(false);
+  const [isSpeakingQuiz, setIsSpeakingQuiz] = useState(false);
+  const [autoReadQuiz, setAutoReadQuiz] = useState(true);
+  const [quizVoice, setQuizVoice] = useState<'Puck' | 'Kore' | 'Girl' | 'Boy'>('Puck');
+
+  const handleReadQuizQuestion = async (forceRead = false) => {
+    const q = data[currentIndex];
+    if (!q) return;
+    if (isSpeakingQuiz && !forceRead) {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeakingQuiz(false);
+      return;
+    }
+    const qText = toSafeText(q.question || q.content);
+    const qOpts = Array.isArray(q.options) ? q.options : [];
+    const speechText = geminiService.formatQuestionForSpeech(qText, qOpts, currentIndex + 1);
+    setIsSpeakingQuiz(true);
+    await geminiService.speakQuestionText(
+      speechText,
+      quizVoice,
+      () => setIsSpeakingQuiz(true),
+      () => setIsSpeakingQuiz(false)
+    );
+  };
+
+  const handleReadQuizOption = async (e: React.MouseEvent, letter: string, optText: string) => {
+    e.stopPropagation();
+    const cleaned = geminiService.cleanMathAndSymbolsForSpeech(optText.replace(/^[A-F][\.\:\)]\s*/i, '').trim());
+    setIsSpeakingQuiz(true);
+    await geminiService.speakQuestionText(
+      `Đáp án ${letter}: ${cleaned}`,
+      quizVoice,
+      () => setIsSpeakingQuiz(true),
+      () => setIsSpeakingQuiz(false)
+    );
+  };
 
   useEffect(() => {
-    setTimeLeft(15);
+    setTimeLeft(45);
     setIsBatchEditing(false); // Reset edit mode when changing question
-  }, [currentIndex]);
+    if (showScore) {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeakingQuiz(false);
+      return;
+    }
+    if (autoReadQuiz && data[currentIndex]) {
+      const t = setTimeout(() => {
+        handleReadQuizQuestion(true);
+      }, 250);
+      return () => {
+        clearTimeout(t);
+        geminiService.stopSpeakingQuestion();
+        setIsSpeakingQuiz(false);
+      };
+    } else {
+      geminiService.stopSpeakingQuestion();
+      setIsSpeakingQuiz(false);
+    }
+  }, [currentIndex, showScore, autoReadQuiz, quizVoice]);
+
+  useEffect(() => {
+    return () => {
+      geminiService.stopSpeakingQuestion();
+    };
+  }, []);
 
   const checkCorrectness = (q: any, opt: any, idx: number) => {
     if (!q || !opt) return false;
@@ -267,7 +327,7 @@ const QuizPlayer: React.FC<{
   };
 
   useEffect(() => {
-    if (showScore || selectedOption || isBatchEditing) return;
+    if (!timerEnabled || showScore || selectedOption || isBatchEditing) return;
 
     if (timeLeft === 0) {
       handleAnswerClick('TIMEOUT', -1);
@@ -279,7 +339,7 @@ const QuizPlayer: React.FC<{
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, showScore, selectedOption, isBatchEditing]);
+  }, [timerEnabled, timeLeft, showScore, selectedOption, isBatchEditing]);
 
   const restartQuiz = () => {
     setCurrentIndex(0);
@@ -287,7 +347,7 @@ const QuizPlayer: React.FC<{
     setShowScore(false);
     setSelectedOption(null);
     setIsCorrect(null);
-    setTimeLeft(15);
+    setTimeLeft(45);
   };
 
   const startBatchEdit = () => {
@@ -486,35 +546,88 @@ const QuizPlayer: React.FC<{
 
   return (
     <div className="flex flex-col h-full p-4">
-      <div className="flex justify-between items-center mb-6">
-        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Câu hỏi {currentIndex + 1}/{data.length}</span>
-        <div className={`flex items-center space-x-1 px-3 py-1 rounded-full border ${timeLeft <= 5 ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-          <i className="fas fa-clock text-xs"></i>
-          <span className="text-xs font-black w-5 text-center">{timeLeft}s</span>
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Câu {currentIndex + 1}/{data.length}</span>
+          <button
+            type="button"
+            onClick={() => setTimerEnabled(!timerEnabled)}
+            className={`flex items-center space-x-1 px-3 py-1 rounded-full border text-xs font-black transition-all ${
+              timerEnabled
+                ? timeLeft <= 5
+                  ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}
+            title="Bật/Tắt đếm ngược thời gian"
+          >
+            <i className="fas fa-clock text-xs"></i>
+            <span>{timerEnabled ? `${timeLeft}s` : 'Không giới hạn giờ'}</span>
+          </button>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {onUpdateQuestion && (
-            <button onClick={startBatchEdit} className="text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-all border border-indigo-200 flex items-center shadow-sm active:scale-95" title="Sửa toàn bộ đề thi">
-              <i className="fas fa-edit mr-2"></i>Sửa đề & Cắt ảnh
+            <button onClick={startBatchEdit} className="text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all border border-indigo-200 flex items-center shadow-sm active:scale-95" title="Sửa toàn bộ đề thi">
+              <i className="fas fa-edit mr-1.5"></i>Sửa đề & Cắt ảnh
             </button>
           )}
           {onShare && (
-            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center">
+            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-full transition-colors border border-indigo-100 flex items-center">
               <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
             </button>
           )}
           {onCopyCode && (
-            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
+            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
               <i className="fas fa-code mr-1"></i>Mã
             </button>
           )}
           {onExportDocx && (
-            <button onClick={onExportDocx} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition-all shadow-md flex items-center shadow-blue-100" title="Xuất ra file Word (.docx)">
-              <i className="fas fa-file-word mr-2"></i>Word
+            <button onClick={onExportDocx} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-xl transition-all shadow-md flex items-center shadow-blue-100" title="Xuất ra file Word (.docx)">
+              <i className="fas fa-file-word mr-1.5"></i>Word
             </button>
           )}
-          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Điểm: {score}</span>
+          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">Điểm: {score}</span>
         </div>
+      </div>
+
+      {/* Thanh công cụ AI Đọc câu hỏi hỗ trợ học sinh Lớp 1 */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-5 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => handleReadQuizQuestion(false)}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95 ${
+            isSpeakingQuiz
+              ? 'bg-rose-500 text-white animate-pulse'
+              : 'bg-amber-500 hover:bg-amber-600 text-white'
+          }`}
+        >
+          <i className={`fas ${isSpeakingQuiz ? 'fa-stop-circle' : 'fa-volume-high'} text-sm`}></i>
+          <span>{isSpeakingQuiz ? 'Dừng đọc' : 'AI Đọc câu hỏi & đáp án'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAutoReadQuiz(!autoReadQuiz)}
+          className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+            autoReadQuiz
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-white text-slate-400 border-slate-200'
+          }`}
+        >
+          <i className={`fas ${autoReadQuiz ? 'fa-check-circle' : 'fa-circle-pause'}`}></i>
+          <span>Tự động đọc: {autoReadQuiz ? 'Bật' : 'Tắt'}</span>
+        </button>
+
+        <select
+          value={quizVoice}
+          onChange={(e) => setQuizVoice(e.target.value as any)}
+          className="bg-white text-indigo-700 border border-indigo-200 rounded-xl px-3 py-1.5 text-[11px] font-black outline-none cursor-pointer"
+        >
+          <option value="Puck">👩‍🏫 Giọng Cô giáo</option>
+          <option value="Kore">👨‍🏫 Giọng Thầy giáo</option>
+          <option value="Girl">👧 Giọng Bé gái</option>
+          <option value="Boy">👦 Giọng Bé trai</option>
+        </select>
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
@@ -554,14 +667,15 @@ const QuizPlayer: React.FC<{
         <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
         <div className="grid grid-cols-1 gap-3">
-          {currentQuestion.type === 'Trắc nghiệm' && questionOptions.length > 0 ? (
+          {(!currentQuestion.type || currentQuestion.type === 'Trắc nghiệm') && questionOptions.length > 0 ? (
             questionOptions.map((option: any, index: number) => {
               const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
               const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
               const isSelected = selectedOption === option;
               const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
+              const letter = String.fromCharCode(65 + index);
 
-              let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden ";
+              let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden cursor-pointer ";
               if (isSelected) {
                 btnClass += isCorrectAnswer
                   ? "bg-emerald-100 border-emerald-500 text-emerald-800"
@@ -573,14 +687,15 @@ const QuizPlayer: React.FC<{
               }
 
               return (
-                <button
+                <div
                   key={index}
-                  onClick={() => handleAnswerClick(option, index)}
-                  disabled={!!selectedOption}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => !selectedOption && handleAnswerClick(option, index)}
                   className={btnClass}
                 >
-                  <div className="flex items-center">
-                    <span className="mr-3 font-black opacity-50">{String.fromCharCode(65 + index)}.</span>
+                  <div className="flex items-center gap-2">
+                    <span className="mr-1 font-black opacity-60">{letter}.</span>
                     <div className="flex-1">
                       {optText.trim().startsWith('<svg') ? (
                         <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
@@ -588,6 +703,14 @@ const QuizPlayer: React.FC<{
                         <span className="text-[15px] font-bold">{optText}</span>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => handleReadQuizOption(e, letter, optText)}
+                      className="w-9 h-9 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 transition-all z-10"
+                      title={`Nghe đáp án ${letter}`}
+                    >
+                      <i className="fas fa-volume-high text-xs"></i>
+                    </button>
                   </div>
 
                   {optImg && (
@@ -608,11 +731,11 @@ const QuizPlayer: React.FC<{
                   )}
 
                   {isSelected && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <span className="mt-2 inline-block">
                       {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
                     </span>
                   )}
-                </button>
+                </div>
               );
             })
           ) : (
@@ -1085,14 +1208,15 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       if (rawQuestions.length > 0) {
         const formattedQuestions = rawQuestions.map((q: any, i: number) => {
-          const normalizedOptions = (q.type === 'Trắc nghiệm' && Array.isArray(q.options))
+          const isMcq = !q.type || q.type === 'Trắc nghiệm' || String(q.type).toLowerCase().includes('trắc nghiệm');
+          const normalizedOptions = (isMcq && Array.isArray(q.options))
             ? q.options.map((opt: any) => {
               if (typeof opt === 'string') return { text: opt, image: '' };
               return { text: opt.text || '', image: opt.image || '' };
             }) : [];
           return {
             id: q.id || `quiz-topic-${Date.now()}-${i}`,
-            type: q.type || 'Trắc nghiệm',
+            type: isMcq ? 'Trắc nghiệm' : 'Tự luận',
             question: q.question?.replace(/\[IMAGE\]/g, '').trim() || q.content?.trim() || '',
             image: q.image || '',
             options: normalizedOptions,

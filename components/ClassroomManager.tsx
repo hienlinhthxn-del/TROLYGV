@@ -1888,7 +1888,20 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
                 <h4 className="text-lg font-black">{generatedQuiz.title || 'Kết quả Quiz'}</h4>
                 {generatedQuiz.questions.map((q, i) => (
                   <div key={q.id || i} className="p-4 border border-slate-200 rounded-xl bg-white">
-                    <p className="font-bold">Câu {i + 1}: {q.content}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-bold flex-1">Câu {i + 1}: {q.content}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = geminiService.formatQuestionForSpeech(q.content, q.options, i + 1);
+                          geminiService.speakQuestionText(text, 'Puck');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-700 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1.5"
+                      >
+                        <i className="fas fa-volume-high"></i>
+                        <span>Đọc câu hỏi</span>
+                      </button>
+                    </div>
                     {q.image && renderImage(q.image)}
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {q.options?.map((opt: any, optIdx: number) => (

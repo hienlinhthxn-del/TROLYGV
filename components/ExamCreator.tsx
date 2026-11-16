@@ -45,6 +45,27 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
   const [createdAssignmentId, setCreatedAssignmentId] = useState<string | null>(null);
   const [tempStrandName, setTempStrandName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
+
+  const handleSpeakExamQuestion = async (q: ExamQuestion, idx: number) => {
+    if (speakingQuestionId === q.id) {
+      geminiService.stopSpeakingQuestion();
+      setSpeakingQuestionId(null);
+      return;
+    }
+    const speechText = geminiService.formatQuestionForSpeech(
+      q.content,
+      q.type === 'Trắc nghiệm' ? q.options : [],
+      idx + 1
+    );
+    setSpeakingQuestionId(q.id);
+    await geminiService.speakQuestionText(
+      speechText,
+      'Puck',
+      () => setSpeakingQuestionId(q.id),
+      () => setSpeakingQuestionId(null)
+    );
+  };
   const [referenceFile, setReferenceFile] = useState<Attachment | null>(null);
   const referenceFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1291,7 +1312,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                       </div>
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shrink-0 ${q.type === 'Tự luận' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-indigo-600 shadow-sm'}`}>{idx + 1}</div>
                       <div className="flex-1 min-w-0 space-y-4">
-                        <div className="flex items-center space-x-2 pr-16 sm:pr-0">
+                        <div className="flex flex-wrap items-center gap-2 pr-16 sm:pr-0">
                           <select
                             value={q.type}
                             onChange={(e) => updateQuestionField(q.id, 'type', e.target.value)}
@@ -1307,6 +1328,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
                           >
                             {COGNITIVE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                           </select>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakExamQuestion(q, idx)}
+                            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ${
+                              speakingQuestionId === q.id
+                                ? 'bg-rose-500 text-white animate-pulse'
+                                : 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200'
+                            }`}
+                            title="AI đọc to câu hỏi và các phương án trả lời cho học sinh"
+                          >
+                            <i className={`fas ${speakingQuestionId === q.id ? 'fa-stop-circle' : 'fa-volume-high'}`}></i>
+                            <span>{speakingQuestionId === q.id ? 'Dừng đọc' : 'AI Đọc câu hỏi'}</span>
+                          </button>
                         </div>
 
                         <textarea
