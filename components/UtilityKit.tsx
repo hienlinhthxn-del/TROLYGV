@@ -7,6 +7,7 @@ import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
 import { exportWorksheetToDocx, convertPdfToWordDocx, convertPdfToWordWithOCR } from '../docxHelper';
 import { VIOEDU_GRADE1_SAMPLE_30 } from '../vioeduQuizData';
+import { loadPdfJsLibrary } from '../services/pdfService';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -2741,10 +2742,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     setIsConverting(true);
 
     try {
-      // @ts-ignore
-      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-      // @ts-ignore
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+      const pdfjsLib = await loadPdfJsLibrary();
       // @ts-ignore
       const JSZip = (await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm')).default;
 
@@ -3761,7 +3759,8 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   multiple
                                   accept="image/*,.pdf"
                                   onChange={(e) => {
-                                    if (e.target.files) {
+                                    if (e.target.files && e.target.files.length > 0) {
+                                      setPendingAttachments([]);
                                       handleFileChange(e as any);
                                     }
                                   }}

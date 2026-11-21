@@ -49,12 +49,43 @@ const trimCanvasWhitespace = (sourceCanvas: HTMLCanvasElement) => {
   return croppedCanvas;
 };
 
+let cachedPdfWorkerBlobUrl: string | null = null;
+
+export const loadPdfJsLibrary = async (): Promise<any> => {
+  // @ts-ignore
+  const pdfjsLib = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+  const workerCdnUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+
+  if (!cachedPdfWorkerBlobUrl) {
+    try {
+      const resp = await fetch(workerCdnUrl);
+      if (resp.ok) {
+        const workerCode = await resp.text();
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        cachedPdfWorkerBlobUrl = URL.createObjectURL(blob);
+      }
+    } catch (e) {
+      console.warn('[pdfService] Fetch worker script failed, using module import blob:', e);
+    }
+
+    if (!cachedPdfWorkerBlobUrl) {
+      try {
+        const blob = new Blob([`import "${workerCdnUrl}";`], { type: 'application/javascript' });
+        cachedPdfWorkerBlobUrl = URL.createObjectURL(blob);
+      } catch {
+        cachedPdfWorkerBlobUrl = workerCdnUrl;
+      }
+    }
+  }
+
+  // @ts-ignore
+  pdfjsLib.GlobalWorkerOptions.workerSrc = cachedPdfWorkerBlobUrl;
+  return pdfjsLib;
+};
+
 export const convertPdfToImages = async (base64: string, maxPagesLimit = 30): Promise<PdfImage[]> => {
   try {
-    // @ts-ignore
-    const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-    // @ts-ignore
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+    const pdfjsLib = await loadPdfJsLibrary();
 
     const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
     const pdf = await loadingTask.promise;
