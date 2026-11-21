@@ -225,6 +225,7 @@ const QuizPlayer: React.FC<{
   const [isSpeakingQuiz, setIsSpeakingQuiz] = useState(false);
   const [autoReadQuiz, setAutoReadQuiz] = useState(true);
   const [quizVoice, setQuizVoice] = useState<'Puck' | 'Kore' | 'Girl' | 'Boy'>('Puck');
+  const [showOriginalPage, setShowOriginalPage] = useState(false);
 
   const handleReadQuizQuestion = async (forceRead = false) => {
     const q = data[currentIndex];
@@ -266,6 +267,7 @@ const QuizPlayer: React.FC<{
     setIsCorrect(null);
     setFeedbackToast(null);
     setIsBatchEditing(false); // Reset edit mode when changing question
+    setShowOriginalPage(false);
     if (showScore) {
       geminiService.stopSpeakingQuestion();
       setIsSpeakingQuiz(false);
@@ -695,6 +697,21 @@ const QuizPlayer: React.FC<{
         </div>
 
         <div className="flex items-center gap-1.5">
+          {currentQuestion.originalPageImage && (
+            <button
+              type="button"
+              onClick={() => setShowOriginalPage(prev => !prev)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all flex items-center gap-1.5 ${
+                showOriginalPage
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+              }`}
+              title="Đối chiếu với ảnh chụp trang đề gốc đã tải lên"
+            >
+              <i className={`fas ${showOriginalPage ? 'fa-wand-magic-sparkles' : 'fa-file-image'}`}></i>
+              <span>{showOriginalPage ? 'Xem bản số hóa' : 'Ảnh trang đề gốc'}</span>
+            </button>
+          )}
           <button
             type="button"
             disabled={currentIndex === 0}
@@ -716,6 +733,28 @@ const QuizPlayer: React.FC<{
 
       {/* Khung câu hỏi chuẩn VioEdu */}
       <div className="flex-1 flex flex-col justify-center bg-white rounded-3xl border border-slate-100 p-4 sm:p-6 shadow-sm">
+        {showOriginalPage && currentQuestion.originalPageImage && (
+          <div className="mb-4 p-3 bg-slate-50 border border-indigo-100 rounded-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black text-indigo-700 uppercase tracking-wider">
+                <i className="fas fa-image mr-1.5"></i>Trang {currentIndex + 1} từ file đề gốc
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomedImage(currentQuestion.originalPageImage)}
+                className="text-[11px] font-bold text-indigo-600 hover:underline"
+              >
+                <i className="fas fa-magnifying-glass-plus mr-1"></i>Phóng to toàn trang
+              </button>
+            </div>
+            <img
+              src={currentQuestion.originalPageImage}
+              alt={`Trang đề gốc ${currentIndex + 1}`}
+              onClick={() => setZoomedImage(currentQuestion.originalPageImage)}
+              className="max-h-72 w-auto mx-auto rounded-xl border border-slate-200 shadow-sm cursor-zoom-in object-contain"
+            />
+          </div>
+        )}
         {displayImage && (
           displayImage.trim().startsWith('<svg') ? (
             <div className="flex justify-center sm:justify-start mb-4 p-3 bg-white rounded-2xl [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-56" dangerouslySetInnerHTML={{ __html: displayImage }} />
