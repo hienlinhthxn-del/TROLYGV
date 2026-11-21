@@ -51,35 +51,67 @@ const trimCanvasWhitespace = (sourceCanvas: HTMLCanvasElement) => {
 
 let cachedPdfWorkerBlobUrl: string | null = null;
 
-export const loadPdfJsLibrary = async (): Promise<any> => {
-  // @ts-ignore
-  const pdfjsLib = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-  const workerCdnUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-
-  if (!cachedPdfWorkerBlobUrl) {
-    try {
-      const resp = await fetch(workerCdnUrl);
-      if (resp.ok) {
-        const workerCode = await resp.text();
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        cachedPdfWorkerBlobUrl = URL.createObjectURL(blob);
-      }
-    } catch (e) {
-      console.warn('[pdfService] Fetch worker script failed, using module import blob:', e);
+const injectScriptTag = (src: string): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      resolve();
+      return;
     }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script ${src}`));
+    document.head.appendChild(script);
+  });
 
-    if (!cachedPdfWorkerBlobUrl) {
+export const loadPdfJsLibrary = async (): Promise<any> => {
+  const mainUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  if (!(window as any).pdfjsLib) {
+    try {
+      await injectScriptTag(mainUrl);
+    } catch {
+      await injectScriptTag('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+    }
+  }
+  if (!(window as any).pdfjsWorker) {
+    try {
+      await injectScriptTag(workerUrl);
+    } catch {
       try {
-        const blob = new Blob([`import "${workerCdnUrl}";`], { type: 'application/javascript' });
-        cachedPdfWorkerBlobUrl = URL.createObjectURL(blob);
+        await injectScriptTag('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js');
       } catch {
-        cachedPdfWorkerBlobUrl = workerCdnUrl;
+        // Ignore if worker script cannot be injected; blob or fake worker will handle
       }
     }
   }
 
-  // @ts-ignore
-  pdfjsLib.GlobalWorkerOptions.workerSrc = cachedPdfWorkerBlobUrl;
+  let pdfjsLib = (window as any).pdfjsLib;
+  if (!pdfjsLib) {
+    // @ts-ignore
+    const mod = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/+esm');
+    pdfjsLib = mod?.default || mod;
+  }
+
+  if (!cachedPdfWorkerBlobUrl) {
+    try {
+      const resp = await fetch(workerUrl);
+      if (resp.ok) {
+        const workerCode = await resp.text();
+        const blob = new Blob([workerCode], { type: 'text/javascript' });
+        cachedPdfWorkerBlobUrl = URL.createObjectURL(blob);
+      }
+    } catch {
+      cachedPdfWorkerBlobUrl = workerUrl;
+    }
+  }
+
+  if (pdfjsLib?.GlobalWorkerOptions) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = cachedPdfWorkerBlobUrl || workerUrl;
+  }
   return pdfjsLib;
 };
 
