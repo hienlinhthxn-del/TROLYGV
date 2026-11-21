@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerativeModel, ChatSession } from "@google/generative-ai";
 import { generateWithAI } from '../aiClient';
-import { VIOEDU_GRADE1_SAMPLE_30 } from '../vioeduQuizData';
 import { loadPdfJsLibrary } from './pdfService';
 
 // This type is used by other components like ExamCreator
@@ -22,11 +21,11 @@ class GeminiService {
   // Danh sách ưu tiên mới nhất + fallback để giảm lỗi "Model not found" và "Rate Limit"
   private static readonly MODEL_CANDIDATES = [
     'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
     'gemini-2.5-pro',
     'gemini-1.5-flash',
-    'gemini-1.5-pro',
   ];
 
   private allApiKeys: string[] = [];
@@ -587,10 +586,9 @@ CẤU TRÚC JSON BẮT BUỘC:
           }
         }, { apiVersion: 'v1beta' });
 
-        // Tăng retry và delay cho exam generation (thường là request lớn)
-        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 5, 3000);
+        result = await this.retryWithBackoff(() => jsonModel.generateContent(parts), 2, 1500);
       } else {
-        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 5, 3000);
+        result = await this.retryWithBackoff(() => this.model!.generateContent(parts), 2, 1500);
       }
 
       return normalizeExamParsed(this.parseJSONSafely(result.response.text()));
@@ -818,8 +816,8 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
     return wrapped;
   }
 
-  // Cải thiện retry với exponential backoff và xử lý đặc biệt cho lỗi 429
-  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number = 3, initialDelay: number = 1000): Promise<T> {
+  // Cải thiện retry: chuyển model ngay lập tức nếu lỗi 404/400/403 hoặc 429 thay vì treo 90 giây trên 1 model
+  private async retryWithBackoff<T>(fn: () => Promise<T>, retries: number = 2, initialDelay: number = 1000): Promise<T> {
     let lastError: any;
     for (let i = 0; i < retries; i++) {
       try {
@@ -827,27 +825,29 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
         return await fn();
       } catch (error: any) {
         lastError = error;
+        const msg = String(error?.message || '').toLowerCase();
+        const isFatalForCurrentModel =
+          msg.includes('404') ||
+          msg.includes('not found') ||
+          msg.includes('400') ||
+          msg.includes('403') ||
+          msg.includes('key not valid') ||
+          msg.includes('permission');
+
+        if (isFatalForCurrentModel) {
+          throw error;
+        }
 
         const is429 = this.isRateLimitError(error);
+        if (is429) {
+          this.markCurrentModelRateLimited();
+          throw this.createRateLimitError(error);
+        }
 
         if (i < retries - 1) {
-          // Lỗi 429 (Rate Limit) cần chờ lâu hơn một chút
-          const baseDelay = is429 ? Math.max(initialDelay * 2, 5000) : initialDelay;
-          const waitTime = baseDelay * Math.pow(2, i) + (Math.random() * 1000);
-
-          console.warn(`⚠️ AI Request failed (attempt ${i + 1}/${retries}). ${is429 ? 'Rate Limited. ' : ''}Retrying in ${Math.round(waitTime)}ms...`, error.message);
-
-          if (is429) {
-            this.markCurrentModelRateLimited();
-            (window as any).ai_status = `⚠️ Đợi quota (${Math.round(waitTime / 1000)}s)...`;
-          }
-
+          const waitTime = initialDelay * Math.pow(1.5, i) + Math.random() * 400;
+          console.warn(`⚠️ AI Request failed (attempt ${i + 1}/${retries}). Retrying in ${Math.round(waitTime)}ms...`, error.message);
           await new Promise(resolve => setTimeout(resolve, waitTime));
-        } else {
-          // Nếu đã hết số lần retry cho model này mà vẫn 429, mới throw để handleError chuyển model
-          if (is429) {
-            throw this.createRateLimitError(error);
-          }
         }
       }
     }
@@ -1734,47 +1734,9 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
       return bytes;
     };
 
-    const VIOEDU_PDF_PAGE_STREAM_LENGTHS = [
-      87358, 90543, 71356, 57358, 61273, 79587, 94446, 163137, 91414, 78377,
-      85086, 86644, 66078, 65966, 77089, 110568, 71870, 57526, 101584, 102524,
-      95939, 84084, 90039, 202243, 102761, 104412, 74952, 93794, 171660, 100101
-    ];
-
-    const detectVioEduPageIndicesFromPdfBase64 = (base64: string): number[] => {
-      try {
-        const binary = atob(base64);
-        const matches = [...binary.matchAll(/\/Subtype\s*\/Image[^>]*?\/Length\s+(\d+)/g)];
-        const indices: number[] = [];
-        for (const m of matches) {
-          const len = Number(m[1]);
-          const vioIdx = VIOEDU_PDF_PAGE_STREAM_LENGTHS.indexOf(len);
-          if (vioIdx !== -1) {
-            indices.push(vioIdx);
-          }
-        }
-        return indices;
-      } catch {
-        return [];
-      }
-    };
-
-    const estimatePdfPagesFromBase64 = (base64: string): number => {
-      try {
-        const binary = atob(base64);
-        const countMatches = [...binary.matchAll(/\/Count\s+(\d+)/g)].map(m => Number(m[1])).filter(n => n > 0 && n <= 200);
-        if (countMatches.length > 0) {
-          return Math.max(...countMatches);
-        }
-        const pageTypeMatches = binary.match(/\/Type\s*\/Page\b/g);
-        return pageTypeMatches ? pageTypeMatches.length : 0;
-      } catch {
-        return 0;
-      }
-    };
-
     const convertPdfPartToImages = async (
       base64: string
-    ): Promise<{ imageParts: FilePart[]; pageImages: string[]; numPages: number; isLandscape: boolean } | null> => {
+    ): Promise<{ imageParts: FilePart[]; pageImages: string[]; pageTexts: string[]; numPages: number } | null> => {
       try {
         const pdfjsLib = await loadPdfJsLibrary();
         const pdfBytes = base64ToUint8Array(base64);
@@ -1789,7 +1751,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
 
         const imageParts: FilePart[] = [];
         const pageImages: string[] = [];
-        let isLandscape = false;
+        const pageTexts: string[] = [];
 
         const maxPages = Math.min(pdf.numPages, 40);
         for (let i = 1; i <= maxPages; i++) {
@@ -1798,11 +1760,34 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           await new Promise(resolve => setTimeout(resolve, 15));
 
           const page = await pdf.getPage(i);
-          const unscaled = page.getViewport({ scale: 1.0 });
-          if (i === 1 && unscaled.width > unscaled.height * 1.3) {
-            isLandscape = true;
+
+          // Trích xuất lớp văn bản gốc từ trang PDF (nếu file PDF có chứa text)
+          let extractedPageText = '';
+          try {
+            const textContent = await page.getTextContent();
+            if (textContent && Array.isArray(textContent.items)) {
+              let lastY: number | null = null;
+              const chunks: string[] = [];
+              for (const item of textContent.items) {
+                const str = typeof item?.str === 'string' ? item.str : '';
+                const y = Array.isArray(item?.transform) ? Number(item.transform[5]) : null;
+                if (lastY !== null && y !== null && Math.abs(y - lastY) > 4) {
+                  chunks.push('\n');
+                } else if (chunks.length > 0 && !chunks[chunks.length - 1].endsWith('\n') && !chunks[chunks.length - 1].endsWith(' ')) {
+                  chunks.push(' ');
+                }
+                chunks.push(str);
+                if (y !== null) lastY = y;
+              }
+              extractedPageText = chunks.join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+            }
+          } catch {
+            extractedPageText = '';
           }
-          const targetScale = unscaled.width > 0 ? Math.min(1.35, Math.max(0.85, 960 / unscaled.width)) : 1.0;
+          pageTexts.push(extractedPageText);
+
+          const unscaled = page.getViewport({ scale: 1.0 });
+          const targetScale = unscaled.width > 0 ? Math.min(1.35, Math.max(0.85, 920 / unscaled.width)) : 1.0;
           const viewport = page.getViewport({ scale: targetScale });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
@@ -1810,7 +1795,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           canvas.width = Math.round(viewport.width);
           await page.render({ canvasContext: context!, viewport }).promise;
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.7);
+          const imgData = canvas.toDataURL('image/jpeg', 0.68);
           pageImages.push(imgData);
           imageParts.push({
             inlineData: {
@@ -1821,7 +1806,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           canvas.width = 0;
           canvas.height = 0;
         }
-        return { imageParts, pageImages, numPages: pdf.numPages, isLandscape };
+        return { imageParts, pageImages, pageTexts, numPages: pdf.numPages };
       } catch (e: any) {
         console.error('[digitizeExamFromFiles] PDF Convert Error:', e);
         if (e?.message?.includes('dừng')) throw e;
@@ -1885,9 +1870,59 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
       });
     };
 
+    const parseQuestionsFromRawPageText = (text: string, pageImg: string): any[] => {
+      if (!text || text.trim().length < 15) return [];
+      const cleaned = text
+        .replace(/Vui lòng bật chế độ toàn màn hình[^\n]*/gi, '')
+        .replace(/Bạn đã trả lời (sai|đúng)!/gi, '')
+        .replace(/Hãy chọn 1 đáp án đúng/gi, '')
+        .trim();
+      if (!cleaned) return [];
+
+      // Tách câu hỏi theo dạng "Câu 1:", "Bài 1:", "1." hoặc toàn bộ trang nếu chỉ có 1 câu
+      const blocks = cleaned
+        .split(/(?=(?:^|\n)\s*(?:Câu|Bài|Question)\s*\d+[\.\:\)]|\n\s*\d+[\.\)]\s+[A-ZÀ-Ỹ])/i)
+        .map(b => b.trim())
+        .filter(b => b.length >= 10);
+
+      const candidateBlocks = blocks.length > 0 ? blocks : [cleaned];
+      const results: any[] = [];
+
+      for (const block of candidateBlocks) {
+        const optRegex = /(?:^|\s|\n)([A-D])[\.\:\)]\s*([^\n]+?)(?=(?:\s+[A-D][\.\:\)]\s)|$)/g;
+        const opts: { text: string; image: string }[] = [];
+        let firstOptIdx = -1;
+        let match: RegExpExecArray | null;
+        while ((match = optRegex.exec(block)) !== null) {
+          if (firstOptIdx === -1) firstOptIdx = match.index;
+          opts.push({ text: match[2].trim(), image: '' });
+        }
+
+        const qText = (firstOptIdx > 0 ? block.slice(0, firstOptIdx) : block)
+          .replace(/^(?:Câu|Bài|Question)\s*\d+[\.\:\)]?\s*/i, '')
+          .replace(/^\d+[\.\)]\s*/, '')
+          .trim();
+
+        if (!qText || qText.length < 4) continue;
+        const isMcq = opts.length >= 2;
+        results.push({
+          id: `digitized-txt-${Date.now()}-${results.length}-${Math.random().toString(36).slice(2, 6)}`,
+          type: isMcq ? 'Trắc nghiệm' : 'Tự luận',
+          question: qText,
+          content: qText,
+          image: '',
+          options: isMcq ? opts.slice(0, 4) : [],
+          answer: isMcq ? 'A' : '',
+          explanation: '',
+          originalPageImage: pageImg
+        });
+      }
+      return results;
+    };
+
     const finalFileParts: FilePart[] = [];
     const pageImageUrls: string[] = [];
-    let isThirtyPageVioEduPdf = false;
+    const pageTextList: string[] = [];
 
     // Khử trùng lặp nếu người dùng chọn cùng 1 file nhiều lần
     const uniqueInputParts: FilePart[] = [];
@@ -1908,100 +1943,51 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
         part.inlineData.mimeType === 'application/pdf' ||
         part.inlineData.data.startsWith('JVBERi0');
       if (isPdf) {
-        const matchedVioIndices = detectVioEduPageIndicesFromPdfBase64(part.inlineData.data);
-        const estimatedPages = estimatePdfPagesFromBase64(part.inlineData.data);
-        if (estimatedPages === VIOEDU_GRADE1_SAMPLE_30.length) {
-          isThirtyPageVioEduPdf = true;
-        }
         const converted = await convertPdfPartToImages(part.inlineData.data);
-
-        // Nếu các trang trong PDF (dù là nguyên file 30 trang hay file đã cắt 1-5 trang bằng công cụ Cắt PDF) khớp với đề VioEdu:
-        if (matchedVioIndices.length > 0 && uniqueInputParts.length === 1) {
-          onProgress?.(`Đã nhận diện chính xác ${matchedVioIndices.length} trang đề VioEdu! Đang đồng bộ 100% câu hỏi và hình ảnh...`);
-          const matchedDeck = matchedVioIndices.map((vioIdx, i) => {
-            const sample = VIOEDU_GRADE1_SAMPLE_30[vioIdx] || VIOEDU_GRADE1_SAMPLE_30[0];
-            return {
-              ...sample,
-              id: `digitized-vio-${Date.now()}-${i}`,
-              content: sample.question,
-              options: Array.isArray(sample.options) ? sample.options.map((o: any) => ({ ...o })) : [],
-              originalPageImage: converted?.pageImages?.[i] || ''
-            };
-          });
-          onPartialResult?.(matchedDeck);
-          return matchedDeck;
-        }
-
         if (converted && converted.imageParts.length > 0) {
           finalFileParts.push(...converted.imageParts);
           pageImageUrls.push(...converted.pageImages);
-          if (converted.numPages === VIOEDU_GRADE1_SAMPLE_30.length) {
-            isThirtyPageVioEduPdf = true;
-          }
-          // Nếu là bộ đề 30 trang chụp màn hình ngang VioEdu, khớp ngay tức thì 100% câu hỏi + ảnh gốc từng trang mà không lo lỗi 429
-          if (converted.numPages === VIOEDU_GRADE1_SAMPLE_30.length && converted.isLandscape && uniqueInputParts.length === 1) {
-            onProgress?.('Đã nhận diện bộ đề VioEdu 30 trang! Đang nạp 100% câu hỏi, hình vẽ và ảnh trang đề gốc...');
-            const fullDeck = VIOEDU_GRADE1_SAMPLE_30.map((sample, idx) => ({
-              ...sample,
-              id: `digitized-vio-${Date.now()}-${idx}`,
-              content: sample.question,
-              options: Array.isArray(sample.options) ? sample.options.map((o: any) => ({ ...o })) : [],
-              originalPageImage: converted.pageImages[idx] || ''
-            }));
-            onPartialResult?.(fullDeck);
-            return fullDeck;
-          }
+          pageTextList.push(...converted.pageTexts);
         } else {
-          // Trường hợp mạng chặn CDN PDF.js nhưng phát hiện đúng đề 30 trang VioEdu
-          if (estimatedPages === VIOEDU_GRADE1_SAMPLE_30.length) {
-            onProgress?.('Đã nhận diện bộ đề VioEdu 30 câu! Đang nạp toàn bộ câu hỏi...');
-            const fullDeck = VIOEDU_GRADE1_SAMPLE_30.map((sample, idx) => ({
-              ...sample,
-              id: `digitized-vio-${Date.now()}-${idx}`,
-              content: sample.question,
-              options: Array.isArray(sample.options) ? sample.options.map((o: any) => ({ ...o })) : [],
-              originalPageImage: ''
-            }));
-            onPartialResult?.(fullDeck);
-            return fullDeck;
-          }
           finalFileParts.push({
             inlineData: { data: part.inlineData.data, mimeType: 'application/pdf' }
           });
+          pageImageUrls.push('');
+          pageTextList.push('');
         }
       } else {
         const mime = part.inlineData.mimeType || 'image/jpeg';
         finalFileParts.push({ inlineData: { data: part.inlineData.data, mimeType: mime } });
         pageImageUrls.push(`data:${mime};base64,${part.inlineData.data}`);
+        pageTextList.push('');
       }
     }
 
     if (finalFileParts.length === 0) {
       throw new Error('Không tìm thấy trang tài liệu hợp lệ để số hóa.');
     }
-    if (finalFileParts.length === VIOEDU_GRADE1_SAMPLE_30.length) {
-      isThirtyPageVioEduPdf = true;
-    }
 
-    const digitizePrompt = `Bạn là hệ thống SỐ HÓA ĐỀ THI chuyên nghiệp (đặc biệt tối ưu cho đề thi VioEdu, Violympic, Trạng Nguyên và đề kiểm tra PDF/Ảnh).
-Nhiệm vụ: Số hóa TOÀN BỘ các câu hỏi có trong các trang ảnh đính kèm thành dữ liệu Quiz tương tác.
+    const digitizePrompt = `Bạn là hệ thống SỐ HÓA ĐỀ THI chuyên nghiệp.
+Nhiệm vụ: Đọc kỹ các trang tài liệu đính kèm và trích xuất TOÀN BỘ các câu hỏi có trong tài liệu thành dữ liệu Quiz tương tác.
 
 QUY TẮC BẮT BUỘC:
-1. SỐ HÓA ĐỦ 100% CÁC TRANG: Nếu gửi N trang ảnh (mỗi trang 1 câu hỏi VioEdu) thì PHẢI trả về đúng N câu hỏi theo đúng thứ tự trang (page_index từ 0 đến N-1).
-2. LỌC BỎ NHIỄU GIAO DIỆN CHỤP MÀN HÌNH:
-   - KHÔNG đưa vào nội dung câu hỏi các dòng cảnh báo/giao diện như: "Vui lòng bật chế độ toàn màn hình (F11)...", "Tên đăng nhập: ...", "Bạn đã trả lời sai!", "Bạn đã trả lời đúng!", "Hãy chọn 1 đáp án đúng", "Xác nhận", "Lưu ý: Đối với các môn toán...".
+1. SỐ HÓA ĐÚNG NỘI DUNG TÀI LIỆU TẢI LÊN:
+   - Trích xuất toàn bộ các câu hỏi có trên từng trang (gán đúng "page_index" từ 0 đến N-1 tương ứng với trang trong lô gửi lên).
+   - Nếu 1 trang có nhiều câu hỏi (đề kiểm tra A4) thì trích xuất đủ tất cả các câu trên trang đó. Nếu 1 trang là 1 màn hình câu hỏi (VioEdu/Violympic) thì trích xuất đúng câu hỏi của trang đó.
+2. LỌC BỎ NHIỄU GIAO DIỆN CHỤP MÀN HÌNH (nếu có):
+   - Không lấy các dòng cảnh báo trình duyệt như: "Vui lòng bật chế độ toàn màn hình (F11)...", "Tên đăng nhập: ...", "Bạn đã trả lời sai!", "Bạn đã trả lời đúng!", "Hãy chọn 1 đáp án đúng", "Xác nhận".
 3. PHÂN LOẠI CÂU HỎI CHÍNH XÁC:
-   - Nếu trang có các khung lựa chọn đáp án (thường là 4 ô lưới 2x2 hoặc 3-4 dòng) -> "type": "Trắc nghiệm". Thứ tự 4 ô lưới 2x2 là: A (Trái trên), B (Phải trên), C (Trái dưới), D (Phải dưới).
-   - Nếu trang có ô nhập "Đáp án của bạn..." hoặc yêu cầu điền số/chữ vào chỗ chấm "..." / dấu "?" mà không có các thẻ lựa chọn -> "type": "Tự luận", "options": [].
-4. CẮT HÌNH MINH HỌA CÂU HỎI ("bbox"):
-   - Nếu câu hỏi có hình vẽ minh họa, phép tính bằng hình, robot ghép hình, dãy quy luật, con vật, vạch đếm, sơ đồ tách gộp số: BẮT BUỘC trả về "has_image": true và "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa từ 0 đến 1000 trên trang đó) bao quanh ĐÚNG vùng hình minh họa của câu hỏi (KHÔNG lấy thanh tiêu đề đỏ phía trên, khung tên học sinh, thanh điểm số 28/30, đồng hồ tím 12:58, và KHÔNG lấy phần các thẻ đáp án bên dưới).
-   - Nếu câu hỏi chỉ có chữ thuần túy (hoặc hình chỉ nằm trong 4 đáp án như câu "Hình nào có 10 quả cam?", "Đồ vật nào dưới đây không giống hình tròn?"): trả về "has_image": false, "bbox": null.
+   - Nếu câu hỏi có các phương án lựa chọn (A, B, C, D hoặc 4 ô lựa chọn 2x2) -> "type": "Trắc nghiệm".
+   - Nếu câu hỏi yêu cầu điền số/từ vào chỗ trống hoặc ô nhập "Đáp án của bạn..." mà không có các phương án lựa chọn -> "type": "Tự luận", "options": [].
+4. CẮT HÌNH MINH HỌA CÂU HỎI ("bbox") TỪ TRANG TÀI LIỆU:
+   - Nếu câu hỏi có hình vẽ minh họa, sơ đồ, bảng, đồ vật, con vật, phép tính hình ảnh: BẮT BUỘC trả về "has_image": true và "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa từ 0 đến 1000 trên trang đó) bao quanh ĐÚNG vùng hình minh họa của câu hỏi.
+   - Nếu câu hỏi chỉ có chữ thuần túy: trả về "has_image": false, "bbox": null.
 5. CẮT HÌNH MINH HỌA TRONG TỪNG ĐÁP ÁN ("options"):
    - Với mỗi đáp án A, B, C, D:
-     + Nếu trong ô đáp án là HÌNH VẼ (ví dụ: các vạch màu, bóng đen của đồ vật, hình tam giác/chữ nhật màu, nhóm các quả cam, đồ vật cúc áo/bánh mì/đồng hồ/bánh xe): BẮT BUỘC đặt "has_image": true và trả về "bbox": [ymin, xmin, ymax, xmax] (hệ 0-1000) bao quanh hình vẽ bên trong ô đáp án đó, đồng thời điền "text" mô tả ngắn gọn (VD: "Phương án A", "Phương án B"...).
-     + Nếu trong ô đáp án chỉ là chữ hoặc con số thông thường (VD: "Hình tam giác", "3 + 3 + 4 = 10", "8", "<", ">"): đặt "text" là chữ/số đó, "has_image": false, "bbox": null.
+     + Nếu phương án là HÌNH VẼ: đặt "has_image": true và trả về "bbox": [ymin, xmin, ymax, xmax] (hệ 0-1000) bao quanh hình vẽ bên trong ô đáp án đó, đồng thời điền "text" mô tả ngắn gọn.
+     + Nếu phương án chỉ là chữ hoặc số: điền nội dung vào "text" (không kèm tiền tố A., B., C., D.), "has_image": false, "bbox": null.
 6. GIẢI ĐỀ CHÍNH XÁC 100%:
-   - Tự quan sát kỹ hình ảnh và giải bài toán để điền đáp án ĐÚNG vào "answer" (Điền "A", "B", "C", hoặc "D" nếu là Trắc nghiệm; điền con số hoặc kết quả như "7", "9", "0", "2", "3" nếu là Tự luận điền số). Không bị ảnh hưởng bởi thông báo "Bạn đã trả lời sai!" trên ảnh chụp màn hình.
+   - Quan sát kỹ đề và điền đáp án ĐÚNG vào "answer" ("A", "B", "C", hoặc "D" nếu là Trắc nghiệm; hoặc kết quả cần điền nếu là Tự luận).
 
 TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 {
@@ -2009,81 +1995,20 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
     {
       "page_index": 0,
       "type": "Trắc nghiệm",
-      "question": "Nội dung câu hỏi đã làm sạch",
+      "question": "Nội dung câu hỏi",
       "has_image": true,
       "bbox": [ymin, xmin, ymax, xmax],
       "options": [
-        {"text": "Nội dung hoặc nhãn A", "has_image": false, "bbox": null},
-        {"text": "Nội dung hoặc nhãn B", "has_image": false, "bbox": null},
-        {"text": "Nội dung hoặc nhãn C", "has_image": false, "bbox": null},
-        {"text": "Nội dung hoặc nhãn D", "has_image": false, "bbox": null}
+        {"text": "Nội dung A", "has_image": false, "bbox": null},
+        {"text": "Nội dung B", "has_image": false, "bbox": null},
+        {"text": "Nội dung C", "has_image": false, "bbox": null},
+        {"text": "Nội dung D", "has_image": false, "bbox": null}
       ],
       "answer": "A",
       "explanation": "Giải thích chi tiết cách làm"
     }
   ]
 }`;
-
-    const normalizeForMatch = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const matchVioEduSampleQuestion = (qText: string, pageIdx?: number) => {
-      const normQ = normalizeForMatch(qText);
-      if (!normQ || normQ.length < 6) return null;
-
-      // Ưu tiên kiểm tra đúng vị trí trang trước
-      if (typeof pageIdx === 'number' && pageIdx >= 0 && pageIdx < VIOEDU_GRADE1_SAMPLE_30.length) {
-        const candidate = VIOEDU_GRADE1_SAMPLE_30[pageIdx];
-        const normCand = normalizeForMatch(candidate.question);
-        if (normCand && (normQ.includes(normCand) || normCand.includes(normQ))) {
-          return candidate;
-        }
-        const qWords = normQ.split(' ').filter(w => w.length > 1);
-        const candWords = new Set(normCand.split(' ').filter(w => w.length > 1));
-        if (candWords.size > 0) {
-          const hitCount = qWords.filter(w => candWords.has(w)).length;
-          if (hitCount / Math.min(qWords.length || 1, candWords.size) >= 0.6) {
-            return candidate;
-          }
-        }
-      }
-
-      // Tìm kiếm toàn bộ ngân hàng câu hỏi VioEdu mẫu
-      let bestMatch: any = null;
-      let bestScore = 0;
-      const qWords = normQ.split(' ').filter(w => w.length > 1);
-      for (const sample of VIOEDU_GRADE1_SAMPLE_30) {
-        const normSample = normalizeForMatch(sample.question);
-        if (!normSample) continue;
-        if (normQ === normSample || (normQ.length > 15 && (normSample.includes(normQ) || normQ.includes(normSample)))) {
-          return sample;
-        }
-        const sWords = normSample.split(' ').filter(w => w.length > 1);
-        const sSet = new Set(sWords);
-        const hits = qWords.filter(w => sSet.has(w)).length;
-        const score = hits / Math.max(qWords.length || 1, sWords.length || 1);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = sample;
-        }
-      }
-      return bestScore >= 0.68 ? bestMatch : null;
-    };
-
-    const buildFromVioEduSample = (sample: any, pageImage: string, indexNum: number) => ({
-      ...sample,
-      id: `digitized-vio-${Date.now()}-${indexNum}`,
-      content: sample.question,
-      options: Array.isArray(sample.options) ? sample.options.map((o: any) => ({ ...o })) : [],
-      originalPageImage: pageImage || ''
-    });
 
     const BATCH_PAGES = 2;
     const digitizedQuestions: any[] = [];
@@ -2097,9 +2022,19 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
     for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
       if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
       const endPage = Math.min(startIdx + BATCH_PAGES, finalFileParts.length);
-      onProgress?.(`Đang số hóa câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã xong ${digitizedQuestions.length} câu)...`);
+      onProgress?.(`Đang dùng AI đọc câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length} câu)...`);
 
       const batchParts = finalFileParts.slice(startIdx, endPage);
+      const batchTexts = pageTextList
+        .slice(startIdx, endPage)
+        .map((t, idx) => (t ? `--- VĂN BẢN TRANG ${idx} (page_index = ${idx}) ---\n${t}` : ''))
+        .filter(Boolean)
+        .join('\n\n');
+
+      const promptForBatch = batchTexts
+        ? `${digitizePrompt}\n\nVĂN BẢN GỐC TRÍCH XUẤT TỪ CÁC TRANG TRONG LÔ NÀY (kết hợp cùng hình ảnh trang để lấy đúng nội dung và tọa độ hình vẽ bbox):\n${batchTexts}`
+        : digitizePrompt;
+
       let rawBatchList: any[] = [];
 
       const extractListFromRes = (res: any): any[] => {
@@ -2110,32 +2045,30 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       };
 
       try {
-        const batchResult = await this.generateExamQuestionsStructured(digitizePrompt, batchParts);
+        const batchResult = await this.generateExamQuestionsStructured(promptForBatch, batchParts);
         rawBatchList = extractListFromRes(batchResult);
         if (rawBatchList.length === 0) {
           throw new Error(batchResult?.error || 'Batch empty');
         }
       } catch (firstErr: any) {
         if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
-        // Nếu là đề 30 trang VioEdu và AI bị nghẽn mạng/quota, trả về luôn bộ 30 câu chuẩn kèm ảnh gốc
-        if (isThirtyPageVioEduPdf && startIdx === 0) {
-          const fullDeck = VIOEDU_GRADE1_SAMPLE_30.map((sample, idx) =>
-            buildFromVioEduSample(sample, pageImageUrls[idx] || '', idx)
-          );
-          onPartialResult?.(fullDeck);
-          return fullDeck;
-        }
 
         // Thử lại từng trang một (1 trang/lần) để giảm tải cho AI
         rawBatchList = [];
         for (let pIdx = 0; pIdx < batchParts.length; pIdx++) {
           if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
-          await new Promise(r => setTimeout(r, 1200));
+          await new Promise(r => setTimeout(r, 900));
+          const singleText = pageTextList[startIdx + pIdx] || '';
+          const singlePrompt = singleText
+            ? `${digitizePrompt}\n\nVĂN BẢN GỐC TRANG 0:\n${singleText}`
+            : digitizePrompt;
           try {
-            const singleRes = await this.generateExamQuestionsStructured(digitizePrompt, [batchParts[pIdx]]);
+            const singleRes = await this.generateExamQuestionsStructured(singlePrompt, [batchParts[pIdx]]);
             const singleList = extractListFromRes(singleRes);
             if (singleList.length > 0) {
-              rawBatchList.push({ ...singleList[0], page_index: pIdx });
+              for (const item of singleList) {
+                rawBatchList.push({ ...item, page_index: pIdx });
+              }
             }
           } catch (singleErr) {
             console.warn(`[digitizeExamFromFiles] Retry single page ${startIdx + pIdx + 1} failed:`, singleErr);
@@ -2143,61 +2076,21 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
         }
       }
 
-      // Kiểm tra nếu đây là bộ đề 30 trang VioEdu Lớp 1 (trang 1 hoặc trang 2 khớp với đề mẫu 30 trang)
-      if (startIdx === 0 && isThirtyPageVioEduPdf && rawBatchList.length > 0) {
-        const firstMatches = rawBatchList.some((q: any, idx: number) => {
-          const txt = String(q?.question || q?.content || q?.text || '');
-          return matchVioEduSampleQuestion(txt, idx) !== null;
-        });
-        if (firstMatches) {
-          onProgress?.('Đã nhận diện chính xác bộ đề VioEdu 30 câu! Đang đồng bộ 100% câu hỏi, hình vẽ và trang đề gốc...');
-          const fullDeck = VIOEDU_GRADE1_SAMPLE_30.map((sample, idx) =>
-            buildFromVioEduSample(sample, pageImageUrls[idx] || '', idx)
-          );
-          onPartialResult?.(fullDeck);
-          return fullDeck;
-        }
-      }
+      // Đánh dấu những trang nào trong batch đã có câu hỏi do AI trả về
+      const pagesCoveredInBatch = new Set<number>();
 
-      // Đảm bảo mỗi trang trong batch đều có câu hỏi tương ứng theo đúng thứ tự trang
-      const pageCountInBatch = batchParts.length;
-      for (let localPageIdx = 0; localPageIdx < pageCountInBatch; localPageIdx++) {
+      for (let qIdx = 0; qIdx < rawBatchList.length; qIdx++) {
+        const q = rawBatchList[qIdx];
+        if (!q || typeof q !== 'object') continue;
+
+        const rawLocalPage = Number(q.page_index ?? q.page ?? (qIdx < batchParts.length ? qIdx : 0));
+        const localPageIdx = Number.isFinite(rawLocalPage)
+          ? Math.min(Math.max(0, rawLocalPage), batchParts.length - 1)
+          : 0;
+        pagesCoveredInBatch.add(localPageIdx);
+
         const globalPageIdx = startIdx + localPageIdx;
         const pageImage = pageImageUrls[globalPageIdx] || pageImageUrls[0] || '';
-
-        // Tìm câu hỏi AI trả về cho trang localPageIdx này
-        const q =
-          rawBatchList.find((item: any) => Number(item?.page_index ?? item?.page) === localPageIdx) ||
-          rawBatchList[localPageIdx];
-
-        if (!q || typeof q !== 'object') {
-          // Nếu AI bỏ sót trang trong đề 30 câu VioEdu thì lấy từ mẫu chuẩn
-          if (isThirtyPageVioEduPdf && VIOEDU_GRADE1_SAMPLE_30[globalPageIdx]) {
-            digitizedQuestions.push(
-              buildFromVioEduSample(VIOEDU_GRADE1_SAMPLE_30[globalPageIdx], pageImage, digitizedQuestions.length)
-            );
-          } else if (pageImage) {
-            // Nếu trang đề khác bị quá tải AI (429), vẫn tạo câu hỏi trực quan kèm ảnh cắt từ trang đề để giáo viên không bị lỗi trống đề
-            const fallbackCrop = (await cropImageFromBbox(pageImage, [120, 120, 520, 880])) || pageImage;
-            digitizedQuestions.push({
-              id: `digitized-page-${Date.now()}-${digitizedQuestions.length}`,
-              type: 'Trắc nghiệm',
-              question: `Câu hỏi trang ${globalPageIdx + 1}: Quan sát hình và chọn đáp án đúng:`,
-              content: `Câu hỏi trang ${globalPageIdx + 1}: Quan sát hình và chọn đáp án đúng:`,
-              image: fallbackCrop,
-              options: [
-                { text: 'Đáp án A', image: '' },
-                { text: 'Đáp án B', image: '' },
-                { text: 'Đáp án C', image: '' },
-                { text: 'Đáp án D', image: '' }
-              ],
-              answer: 'A',
-              explanation: '',
-              originalPageImage: pageImage
-            });
-          }
-          continue;
-        }
 
         const qTextRaw = String(q.question || q.content || q.text || '').trim();
         const cleanedQText = qTextRaw
@@ -2206,15 +2099,6 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           .replace(/Hãy chọn 1 đáp án đúng/gi, '')
           .trim() || 'Quan sát hình và trả lời câu hỏi:';
 
-        // Kiểm tra xem câu hỏi này có khớp với câu hỏi chuẩn trong ngân hàng VioEdu không
-        const matchedSample = matchVioEduSampleQuestion(cleanedQText, globalPageIdx);
-        if (matchedSample) {
-          digitizedQuestions.push(
-            buildFromVioEduSample(matchedSample, pageImage, digitizedQuestions.length)
-          );
-          continue;
-        }
-
         let questionCroppedImg = '';
         if (Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
           questionCroppedImg = await cropImageFromBbox(pageImage, q.bbox);
@@ -2222,7 +2106,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           questionCroppedImg = q.image;
         }
 
-        // Fallback cắt vùng hình minh họa trung tâm nếu câu hỏi có nhắc tới hình mà AI quên trả về tọa độ bbox
+        // Fallback cắt vùng hình minh họa trung tâm từ trang đề gốc nếu câu hỏi có nhắc tới hình mà AI quên trả về tọa độ bbox
         const mentionsVisual = /hình trên|hình dưới|hình bên|hình sau|hình vẽ|quan sát hình|bông hoa trên/i.test(cleanedQText);
         if (!questionCroppedImg && (q.has_image || mentionsVisual) && pageImage) {
           questionCroppedImg = await cropImageFromBbox(pageImage, [135, 145, 515, 855]);
@@ -2270,21 +2154,45 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
         });
       }
 
+      // Với những trang trong batch mà AI bị lỗi 429 không trả về được câu hỏi:
+      for (let localPageIdx = 0; localPageIdx < batchParts.length; localPageIdx++) {
+        if (pagesCoveredInBatch.has(localPageIdx)) continue;
+        const globalPageIdx = startIdx + localPageIdx;
+        const pageImage = pageImageUrls[globalPageIdx] || '';
+        const rawPageText = pageTextList[globalPageIdx] || '';
+
+        // Ưu tiên 1: Bóc tách từ văn bản gốc của trang PDF nếu có
+        const textExtractedQuestions = parseQuestionsFromRawPageText(rawPageText, pageImage);
+        if (textExtractedQuestions.length > 0) {
+          digitizedQuestions.push(...textExtractedQuestions);
+          continue;
+        }
+
+        // Ưu tiên 2: Tạo thẻ câu hỏi kèm ảnh cắt trực tiếp từ đúng trang PDF của người dùng tải lên
+        if (pageImage) {
+          const fallbackCrop = (await cropImageFromBbox(pageImage, [120, 120, 540, 880])) || pageImage;
+          digitizedQuestions.push({
+            id: `digitized-page-${Date.now()}-${digitizedQuestions.length}`,
+            type: 'Trắc nghiệm',
+            question: `Câu hỏi trang ${globalPageIdx + 1} (Bấm "Ảnh trang đề gốc" hoặc "Sửa đề & Cắt ảnh" để chỉnh sửa):`,
+            content: `Câu hỏi trang ${globalPageIdx + 1} (Bấm "Ảnh trang đề gốc" hoặc "Sửa đề & Cắt ảnh" để chỉnh sửa):`,
+            image: fallbackCrop,
+            options: [
+              { text: 'Phương án A', image: '' },
+              { text: 'Phương án B', image: '' },
+              { text: 'Phương án C', image: '' },
+              { text: 'Phương án D', image: '' }
+            ],
+            answer: 'A',
+            explanation: '',
+            originalPageImage: pageImage
+          });
+        }
+      }
+
       if (digitizedQuestions.length > 0) {
         onPartialResult?.([...digitizedQuestions]);
       }
-    }
-
-    if (digitizedQuestions.length === 0) {
-      const estCount = Math.min(
-        VIOEDU_GRADE1_SAMPLE_30.length,
-        Math.max(1, estimatePdfPagesFromBase64(uniqueInputParts[0]?.inlineData?.data || '') || VIOEDU_GRADE1_SAMPLE_30.length)
-      );
-      const fallbackDeck = VIOEDU_GRADE1_SAMPLE_30.slice(0, estCount).map((sample, idx) =>
-        buildFromVioEduSample(sample, pageImageUrls[idx] || '', idx)
-      );
-      onPartialResult?.(fallbackDeck);
-      return fallbackDeck;
     }
 
     return digitizedQuestions;
@@ -2461,6 +2369,21 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 
       this.modelCycleCount++;
       if (this.modelCycleCount >= this.availableModels.length) {
+        if (originalPrompt) {
+          try {
+            const text = await this.fallbackToOtherProviders(originalPrompt, true, fileParts);
+            const currentFnStr = retryFn.toString();
+            const needsJson =
+              currentFnStr.includes('Structured') ||
+              currentFnStr.includes('Quiz') ||
+              currentFnStr.includes('Worksheet') ||
+              currentFnStr.includes('Exam');
+            this.resetRetryCounters();
+            return needsJson ? this.parseJSONSafely(text) : text;
+          } catch (serverErr) {
+            console.error("Server fallback after 404/400 failed:", serverErr);
+          }
+        }
         this.resetRetryCounters();
         throw new Error("❌ LỖI AI: Không tìm thấy Model phù hợp hoặc Key không đủ quyền. Thầy/Cô hãy kiểm tra lại Key cá nhân (API Key) trong Cài đặt nhé!");
       }

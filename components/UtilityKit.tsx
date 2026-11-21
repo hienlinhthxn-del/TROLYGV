@@ -3753,7 +3753,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                           ) : (
                             <div className="space-y-3">
                               <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Hỗ trợ tới 35 trang)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Hỗ trợ tới 40 trang)</label>
                                 <input
                                   type="file"
                                   multiple
@@ -3767,19 +3767,9 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                                   className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                                 />
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSubject('Toán');
-                                  setGrade('Lớp 1');
-                                  setTopic('Đề thi VioEdu Toán Lớp 1 (30 câu từ file PDF)');
-                                  setResult(VIOEDU_GRADE1_SAMPLE_30);
-                                }}
-                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
-                              >
-                                <i className="fas fa-file-circle-check"></i>
-                                <span>Mở ngay 30 câu từ file PDF VioEdu vừa gửi</span>
-                              </button>
+                              <p className="text-[10px] text-slate-500 italic px-1">
+                                Chọn file đề PDF hoặc Ảnh của Thầy/Cô, sau đó bấm nút <b>"Tạo Quiz"</b> bên dưới để AI đọc và số hóa đúng nội dung file vừa tải lên.
+                              </p>
                             </div>
                           )}
                         </div>
