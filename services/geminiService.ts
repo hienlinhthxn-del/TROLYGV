@@ -441,7 +441,15 @@ class GeminiService {
     await this.ensureInitialized();
 
     // Thêm hướng dẫn JSON rõ ràng vào prompt TRƯỚC khi gọi bất kỳ nhánh nào (kể cả Server Fallback trên điện thoại)
-    const enhancedPrompt = `${prompt}
+    const hasCustomBboxSchema = /"bbox"\s*:|page_index/i.test(prompt);
+    const enhancedPrompt = hasCustomBboxSchema
+      ? `${prompt}
+
+QUAN TRỌNG - YÊU CẦU ĐỊNH DẠNG:
+- Trả về DUY NHẤT một JSON object hợp lệ có trường "questions" là mảng các câu hỏi.
+- KHÔNG thêm markdown hay giải thích ngoài JSON.
+- Giữ nguyên đầy đủ các trường "bbox", "page_index", "has_image" của câu hỏi và của từng phương án trong "options".`
+      : `${prompt}
 
 QUAN TRỌNG - YÊU CẦU ĐỊNH DẠNG:
 - Trả về DUY NHẤT một JSON object hợp lệ
@@ -503,6 +511,7 @@ CẤU TRÚC JSON BẮT BUỘC:
           const isEssay =
             rawType.includes('tự luận') ||
             rawType.includes('tu luan') ||
+            rawType.includes('điền') ||
             rawType === 'essay' ||
             (rawOpts.length === 0 && rawType !== '' && !rawType.includes('trắc nghiệm') && !rawType.includes('trac nghiem') && !rawType.includes('mcq'));
 
@@ -516,20 +525,27 @@ CẤU TRÚC JSON BẮT BUỘC:
                 }
                 return {
                   text: String(opt?.text ?? opt?.content ?? opt?.label ?? opt?.value ?? ''),
-                  image: String(opt?.image ?? '')
+                  image: String(opt?.image ?? opt?.svg ?? ''),
+                  ...(Array.isArray(opt?.bbox) && opt.bbox.length === 4 ? { bbox: opt.bbox.map(Number) } : {}),
+                  ...(typeof opt?.has_image === 'boolean' ? { has_image: opt.has_image } : {})
                 };
               })
-            : undefined;
+            : [];
 
           return {
             id: q?.id || `gen-${Date.now()}-${idx}`,
             type: isEssay ? 'Tự luận' : 'Trắc nghiệm',
             level: q?.level || 'Thông hiểu',
             content: contentStr,
-            image: typeof q?.image === 'string' ? q.image : '',
+            question: contentStr,
+            image: typeof q?.image === 'string' && q.image ? q.image : (typeof q?.svg === 'string' ? q.svg : ''),
             options: normOpts,
             answer: typeof q?.answer === 'string' ? q.answer : String(q?.answer?.text ?? q?.answer ?? ''),
-            explanation: typeof q?.explanation === 'string' ? q.explanation : String(q?.explanation ?? '')
+            explanation: typeof q?.explanation === 'string' ? q.explanation : String(q?.explanation ?? ''),
+            ...(Array.isArray(q?.bbox) && q.bbox.length === 4 ? { bbox: q.bbox.map(Number) } : {}),
+            ...(q?.page_index !== undefined || q?.page !== undefined || q?.pageNumber !== undefined
+              ? { page_index: Number(q?.page_index ?? q?.page ?? q?.pageNumber ?? 0) }
+              : {})
           };
         });
       }
@@ -1693,6 +1709,297 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
     } catch {
       return ["Hãy kể cho tôi nghe thêm về chủ đề này", "Tôi nên bắt đầu từ đâu?", "Bạn có thể ví dụ không?"];
     }
+  }
+
+  public async digitizeExamFromFiles(
+    fileParts: FilePart[],
+    callbacks?: {
+      onProgress?: (msg: string) => void;
+      onPartialResult?: (questions: any[]) => void;
+      shouldStop?: () => boolean;
+    }
+  ): Promise<any[]> {
+    const onProgress = callbacks?.onProgress;
+    const onPartialResult = callbacks?.onPartialResult;
+    const shouldStop = callbacks?.shouldStop || (() => false);
+
+    const base64ToUint8Array = (data: string) => {
+      const binary = atob(data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    };
+
+    const convertPdfPartToImages = async (base64: string): Promise<{ imageParts: FilePart[]; pageImages: string[] } | null> => {
+      try {
+        // @ts-ignore
+        const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
+        // @ts-ignore
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+
+        const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
+        const pdf = await loadingTask.promise;
+        const imageParts: FilePart[] = [];
+        const pageImages: string[] = [];
+
+        const maxPages = Math.min(pdf.numPages, 40);
+        for (let i = 1; i <= maxPages; i++) {
+          if (shouldStop()) throw new Error('Đã dừng xử lý file.');
+          onProgress?.(`Đang đọc file PDF: trang ${i}/${maxPages}...`);
+          await new Promise(resolve => setTimeout(resolve, 25));
+
+          const page = await pdf.getPage(i);
+          const unscaled = page.getViewport({ scale: 1.0 });
+          const targetScale = unscaled.width > 0 ? Math.min(1.5, Math.max(0.95, 1150 / unscaled.width)) : 1.1;
+          const viewport = page.getViewport({ scale: targetScale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = Math.round(viewport.height);
+          canvas.width = Math.round(viewport.width);
+          await page.render({ canvasContext: context!, viewport }).promise;
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.74);
+          pageImages.push(imgData);
+          imageParts.push({
+            inlineData: {
+              data: imgData.split(',')[1],
+              mimeType: 'image/jpeg'
+            }
+          });
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        return { imageParts, pageImages };
+      } catch (e: any) {
+        console.error('[digitizeExamFromFiles] PDF Convert Error:', e);
+        if (e?.message?.includes('dừng')) throw e;
+        return null;
+      }
+    };
+
+    const cropImageFromBbox = (base64Image: string, bbox: number[]): Promise<string> => {
+      return new Promise((resolve) => {
+        if (!base64Image || !Array.isArray(bbox) || bbox.length !== 4) {
+          resolve('');
+          return;
+        }
+        const [ymin, xmin, ymax, xmax] = bbox.map(Number);
+        if (
+          !Number.isFinite(ymin) ||
+          !Number.isFinite(xmin) ||
+          !Number.isFinite(ymax) ||
+          !Number.isFinite(xmax) ||
+          ymax <= ymin + 12 ||
+          xmax <= xmin + 12
+        ) {
+          resolve('');
+          return;
+        }
+
+        const img = new Image();
+        img.onload = () => {
+          if (img.width === 0 || img.height === 0) {
+            resolve('');
+            return;
+          }
+          const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+          const y1 = clamp((ymin / 1000) * img.height, 0, img.height - 1);
+          const x1 = clamp((xmin / 1000) * img.width, 0, img.width - 1);
+          const y2 = clamp((ymax / 1000) * img.height, y1 + 1, img.height);
+          const x2 = clamp((xmax / 1000) * img.width, x1 + 1, img.width);
+          const w = Math.round(x2 - x1);
+          const h = Math.round(y2 - y1);
+          if (w < 16 || h < 16) {
+            resolve('');
+            return;
+          }
+
+          const canvas = document.createElement('canvas');
+          const pad = 6;
+          canvas.width = w + pad * 2;
+          canvas.height = h + pad * 2;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve('');
+            return;
+          }
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, x1, y1, w, h, pad, pad, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.86));
+        };
+        img.onerror = () => resolve('');
+        img.src = base64Image;
+      });
+    };
+
+    const finalFileParts: FilePart[] = [];
+    const pageImageUrls: string[] = [];
+
+    for (const part of fileParts) {
+      if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+      const isPdf =
+        part.inlineData.mimeType === 'application/pdf' ||
+        part.inlineData.data.startsWith('JVBERi0');
+      if (isPdf) {
+        const converted = await convertPdfPartToImages(part.inlineData.data);
+        if (converted && converted.imageParts.length > 0) {
+          finalFileParts.push(...converted.imageParts);
+          pageImageUrls.push(...converted.pageImages);
+        } else {
+          finalFileParts.push({
+            inlineData: { data: part.inlineData.data, mimeType: 'application/pdf' }
+          });
+        }
+      } else {
+        const mime = part.inlineData.mimeType || 'image/jpeg';
+        finalFileParts.push({ inlineData: { data: part.inlineData.data, mimeType: mime } });
+        pageImageUrls.push(`data:${mime};base64,${part.inlineData.data}`);
+      }
+    }
+
+    if (finalFileParts.length === 0) {
+      throw new Error('Không tìm thấy trang tài liệu hợp lệ để số hóa.');
+    }
+
+    const digitizePrompt = `Bạn là hệ thống SỐ HÓA ĐỀ THI chuyên nghiệp (đặc biệt tối ưu cho đề thi VioEdu, Violympic, Trạng Nguyên và đề kiểm tra PDF/Ảnh).
+Nhiệm vụ: Số hóa TOÀN BỘ các câu hỏi có trong các trang ảnh đính kèm thành dữ liệu Quiz tương tác.
+
+QUY TẮC BẮT BUỘC:
+1. SỐ HÓA ĐỦ 100% CÁC TRANG: Nếu gửi N trang ảnh (mỗi trang 1 câu hỏi VioEdu) thì PHẢI trả về đúng N câu hỏi theo đúng thứ tự trang (page_index từ 0 đến N-1).
+2. LỌC BỎ NHIỄU GIAO DIỆN CHỤP MÀN HÌNH:
+   - KHÔNG đưa vào nội dung câu hỏi các dòng cảnh báo/giao diện như: "Vui lòng bật chế độ toàn màn hình (F11)...", "Tên đăng nhập: ...", "Bạn đã trả lời sai!", "Bạn đã trả lời đúng!", "Hãy chọn 1 đáp án đúng", "Xác nhận", "Lưu ý: Đối với các môn toán...".
+3. PHÂN LOẠI CÂU HỎI CHÍNH XÁC:
+   - Nếu trang có các khung lựa chọn đáp án (thường là 4 ô lưới 2x2 hoặc 3-4 dòng) -> "type": "Trắc nghiệm". Thứ tự 4 ô lưới 2x2 là: A (Trái trên), B (Phải trên), C (Trái dưới), D (Phải dưới).
+   - Nếu trang có ô nhập "Đáp án của bạn..." hoặc yêu cầu điền số/chữ vào chỗ chấm "..." / dấu "?" mà không có các thẻ lựa chọn -> "type": "Tự luận", "options": [].
+4. CẮT HÌNH MINH HỌA CÂU HỎI ("bbox"):
+   - Nếu câu hỏi có hình vẽ minh họa, phép tính bằng hình, robot ghép hình, dãy quy luật, con vật, vạch đếm, sơ đồ tách gộp số: BẮT BUỘC trả về "has_image": true và "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa từ 0 đến 1000 trên trang đó) bao quanh ĐÚNG vùng hình minh họa của câu hỏi (KHÔNG lấy thanh tiêu đề đỏ phía trên, khung tên học sinh, thanh điểm số 28/30, đồng hồ tím 12:58, và KHÔNG lấy phần các thẻ đáp án bên dưới).
+   - Nếu câu hỏi chỉ có chữ thuần túy (hoặc hình chỉ nằm trong 4 đáp án như câu "Hình nào có 10 quả cam?", "Đồ vật nào dưới đây không giống hình tròn?"): trả về "has_image": false, "bbox": null.
+5. CẮT HÌNH MINH HỌA TRONG TỪNG ĐÁP ÁN ("options"):
+   - Với mỗi đáp án A, B, C, D:
+     + Nếu trong ô đáp án là HÌNH VẼ (ví dụ: các vạch màu, bóng đen của đồ vật, hình tam giác/chữ nhật màu, nhóm các quả cam, đồ vật cúc áo/bánh mì/đồng hồ/bánh xe): BẮT BUỘC đặt "has_image": true và trả về "bbox": [ymin, xmin, ymax, xmax] (hệ 0-1000) bao quanh hình vẽ bên trong ô đáp án đó, đồng thời điền "text" mô tả ngắn gọn (VD: "Phương án A", "Phương án B"...).
+     + Nếu trong ô đáp án chỉ là chữ hoặc con số thông thường (VD: "Hình tam giác", "3 + 3 + 4 = 10", "8", "<", ">"): đặt "text" là chữ/số đó, "has_image": false, "bbox": null.
+6. GIẢI ĐỀ CHÍNH XÁC 100%:
+   - Tự quan sát kỹ hình ảnh và giải bài toán để điền đáp án ĐÚNG vào "answer" (Điền "A", "B", "C", hoặc "D" nếu là Trắc nghiệm; điền con số hoặc kết quả như "7", "9", "0", "2", "3" nếu là Tự luận điền số). Không bị ảnh hưởng bởi thông báo "Bạn đã trả lời sai!" trên ảnh chụp màn hình.
+
+TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
+{
+  "questions": [
+    {
+      "page_index": 0,
+      "type": "Trắc nghiệm",
+      "question": "Nội dung câu hỏi đã làm sạch",
+      "has_image": true,
+      "bbox": [ymin, xmin, ymax, xmax],
+      "options": [
+        {"text": "Nội dung hoặc nhãn A", "has_image": false, "bbox": null},
+        {"text": "Nội dung hoặc nhãn B", "has_image": false, "bbox": null},
+        {"text": "Nội dung hoặc nhãn C", "has_image": false, "bbox": null},
+        {"text": "Nội dung hoặc nhãn D", "has_image": false, "bbox": null}
+      ],
+      "answer": "A",
+      "explanation": "Giải thích chi tiết cách làm"
+    }
+  ]
+}`;
+
+    const BATCH_PAGES = 4;
+    const digitizedQuestions: any[] = [];
+
+    for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
+      if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+      const endPage = Math.min(startIdx + BATCH_PAGES, finalFileParts.length);
+      onProgress?.(`Đang số hóa câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã xong ${digitizedQuestions.length} câu)...`);
+
+      const batchParts = finalFileParts.slice(startIdx, endPage);
+      let batchResult: any = null;
+      try {
+        batchResult = await this.generateExamQuestionsStructured(digitizePrompt, batchParts);
+      } catch (firstErr: any) {
+        if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+        await new Promise(r => setTimeout(r, 1500));
+        batchResult = await this.generateExamQuestionsStructured(digitizePrompt, batchParts);
+      }
+
+      let rawBatchList: any[] = [];
+      if (batchResult && Array.isArray(batchResult.questions)) {
+        rawBatchList = batchResult.questions;
+      } else if (Array.isArray(batchResult)) {
+        rawBatchList = batchResult;
+      }
+
+      for (let localIdx = 0; localIdx < rawBatchList.length; localIdx++) {
+        const q = rawBatchList[localIdx];
+        if (!q || typeof q !== 'object') continue;
+
+        const rawLocalPage = Number(q.page_index ?? q.page ?? localIdx);
+        const clampedLocalPage = Number.isFinite(rawLocalPage)
+          ? Math.min(Math.max(0, rawLocalPage), batchParts.length - 1)
+          : Math.min(localIdx, batchParts.length - 1);
+        const globalPageIdx = startIdx + clampedLocalPage;
+        const pageImage = pageImageUrls[globalPageIdx] || pageImageUrls[0] || '';
+
+        const qTextRaw = String(q.question || q.content || q.text || '').trim();
+        const cleanedQText = qTextRaw
+          .replace(/Vui lòng bật chế độ toàn màn hình.*?lần/gi, '')
+          .replace(/Bạn đã trả lời (sai|đúng)!/gi, '')
+          .replace(/Hãy chọn 1 đáp án đúng/gi, '')
+          .trim() || 'Quan sát hình và trả lời câu hỏi:';
+
+        let questionCroppedImg = '';
+        if (Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
+          questionCroppedImg = await cropImageFromBbox(pageImage, q.bbox);
+        } else if (typeof q.image === 'string' && (q.image.startsWith('<svg') || q.image.startsWith('data:image'))) {
+          questionCroppedImg = q.image;
+        }
+
+        const rawOpts = Array.isArray(q.options) ? q.options : [];
+        const processedOptions = await Promise.all(
+          rawOpts.map(async (opt: any, oIdx: number) => {
+            if (typeof opt === 'string' || typeof opt === 'number') {
+              return { text: String(opt).trim(), image: '' };
+            }
+            const optText = String(opt?.text ?? opt?.label ?? opt?.content ?? '').trim();
+            let optImg = typeof opt?.image === 'string' && (opt.image.startsWith('<svg') || opt.image.startsWith('data:image'))
+              ? opt.image
+              : '';
+            if (!optImg && Array.isArray(opt?.bbox) && opt.bbox.length === 4 && pageImage) {
+              optImg = await cropImageFromBbox(pageImage, opt.bbox);
+            }
+            return {
+              text: optText || (optImg ? `Hình ${String.fromCharCode(65 + oIdx)}` : ''),
+              image: optImg
+            };
+          })
+        );
+
+        const validOptions = processedOptions.filter(o => o.text !== '' || o.image !== '');
+        const isEssay =
+          String(q.type || '').toLowerCase().includes('tự luận') ||
+          String(q.type || '').toLowerCase().includes('điền') ||
+          validOptions.length < 2;
+
+        digitizedQuestions.push({
+          id: `digitized-${Date.now()}-${digitizedQuestions.length}`,
+          type: isEssay ? 'Tự luận' : 'Trắc nghiệm',
+          question: cleanedQText,
+          content: cleanedQText,
+          image: questionCroppedImg,
+          options: isEssay ? [] : validOptions,
+          answer: String(q.answer ?? '').trim(),
+          explanation: String(q.explanation ?? '').trim(),
+          originalPageImage: pageImage
+        });
+      }
+
+      if (digitizedQuestions.length > 0) {
+        onPartialResult?.([...digitizedQuestions]);
+      }
+    }
+
+    return digitizedQuestions;
   }
 
   /* --- XỬ LÝ JSON AN TOÀN --- */

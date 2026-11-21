@@ -747,7 +747,20 @@ const QuizPlayer: React.FC<{
           )
         )}
 
-        <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 leading-relaxed font-serif">{displayQuestion}</h3>
+              {!displayImage && onCrop && currentQuestion.originalPageImage && (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => onCrop(currentQuestion.originalPageImage, 'question', currentIndex)}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 text-xs font-bold inline-flex items-center gap-1.5 transition-all"
+                  >
+                    <i className="fas fa-crop-simple"></i>
+                    <span>Cắt hình minh họa từ trang đề gốc</span>
+                  </button>
+                </div>
+              )}
+
+              <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 leading-relaxed font-serif">{displayQuestion}</h3>
 
         {isCurrentMcq ? (
           <>
@@ -925,6 +938,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [voiceName, setVoiceName] = useState<'Kore' | 'Puck' | 'Boy' | 'Girl'>('Kore');
   const [quizCount, setQuizCount] = useState(5);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [digitizeProgress, setDigitizeProgress] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -1049,14 +1063,26 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const inferredMime =
+        file.type ||
+        (ext === 'pdf'
+          ? 'application/pdf'
+          : ext === 'png'
+            ? 'image/png'
+            : ext === 'jpg' || ext === 'jpeg'
+              ? 'image/jpeg'
+              : ext === 'webp'
+                ? 'image/webp'
+                : 'application/octet-stream');
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64Data = (reader.result as string).split(',')[1];
         setPendingAttachments(prev => [...prev, {
-          type: file.type.startsWith('image/') ? 'image' : 'file',
+          type: inferredMime.startsWith('image/') ? 'image' : 'file',
           name: file.name,
           data: base64Data,
-          mimeType: file.type
+          mimeType: inferredMime
         }]);
       };
       reader.readAsDataURL(file);
@@ -1452,343 +1478,49 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
   const generateQuizFromUpload = async () => {
     setIsProcessing(true);
+    setDigitizeProgress('Đang chuẩn bị đọc file đề thi...');
     setResult(null);
     setAudioUrl(null);
     forceStopRef.current = false;
 
-    const controller = new AbortController();
-    const { signal } = controller;
-
     try {
-      // Ưu tiên sử dụng pendingAttachments nếu có (để hỗ trợ nhiều file)
       const fileParts = getFileParts();
 
       if (fileParts.length === 0 && quizFile) {
-        // Fallback cho logic cũ hoặc nếu người dùng chỉ chọn 1 file qua input riêng
+        const ext = quizFile.name.split('.').pop()?.toLowerCase() || '';
+        const inferredMime =
+          quizFile.type ||
+          (ext === 'pdf' ? 'application/pdf' : 'image/jpeg');
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve) => {
           reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
           reader.readAsDataURL(quizFile);
         });
         const base64Data = await base64Promise;
-        fileParts.push({ inlineData: { data: base64Data, mimeType: quizFile.type } });
+        fileParts.push({ inlineData: { data: base64Data, mimeType: inferredMime } });
       }
 
       if (fileParts.length === 0) {
-        alert("Vui lòng chọn file đề thi (Ảnh/PDF)!");
+        alert("Vui lòng chọn file đề thi (Ảnh hoặc PDF) trước khi bấm Tạo Quiz!");
         setIsProcessing(false);
+        setDigitizeProgress('');
         return;
       }
 
-      // --- TỰ ĐỘNG CHUYỂN PDF SANG ẢNH ĐỂ TRÁNH LỖI GEMINI ---
-      const base64ToUint8Array = (data: string) => {
-        const binary = atob(data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        return bytes;
-      };
-
-      const convertPdfToImages = async (base64: string): Promise<{ imageParts: any[]; pageImages: string[] } | null> => {
-        try {
-          // @ts-ignore
-          const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-          // @ts-ignore
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-
-          const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
-          const pdf = await loadingTask.promise;
-          const imageParts: any[] = [];
-          const pageImages: string[] = [];
-
-          const maxPages = Math.min(pdf.numPages, 35); // Hỗ trợ đề VioEdu lên tới 35 trang (30 câu/đề)
-          let scale = 1.0;
-          let quality = 0.6;
-
-          for (let i = 1; i <= maxPages; i++) {
-            if (forceStopRef.current) throw new Error("Dừng xử lý PDF.");
-
-            // Yield to main thread more frequently
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context!, viewport: viewport }).promise;
-
-            // Sử dụng jpeg để nén tốt hơn png
-            const imgData = canvas.toDataURL('image/jpeg', quality);
-            pageImages.push(imgData);
-            imageParts.push({
-              inlineData: {
-                data: imgData.split(',')[1],
-                mimeType: 'image/jpeg'
-              }
-            });
-
-            // Giải phóng bộ nhớ canvas
-            canvas.width = 0;
-            canvas.height = 0;
+      const formattedQuestions = await geminiService.digitizeExamFromFiles(fileParts, {
+        onProgress: (msg) => setDigitizeProgress(msg),
+        onPartialResult: (partialQs) => {
+          if (partialQs.length > 0) {
+            setResult(partialQs);
           }
-          return { imageParts, pageImages };
-        } catch (e: any) {
-          console.error("PDF Convert Error:", e);
-          if (e.message?.includes("Dừng")) throw e;
-          return null; // Fallback to original
-        }
-      };
+        },
+        shouldStop: () => forceStopRef.current,
+      });
 
-      const finalFileParts: any[] = [];
-      const pageImageUrls: string[] = [];
-
-      for (const part of fileParts) {
-        if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-        if (part.inlineData.mimeType === 'application/pdf') {
-          const converted = await convertPdfToImages(part.inlineData.data);
-          if (converted && converted.imageParts.length > 0) {
-            finalFileParts.push(...converted.imageParts);
-            pageImageUrls.push(...converted.pageImages);
-          } else {
-            finalFileParts.push(part);
-          }
-        } else {
-          finalFileParts.push(part);
-          if (part.inlineData.mimeType.startsWith('image/')) {
-            pageImageUrls.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-          }
-        }
-      }
-
-      if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-
-      const prompt = `Trích xuất TOÀN BỘ câu hỏi từ các trang đề thi (đặc biệt hỗ trợ đề thi VioEdu / Violympic / Trạng Nguyên mỗi trang 1 câu hỏi).
-      
-      YÊU CẦU QUAN TRỌNG (BẮT BUỘC):
-      1. TRÍCH XUẤT 100%: Phải trích xuất đầy đủ tất cả câu hỏi có trong các trang ảnh được gửi.
-      2. PHÂN LOẠI ĐÚNG:
-         - Nếu câu hỏi có các thẻ lựa chọn đáp án -> "type": "Trắc nghiệm", trích xuất đủ các phương án vào "options". Nếu phương án trả lời là HÌNH ẢNH (ví dụ 4 hình vẽ, 4 nhóm quả cam, 4 hình bóng), hãy trả về tọa độ "bbox": [ymin, xmin, ymax, xmax] cho từng option trong "options": [{"text": "Hình A", "bbox": [ymin, xmin, ymax, xmax]}] để hệ thống tự cắt ảnh từng đáp án!
-         - Nếu câu hỏi có ô trống "Đáp án của bạn..." hoặc yêu cầu điền số vào dấu "?" -> "type": "Tự luận", "options": [], và tự giải toán để điền đáp án chính xác vào trường "answer" (ví dụ: "7", "9", "0").
-      3. TỰ ĐỘNG CẮT ẢNH CÂU HỎI (BẮT BUỘC): Nếu câu hỏi có hình minh họa, sơ đồ, phép tính hình ảnh, bạn PHẢI cung cấp trường "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa 0-1000) chỉ bao quanh phần HÌNH MINH HỌA của câu hỏi (không lấy thanh tiêu đề trình duyệt hay khung đáp án bên dưới).
-      
-      JSON Format: {
-        "questions": [
-          {
-            "type": "Trắc nghiệm" | "Tự luận",
-            "question": "Nội dung chữ của câu hỏi",
-            "options": [{"text": "...", "image": "", "bbox": [ymin, xmin, ymax, xmax]}],
-            "answer": "Đáp án đúng (A/B/C/D hoặc số điền vào ô trống)",
-            "explanation": "Giải thích ngắn gọn cách tìm ra đáp án",
-            "bbox": [ymin, xmin, ymax, xmax],
-            "page_index": 0
-          }
-        ]
-      }`;
-
-      // Xử lý theo từng lô 6 trang để đọc trọn vẹn đề PDF 30 trang mà không bị quá tải token/payload
-      const BATCH_PAGES = 6;
-      const rawQuestions: any[] = [];
-      for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
-        if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-        const batchParts = finalFileParts.slice(startIdx, startIdx + BATCH_PAGES);
-        const runBatch = async () => geminiService.generateExamQuestionsStructured(prompt, batchParts);
-        let batchJson: any;
-        try {
-          batchJson = await runBatch();
-        } catch (firstError: any) {
-          if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-          await new Promise((resolve) => setTimeout(resolve, 1800));
-          batchJson = await runBatch();
-        }
-
-        let batchList: any[] = [];
-        if (batchJson && Array.isArray(batchJson.questions)) {
-          batchList = batchJson.questions;
-        } else if (Array.isArray(batchJson)) {
-          batchList = batchJson;
-        } else if (batchJson && typeof batchJson === 'object') {
-          const key = Object.keys(batchJson).find(k => Array.isArray(batchJson[k]));
-          if (key) batchList = batchJson[key];
-        }
-
-        batchList.forEach((q: any, localIdx: number) => {
-          const localPage = typeof q.page_index === 'number' ? q.page_index : localIdx;
-          rawQuestions.push({
-            ...q,
-            page_index: startIdx + Math.min(Math.max(0, localPage), batchParts.length - 1)
-          });
-        });
-      }
-
-      if (rawQuestions.length > 0) {
-        // KIỂM TRA AN TOÀN: Nếu AI trả về một mảng các chuỗi (chỉ có đáp án) thay vì các đối tượng câu hỏi.
-        if (typeof rawQuestions[0] === 'string' || typeof rawQuestions[0] === 'number') {
-          throw new Error("AI đã trả về một danh sách đáp án thay vì bộ câu hỏi đầy đủ. Vui lòng thử lại.");
-        }
-
-        // Helper để cắt ảnh từ bbox
-        const cropImageFromBbox = (base64Image: string, bbox: number[]): Promise<string> => {
-          return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              if (!bbox || bbox.length !== 4) { resolve(base64Image); return; }
-              if (img.width === 0 || img.height === 0) { resolve(base64Image); return; }
-
-              const [ymin, xmin, ymax, xmax] = bbox;
-              const width = img.width;
-              const height = img.height;
-
-              const y = (ymin / 1000) * height;
-              const x = (xmin / 1000) * width;
-              const h = ((ymax - ymin) / 1000) * height;
-              const w = ((xmax - xmin) / 1000) * width;
-
-              if (w <= 0 || h <= 0) { resolve(base64Image); return; }
-
-              const canvas = document.createElement('canvas');
-              const padding = 10;
-              canvas.width = w + padding * 2;
-              canvas.height = h + padding * 2;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, x, y, w, h, padding, padding, w, h);
-                resolve(canvas.toDataURL('image/jpeg'));
-              } else {
-                resolve(base64Image);
-              }
-            };
-            img.onerror = () => resolve(base64Image);
-            img.src = base64Image;
-          });
-        };
-
-        const formattedQuestions = await Promise.all(rawQuestions.map(async (q: any, i: number) => {
-          // Chuẩn hóa dữ liệu options để đảm bảo cấu trúc {text, image}
-          const resolveOptions = (candidate: unknown) => {
-            if (Array.isArray(candidate)) return candidate;
-            if (candidate && typeof candidate === 'object') {
-              return Object.values(candidate as Record<string, unknown>);
-            }
-            return [];
-          };
-          const rawOptions = resolveOptions(
-            q.options
-            ?? q.choices
-            ?? q.answers
-            ?? q.luaChon
-            ?? q.luachon
-          );
-          let normalizedOptions = rawOptions
-            .map((opt: any) => {
-              const text = (typeof opt === 'string' || typeof opt === 'number') ? String(opt) : (opt.text || opt.label || '');
-              const image = (typeof opt === 'object' && opt !== null) ? opt.image : '';
-              return { text: text.trim(), image };
-            })
-            .filter(opt => opt.text !== '' || (typeof opt.image === 'string' && opt.image.length > 0));
-
-          if (normalizedOptions.length < 2) {
-            // Tự động chuyển thành Tự luận nếu không có đủ phương án trắc nghiệm
-            q.type = 'Tự luận';
-            normalizedOptions = [];
-          }
-          // Xử lý chỉ số trang trả về từ AI: page_index bắt đầu từ 0
-          const pageIndexRaw = q.page_index ?? q.page ?? q.pageNumber;
-          let pageImage = '';
-          if (pageIndexRaw !== undefined && pageIndexRaw !== null) {
-            const parsed = Number(pageIndexRaw);
-            if (!Number.isNaN(parsed)) {
-              // page_index từ AI luôn bắt đầu từ 0 (trang đầu tiên)
-              if (parsed >= 0 && parsed < pageImageUrls.length && pageImageUrls[parsed]) {
-                pageImage = pageImageUrls[parsed];
-              }
-            }
-          }
-          // Fallback: Nếu không có chỉ số trang rõ ràng, dùng logic phân bổ đều
-          if (!pageImage && pageImageUrls.length > 0) {
-            const totalQuestions = rawQuestions.length;
-            const questionsPerPage = Math.ceil(totalQuestions / pageImageUrls.length);
-            const calculatedPage = Math.min(Math.floor(i / (questionsPerPage || 1)), pageImageUrls.length - 1);
-            pageImage = pageImageUrls[calculatedPage] || pageImageUrls[0];
-          }
-
-          const normalizeImage = (value: string) => {
-            if (!value) return '';
-            const trimmed = value.trim();
-            // Detect various forms of "Cut Image" instruction from AI or bbox presence
-            const isCutCommand = /\[?(CẮT ẢNH|CẮT ẢNH TỪ ĐỀ|CUT IMAGE|HÌNH ẢNH|IMAGE)\]?/i.test(trimmed);
-            if (isCutCommand) return trimmed;
-            if (trimmed.startsWith('<svg')) return trimmed;
-            if (/^(http|https|data:image)/i.test(trimmed)) return trimmed;
-            return trimmed;
-          };
-
-          const pickQuestionText = (...values: Array<unknown>) => {
-            const stringValue = values.find((val) => typeof val === 'string' && val.trim().length > 0) as string | undefined;
-            if (stringValue) return stringValue.trim();
-            const numberValue = values.find((val) => typeof val === 'number');
-            return typeof numberValue === 'number' ? String(numberValue).trim() : '';
-          };
-
-          const questionText = pickQuestionText(
-            q.content,
-            q.question,
-            q.text,
-            q.prompt,
-            q.title,
-            q.cauHoi,
-            q.cau_hoi,
-            q['câu hỏi']
-          );
-          const imageMarkerMatch = questionText ? questionText.match(/\[(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):.*?\]/i) : null;
-          const imageMarker = imageMarkerMatch ? imageMarkerMatch[0] : '';
-          const questionImage = normalizeImage(q.image || imageMarker);
-          const strippedQuestionText = imageMarker ? questionText.replace(imageMarker, '').trim() : questionText;
-          const cleanedQuestionText = strippedQuestionText
-            || questionText
-            || (questionImage ? 'Xem hình và chọn đáp án đúng.' : 'Câu hỏi chưa rõ nội dung, vui lòng xem lại đề.');
-
-          // Xử lý cắt ảnh nếu có bbox
-          let finalImage = questionImage;
-          if (q.bbox && Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
-            try {
-              finalImage = await cropImageFromBbox(pageImage, q.bbox);
-            } catch (e) {
-              console.warn("Failed to crop image", e);
-            }
-          }
-
-          // Xử lý cắt ảnh cho options (NEW)
-          const processedOptions = await Promise.all(normalizedOptions.map(async (opt: any) => {
-            let optImage = normalizeImage(opt.image || '');
-            if (opt.bbox && Array.isArray(opt.bbox) && opt.bbox.length === 4 && pageImage) {
-              try {
-                optImage = await cropImageFromBbox(pageImage, opt.bbox);
-              } catch (e) {
-                console.warn("Failed to crop option image", e);
-              }
-            }
-            return { text: opt.text, image: optImage };
-          }));
-
-          return {
-            id: q.id || `quiz - ${Date.now()} -${i} `,
-            type: q.type || 'Trắc nghiệm',
-            question: cleanedQuestionText, // QuizPlayer dùng 'question'
-            image: finalImage,
-            options: processedOptions,
-            answer: q.answer || '',
-            explanation: q.explanation || '',
-            originalPageImage: pageImage // Lưu ảnh gốc để hỗ trợ cắt lại
-          };
-        }));
+      if (formattedQuestions.length > 0) {
         setResult(formattedQuestions);
       } else {
-        throw new Error("AI không trích xuất được câu hỏi nào hoặc định dạng trả về không đúng.");
+        throw new Error("AI không trích xuất được câu hỏi nào từ file. Vui lòng kiểm tra lại file PDF/Ảnh.");
       }
     } catch (error: any) {
       console.error("Quiz Upload Error:", error);
@@ -1864,6 +1596,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
 
     } finally {
       setIsProcessing(false);
+      setDigitizeProgress('');
     }
   };
 
@@ -4686,19 +4419,27 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             </div>
 
             <div className="flex-1 lg:overflow-y-auto p-4 sm:p-8 custom-scrollbar">
-              {isProcessing ? (
+              {isProcessing && (!result || !(activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) && result.length > 0)) ? (
                 <div className="min-h-[280px] h-full flex flex-col items-center justify-center space-y-6">
                   <div className="relative">
                     <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
                     <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs font-black text-slate-800 uppercase tracking-widest">AI đang làm việc</p>
+                    <p className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                      {digitizeProgress || 'AI đang làm việc'}
+                    </p>
                     <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tighter">Vui lòng đợi trong giây lát</p>
                   </div>
                 </div>
               ) : result ? (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  {isProcessing && digitizeProgress && (
+                    <div className="mb-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between text-xs font-bold text-indigo-700 animate-pulse">
+                      <span><i className="fas fa-spinner fa-spin mr-2"></i>{digitizeProgress}</span>
+                      <span className="text-[10px] uppercase tracking-wider">Bạn có thể xem trước các câu đã xong</span>
+                    </div>
+                  )}
                   {activeTab === 'games' && gameType === 'crossword' && typeof result === 'object' ? (
                     <Crossword data={result} />
                   ) : activeTab === 'games' && gameType === 'quiz' && Array.isArray(result) ? (

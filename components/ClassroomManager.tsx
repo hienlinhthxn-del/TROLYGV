@@ -1569,115 +1569,48 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
     setGeneratedQuiz(null);
 
     try {
-      // --- START: Logic from UtilityKit for robust PDF/Image processing ---
+      const ext = quizFile.name.split('.').pop()?.toLowerCase() || '';
+      const inferredMime =
+        quizFile.mimeType ||
+        (ext === 'pdf' ? 'application/pdf' : 'image/jpeg');
       const fileParts: FilePart[] = [{
-        inlineData: { data: quizFile.data!, mimeType: quizFile.mimeType! }
+        inlineData: { data: quizFile.data!, mimeType: inferredMime }
       }];
 
-      const base64ToUint8Array = (data: string) => {
-        const binary = atob(data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-          bytes[i] = binary.charCodeAt(i);
+      const digitized = await geminiService.digitizeExamFromFiles(fileParts, {
+        onPartialResult: (partialQs) => {
+          setGeneratedQuiz({
+            title: `Đề số hóa từ ${quizFile.name}`,
+            subject: 'Toán / Tiếng Việt',
+            questions: partialQs.map((q: any) => ({
+              id: q.id,
+              type: q.type || 'Trắc nghiệm',
+              level: 'Thông hiểu',
+              content: q.question || q.content || '',
+              image: q.image || '',
+              options: q.options || [],
+              answer: q.answer || '',
+              explanation: q.explanation || ''
+            }))
+          });
         }
-        return bytes;
-      };
+      });
 
-      const convertPdfToImages = async (base64: string): Promise<{ imageParts: any[]; pageImages: string[] } | null> => {
-        try {
-          // @ts-ignore
-          const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm');
-          // @ts-ignore
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-
-          const loadingTask = pdfjsLib.getDocument({ data: base64ToUint8Array(base64) });
-          const pdf = await loadingTask.promise;
-          const imageParts: any[] = [];
-          const pageImages: string[] = [];
-          const maxPages = Math.min(pdf.numPages, 20);
-
-          for (let i = 1; i <= maxPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context!, viewport: viewport }).promise;
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
-            pageImages.push(imgData);
-            imageParts.push({ inlineData: { data: imgData.split(',')[1], mimeType: 'image/jpeg' } });
-          }
-          return { imageParts, pageImages };
-        } catch (e) {
-          console.error("PDF Convert Error in ClassroomManager:", e);
-          return null;
-        }
-      };
-
-      const finalFileParts: any[] = [];
-      const pageImageUrls: string[] = [];
-
-      for (const part of fileParts) {
-        if (part.inlineData.mimeType === 'application/pdf') {
-          const converted = await convertPdfToImages(part.inlineData.data);
-          if (converted && converted.imageParts.length > 0) {
-            finalFileParts.push(...converted.imageParts);
-            pageImageUrls.push(...converted.pageImages);
-          } else {
-            finalFileParts.push(part);
-          }
-        } else {
-          finalFileParts.push(part);
-          if (part.inlineData.mimeType.startsWith('image/')) {
-            pageImageUrls.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-          }
-        }
-      }
-      // --- END: PDF processing logic ---
-
-      const prompt = `Phân tích file đề thi này và trích xuất TOÀN BỘ các câu hỏi.
-      Yêu cầu:
-      1. Tìm đủ số câu hỏi trong đề (thường là 10, 20 hoặc 30 câu).
-      2. Với mỗi câu hỏi, trích xuất: Nội dung câu hỏi, các lựa chọn (A, B, C, D), đáp án đúng và giải thích.
-      3. Nếu câu hỏi có hình ảnh, hãy ghi chú vị trí trang để hệ thống cắt ảnh.
-      4. TRẢ VỀ DỮ LIÊU DƯỚI DẠNG JSON với cấu trúc: { "title": "...", "questions": [...] }`;
-      const result = await geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
-
-      let rawQuestions = [];
-      if (result && result.questions && Array.isArray(result.questions)) {
-        rawQuestions = result.questions;
-      } else if (Array.isArray(result)) {
-        rawQuestions = result;
-      }
-
-      if (rawQuestions.length > 0) {
-        if (typeof rawQuestions[0] === 'string' || typeof rawQuestions[0] === 'number') {
-          throw new Error("AI đã trả về một danh sách đáp án thay vì bộ câu hỏi đầy đủ.");
-        }
-        const formattedQuestions = rawQuestions.map((q: any, i: number) => {
-          const pageIndex = Number(q.page_index ?? q.page ?? q.pageNumber);
-          const pageImage = (Number.isFinite(pageIndex) && pageIndex >= 0 && pageImageUrls[pageIndex])
-            ? pageImageUrls[pageIndex]
-            : (pageImageUrls.length === 1 ? pageImageUrls[0] : '');
-
-          const normalizeImage = (value?: string) => {
-            if (!value) return pageImage || '';
-            const trimmed = value.trim();
-            if (trimmed.startsWith('<svg') || /^(http|https|data:image)/i.test(trimmed)) return trimmed;
-            return pageImage || trimmed;
-          };
-
-          return {
-            id: q.id || `quiz-cls-${Date.now()}-${i}`,
-            content: q.content || q.question || 'Câu hỏi trống',
-            image: normalizeImage(q.image),
-            options: Array.isArray(q.options) ? q.options.map((opt: any) => ({ text: opt.text || opt, image: normalizeImage(opt.image) })) : [],
+      if (digitized.length > 0) {
+        setGeneratedQuiz({
+          title: `Đề số hóa từ ${quizFile.name} (${digitized.length} câu)`,
+          subject: 'Toán / Tiếng Việt',
+          questions: digitized.map((q: any) => ({
+            id: q.id,
+            type: q.type || 'Trắc nghiệm',
+            level: 'Thông hiểu',
+            content: q.question || q.content || '',
+            image: q.image || '',
+            options: q.options || [],
             answer: q.answer || '',
-            explanation: q.explanation || '',
-          };
+            explanation: q.explanation || ''
+          }))
         });
-        setGeneratedQuiz({ title: result.title || 'Đề thi được tạo bởi AI', subject: result.subject || 'Chưa rõ', questions: formattedQuestions });
       } else {
         throw new Error("AI không trả về dữ liệu quiz hợp lệ.");
       }
@@ -1697,15 +1630,19 @@ const ClassroomManager: React.FC<ClassroomManagerProps> = ({ classroom, onUpdate
   const handleQuizFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const inferredMime =
+      file.type ||
+      (ext === 'pdf' ? 'application/pdf' : 'image/jpeg');
 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64Data = (reader.result as string).split(',')[1];
       setQuizFile({
-        type: file.type.startsWith('image/') ? 'image' : 'file',
+        type: inferredMime.startsWith('image/') ? 'image' : 'file',
         name: file.name,
         data: base64Data,
-        mimeType: file.type
+        mimeType: inferredMime
       });
     };
     reader.readAsDataURL(file);
