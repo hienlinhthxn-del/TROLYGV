@@ -528,7 +528,13 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
             {renderQuestionImage(currentQuestion.image)}
 
             <p className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed relative z-10">
-              {currentQuestion.content}
+              {String(currentQuestion.content || '')
+                .replace(/\\\(\s*\\(?:square|Box|blacksquare)\s*\\\)|\$\s*\\(?:square|Box|blacksquare)\s*\$|\\(?:square|Box|blacksquare)\b/gi, '⬜')
+                .replace(/\\\(\s*\\(?:bigcirc|circ)\s*\\\)|\$\s*\\(?:bigcirc|circ)\s*\$|\\(?:bigcirc|circ)\b/gi, '⚪')
+                .replace(/\\times\b/gi, '×')
+                .replace(/\\div\b/gi, ':')
+                .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+                .replace(/\$([^$]{1,40})\$/g, '$1')}
             </p>
 
             {currentQuestion.type === 'Trắc nghiệm' && currentQuestion.options && currentQuestion.options.length > 0 ? (

@@ -227,6 +227,30 @@ const QuizPlayer: React.FC<{
   const [autoReadQuiz, setAutoReadQuiz] = useState(true);
   const [quizVoice, setQuizVoice] = useState<'Puck' | 'Kore' | 'Girl' | 'Boy'>('Puck');
   const [showOriginalPage, setShowOriginalPage] = useState(false);
+  const [isQuickEditing, setIsQuickEditing] = useState(false);
+
+  const cleanDisplayMathText = (raw: string): string => {
+    if (!raw) return '';
+    return raw
+      .replace(/\\\(\s*\\(?:square|Box|blacksquare|framebox\{[^}]*\})\s*\\\)/gi, '⬜')
+      .replace(/\$\s*\\(?:square|Box|blacksquare)\s*\$/gi, '⬜')
+      .replace(/\\(?:square|Box|blacksquare)\b/gi, '⬜')
+      .replace(/\\\(\s*\\(?:bigcirc|circ|odot)\s*\\\)/gi, '⚪')
+      .replace(/\$\s*\\(?:bigcirc|circ|odot)\s*\$/gi, '⚪')
+      .replace(/\\(?:bigcirc|circ)\b/gi, '⚪')
+      .replace(/\\times\b/gi, '×')
+      .replace(/\\div\b/gi, ':')
+      .replace(/\\cdot\b/gi, '·')
+      .replace(/\\leq?\b/gi, '≤')
+      .replace(/\\geq?\b/gi, '≥')
+      .replace(/\\neq?\b/gi, '≠')
+      .replace(/\\(?:dots|ldots|cdots)\b/gi, '...')
+      .replace(/\\quad|\\qquad|\\,/g, ' ')
+      .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+      .replace(/\$([^$]{1,40})\$/g, '$1')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
 
   const handleReadQuizQuestion = async (forceRead = false) => {
     const q = data[currentIndex];
@@ -269,6 +293,7 @@ const QuizPlayer: React.FC<{
     setFeedbackToast(null);
     setIsBatchEditing(false); // Reset edit mode when changing question
     setShowOriginalPage(false);
+    setIsQuickEditing(false);
     if (showScore) {
       geminiService.stopSpeakingQuestion();
       setIsSpeakingQuiz(false);
@@ -578,8 +603,8 @@ const QuizPlayer: React.FC<{
   const currentQuestion = data[currentIndex] || { question: '', image: '', options: [] };
   const questionOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : [];
 
-  // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung
-  let displayQuestion = toSafeText(currentQuestion.question);
+  // Xử lý thông minh: Tách hình ảnh ra khỏi nội dung câu hỏi nếu AI gộp chung và làm sạch mã LaTeX thừa
+  let displayQuestion = cleanDisplayMathText(toSafeText(currentQuestion.question));
   let displayImage = toSafeText(currentQuestion.image);
 
   if (!displayImage && displayQuestion) {
@@ -800,7 +825,117 @@ const QuizPlayer: React.FC<{
                 </div>
               )}
 
-              <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 leading-relaxed font-serif">{displayQuestion}</h3>
+              {isQuickEditing && onUpdateQuestion ? (
+                <div className="mb-4 p-4 bg-indigo-50/60 border-2 border-indigo-200 rounded-2xl space-y-3 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-black text-indigo-700 uppercase tracking-wider">
+                      <i className="fas fa-pen-to-square mr-1.5"></i>Sửa nhanh câu {currentIndex + 1}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {['⬜', '⚪', '>', '<', '=', '+', '-', '×', ':'].map(sym => (
+                        <button
+                          key={sym}
+                          type="button"
+                          onClick={() => onUpdateQuestion(currentIndex, { ...currentQuestion, question: `${toSafeText(currentQuestion.question)} ${sym} ` })}
+                          className="px-2 py-0.5 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-indigo-100"
+                          title={`Chèn ký hiệu ${sym}`}
+                        >
+                          {sym}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onUpdateQuestion(currentIndex, { ...currentQuestion, question: cleanDisplayMathText(toSafeText(currentQuestion.question)) })}
+                        className="px-2.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[10px] font-black hover:bg-amber-200"
+                        title="Tự động xóa mã LaTeX thừa"
+                      >
+                        ✨ Xóa mã thừa
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Nội dung câu hỏi</label>
+                    <textarea
+                      value={toSafeText(currentQuestion.question)}
+                      onChange={(e) => onUpdateQuestion(currentIndex, { ...currentQuestion, question: e.target.value, content: e.target.value })}
+                      rows={2}
+                      className="w-full mt-1 p-3 bg-white border border-indigo-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  {questionOptions.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {questionOptions.map((opt: any, oIdx: number) => (
+                        <div key={oIdx} className="flex items-center gap-1.5">
+                          <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                            {String.fromCharCode(65 + oIdx)}
+                          </span>
+                          <input
+                            value={typeof opt === 'string' ? opt : (opt?.text || '')}
+                            onChange={(e) => {
+                              const nextOpts = [...questionOptions];
+                              if (typeof nextOpts[oIdx] === 'string') {
+                                nextOpts[oIdx] = { text: e.target.value, image: '' };
+                              } else {
+                                nextOpts[oIdx] = { ...nextOpts[oIdx], text: e.target.value };
+                              }
+                              onUpdateQuestion(currentIndex, { ...currentQuestion, options: nextOpts });
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase">Đáp án đúng</label>
+                      <input
+                        value={toSafeText(currentQuestion.answer)}
+                        onChange={(e) => onUpdateQuestion(currentIndex, { ...currentQuestion, answer: e.target.value })}
+                        placeholder="VD: A, B, C, D hoặc 7"
+                        className="w-full mt-1 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-black text-emerald-700 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase">Giải thích</label>
+                      <input
+                        value={toSafeText(currentQuestion.explanation)}
+                        onChange={(e) => onUpdateQuestion(currentIndex, { ...currentQuestion, explanation: e.target.value })}
+                        placeholder="Nhập lời giải ngắn..."
+                        className="w-full mt-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickEditing(false)}
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5"
+                    >
+                      <i className="fas fa-check"></i> Xong
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2 mb-4">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed font-serif flex-1">{displayQuestion}</h3>
+                  {onUpdateQuestion && (
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickEditing(true)}
+                      className="shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 text-[11px] font-bold transition-all flex items-center gap-1"
+                      title="Sửa nhanh nội dung câu hỏi & đáp án này"
+                    >
+                      <i className="fas fa-pen text-[10px]"></i>
+                      <span>Sửa câu này</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
         {isCurrentMcq ? (
           <>

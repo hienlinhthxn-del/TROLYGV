@@ -2275,12 +2275,33 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
         const globalPageIdx = startIdx + localPageIdx;
         const pageImage = pageImageUrls[globalPageIdx] || pageImageUrls[0] || '';
 
+        const cleanLatexSymbols = (raw: string) =>
+          raw
+            .replace(/\\\(\s*\\(?:square|Box|blacksquare|framebox\{[^}]*\})\s*\\\)/gi, '⬜')
+            .replace(/\$\s*\\(?:square|Box|blacksquare)\s*\$/gi, '⬜')
+            .replace(/\\(?:square|Box|blacksquare)\b/gi, '⬜')
+            .replace(/\\\(\s*\\(?:bigcirc|circ|odot)\s*\\\)/gi, '⚪')
+            .replace(/\$\s*\\(?:bigcirc|circ|odot)\s*\$/gi, '⚪')
+            .replace(/\\(?:bigcirc|circ)\b/gi, '⚪')
+            .replace(/\\times\b/gi, '×')
+            .replace(/\\div\b/gi, ':')
+            .replace(/\\leq?\b/gi, '≤')
+            .replace(/\\geq?\b/gi, '≥')
+            .replace(/\\neq?\b/gi, '≠')
+            .replace(/\\(?:dots|ldots|cdots)\b/gi, '...')
+            .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+            .replace(/\$([^$]{1,40})\$/g, '$1')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
         const qTextRaw = String(q.question || q.content || q.text || '').trim();
-        const cleanedQText = qTextRaw
-          .replace(/Vui lòng bật chế độ toàn màn hình.*?lần/gi, '')
-          .replace(/Bạn đã trả lời (sai|đúng)!/gi, '')
-          .replace(/Hãy chọn 1 đáp án đúng/gi, '')
-          .trim() || 'Quan sát hình và trả lời câu hỏi:';
+        const cleanedQText = cleanLatexSymbols(
+          qTextRaw
+            .replace(/Vui lòng bật chế độ toàn màn hình.*?lần/gi, '')
+            .replace(/Bạn đã trả lời (sai|đúng)!/gi, '')
+            .replace(/Hãy chọn 1 đáp án đúng/gi, '')
+            .trim()
+        ) || 'Quan sát hình và trả lời câu hỏi:';
 
         let questionCroppedImg = '';
         if (Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
