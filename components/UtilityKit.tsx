@@ -6,6 +6,7 @@ import { PERSONAS } from '../constants';
 import ChatMessage from './ChatMessage';
 import Crossword from './Crossword';
 import { exportWorksheetToDocx, convertPdfToWordDocx, convertPdfToWordWithOCR } from '../docxHelper';
+import { VIOEDU_GRADE1_SAMPLE_30 } from '../vioeduQuizData';
 
 interface UtilityKitProps {
   onSendToWorkspace: (content: string) => void;
@@ -210,8 +211,12 @@ const QuizPlayer: React.FC<{
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [wrongCount, setWrongCount] = useState(0);
   const [showScore, setShowScore] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [selectedOption, setSelectedOption] = useState<any>(null);
+  const [pendingOptionIndex, setPendingOptionIndex] = useState<number | null>(null);
+  const [essayInput, setEssayInput] = useState('');
+  const [feedbackToast, setFeedbackToast] = useState<'correct' | 'wrong' | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [timeLeft, setTimeLeft] = useState(45);
   const [timerEnabled, setTimerEnabled] = useState(false);
@@ -255,6 +260,11 @@ const QuizPlayer: React.FC<{
 
   useEffect(() => {
     setTimeLeft(45);
+    setPendingOptionIndex(null);
+    setEssayInput('');
+    setSelectedOption(null);
+    setIsCorrect(null);
+    setFeedbackToast(null);
     setIsBatchEditing(false); // Reset edit mode when changing question
     if (showScore) {
       geminiService.stopSpeakingQuestion();
@@ -283,51 +293,80 @@ const QuizPlayer: React.FC<{
   }, []);
 
   const checkCorrectness = (q: any, opt: any, idx: number) => {
-    if (!q || !opt) return false;
+    if (!q || opt === null || opt === undefined) return false;
 
-    const ansVal = typeof q.answer === 'string' ? q.answer : (q.answer.text || '');
+    const ansVal = typeof q.answer === 'string' || typeof q.answer === 'number' ? String(q.answer) : (q.answer?.text || '');
     const ansStr = String(ansVal).trim();
 
-    const optVal = typeof opt === 'string' ? opt : (opt.text || '');
+    const optVal = typeof opt === 'string' || typeof opt === 'number' ? String(opt) : (opt?.text || '');
     const optStr = String(optVal).trim();
 
+    if (!ansStr || !optStr) return false;
     if (ansStr.toLowerCase() === optStr.toLowerCase()) return true;
+
+    // So sánh số học cho câu hỏi Điền số VioEdu (VD: "7" và "07" hoặc "7.")
+    const cleanAns = ansStr.replace(/^[A-F][\.\:\)]\s*/i, '').trim().toLowerCase();
+    const cleanOpt = optStr.replace(/^[A-F][\.\:\)]\s*/i, '').trim().toLowerCase();
+    if (cleanAns === cleanOpt) return true;
+    if (!Number.isNaN(Number(cleanAns)) && !Number.isNaN(Number(cleanOpt)) && cleanAns !== '' && cleanOpt !== '') {
+      if (Number(cleanAns) === Number(cleanOpt)) return true;
+    }
 
     if (idx >= 0) {
       const letter = String.fromCharCode(65 + idx);
       const letterLower = letter.toLowerCase();
       const ansLower = ansStr.toLowerCase();
       if (ansLower === letterLower) return true;
-      if (ansLower.startsWith(`${letterLower}.`) || ansLower.startsWith(`${letterLower} `) || ansLower.startsWith(`${letterLower})`)) return true;
+      if (ansLower.startsWith(`${letterLower}.`) || ansLower.startsWith(`${letterLower} `) || ansLower.startsWith(`${letterLower})`) || ansLower.startsWith(`${letterLower}:`)) return true;
     }
     return false;
   };
 
   const handleAnswerClick = (option: any, index: number) => {
-    if (selectedOption) return;
+    if (selectedOption !== null) return;
 
     const correct = checkCorrectness(data[currentIndex], option, index);
     setSelectedOption(option);
     setIsCorrect(correct);
+    setFeedbackToast(correct ? 'correct' : 'wrong');
 
     if (correct) {
       setScore(prev => prev + 1);
+    } else {
+      setWrongCount(prev => prev + 1);
     }
 
     setTimeout(() => {
+      setFeedbackToast(null);
       const nextQuestion = currentIndex + 1;
       if (nextQuestion < data.length) {
         setCurrentIndex(nextQuestion);
         setSelectedOption(null);
+        setPendingOptionIndex(null);
+        setEssayInput('');
         setIsCorrect(null);
       } else {
         setShowScore(true);
       }
-    }, 2000);
+    }, 1800);
+  };
+
+  const handleConfirmCurrentAnswer = () => {
+    if (selectedOption !== null) return;
+    const currentQ = data[currentIndex];
+    const qOpts = Array.isArray(currentQ?.options) ? currentQ.options : [];
+    const isMcq = (!currentQ?.type || currentQ.type === 'Trắc nghiệm') && qOpts.length > 0;
+    if (isMcq) {
+      if (pendingOptionIndex === null) return;
+      handleAnswerClick(qOpts[pendingOptionIndex], pendingOptionIndex);
+    } else {
+      if (!essayInput.trim()) return;
+      handleAnswerClick(essayInput.trim(), -1);
+    }
   };
 
   useEffect(() => {
-    if (!timerEnabled || showScore || selectedOption || isBatchEditing) return;
+    if (!timerEnabled || showScore || selectedOption !== null || isBatchEditing) return;
 
     if (timeLeft === 0) {
       handleAnswerClick('TIMEOUT', -1);
@@ -344,8 +383,12 @@ const QuizPlayer: React.FC<{
   const restartQuiz = () => {
     setCurrentIndex(0);
     setScore(0);
+    setWrongCount(0);
     setShowScore(false);
     setSelectedOption(null);
+    setPendingOptionIndex(null);
+    setEssayInput('');
+    setFeedbackToast(null);
     setIsCorrect(null);
     setTimeLeft(45);
   };
@@ -544,104 +587,145 @@ const QuizPlayer: React.FC<{
     }
   }
 
+  const isCurrentMcq = (!currentQuestion.type || currentQuestion.type === 'Trắc nghiệm') && questionOptions.length > 0;
+
   return (
-    <div className="flex flex-col h-full p-4">
-      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Câu {currentIndex + 1}/{data.length}</span>
-          <button
-            type="button"
-            onClick={() => setTimerEnabled(!timerEnabled)}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-full border text-xs font-black transition-all ${
-              timerEnabled
-                ? timeLeft <= 5
-                  ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse'
-                  : 'bg-amber-50 border-amber-200 text-amber-700'
-                : 'bg-slate-50 border-slate-200 text-slate-400'
-            }`}
-            title="Bật/Tắt đếm ngược thời gian"
-          >
-            <i className="fas fa-clock text-xs"></i>
-            <span>{timerEnabled ? `${timeLeft}s` : 'Không giới hạn giờ'}</span>
-          </button>
+    <div className="flex flex-col h-full p-3 sm:p-5 relative">
+      {/* VioEdu Toast Notification */}
+      {feedbackToast && (
+        <div className="fixed sm:absolute top-3 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-white rounded-2xl shadow-2xl border border-slate-200 flex items-center gap-2.5 animate-in fade-in slide-in-from-top-3 duration-200">
+          {feedbackToast === 'correct' ? (
+            <>
+              <span className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs"><i className="fas fa-check"></i></span>
+              <span className="text-sm font-black text-slate-800">Bạn đã trả lời đúng!</span>
+            </>
+          ) : (
+            <>
+              <span className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs"><i className="fas fa-times"></i></span>
+              <span className="text-sm font-black text-slate-800">Bạn đã trả lời sai! (Đáp án: {toSafeText(currentQuestion.answer)})</span>
+            </>
+          )}
         </div>
+      )}
+
+      {/* VioEdu Top Status Bar */}
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
+          <span className="text-xs sm:text-sm font-black text-slate-800">{currentIndex + 1}/{data.length}</span>
+          <span className="flex items-center gap-1 text-xs sm:text-sm font-black text-emerald-600" title="Số câu đúng">
+            <i className="fas fa-check-circle"></i> {score}
+          </span>
+          <span className="flex items-center gap-1 text-xs sm:text-sm font-black text-rose-500" title="Số câu sai">
+            <i className="fas fa-times-circle"></i> {wrongCount}
+          </span>
+        </div>
+
         <div className="flex flex-wrap items-center gap-1.5">
           {onUpdateQuestion && (
-            <button onClick={startBatchEdit} className="text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all border border-indigo-200 flex items-center shadow-sm active:scale-95" title="Sửa toàn bộ đề thi">
+            <button onClick={startBatchEdit} className="text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-xl transition-all border border-indigo-200 flex items-center shadow-sm active:scale-95" title="Sửa toàn bộ đề thi">
               <i className="fas fa-edit mr-1.5"></i>Sửa đề & Cắt ảnh
             </button>
           )}
           {onShare && (
-            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-full transition-colors border border-indigo-100 flex items-center">
+            <button onClick={onShare} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl transition-colors border border-indigo-100 flex items-center">
               <i className="fas fa-share-nodes mr-1"></i>Chia sẻ
             </button>
           )}
           {onCopyCode && (
-            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-full transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
+            <button onClick={onCopyCode} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl transition-colors border border-indigo-100 flex items-center" title="Copy Mã Đề">
               <i className="fas fa-code mr-1"></i>Mã
             </button>
           )}
           {onExportDocx && (
-            <button onClick={onExportDocx} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-xl transition-all shadow-md flex items-center shadow-blue-100" title="Xuất ra file Word (.docx)">
+            <button onClick={onExportDocx} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-xl transition-all shadow-md flex items-center shadow-blue-100" title="Xuất ra file Word (.docx)">
               <i className="fas fa-file-word mr-1.5"></i>Word
             </button>
           )}
-          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">Điểm: {score}</span>
+          <button
+            type="button"
+            onClick={() => setTimerEnabled(!timerEnabled)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition-all"
+            title="Bấm để Bật/Tắt đếm ngược thời gian"
+          >
+            <i className="fas fa-clock text-amber-300"></i>
+            <span>{timerEnabled ? `00:${String(timeLeft).padStart(2, '0')}` : '15:00'}</span>
+          </button>
         </div>
       </div>
 
       {/* Thanh công cụ AI Đọc câu hỏi hỗ trợ học sinh Lớp 1 */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-5 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
-        <button
-          type="button"
-          onClick={() => handleReadQuizQuestion(false)}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95 ${
-            isSpeakingQuiz
-              ? 'bg-rose-500 text-white animate-pulse'
-              : 'bg-amber-500 hover:bg-amber-600 text-white'
-          }`}
-        >
-          <i className={`fas ${isSpeakingQuiz ? 'fa-stop-circle' : 'fa-volume-high'} text-sm`}></i>
-          <span>{isSpeakingQuiz ? 'Dừng đọc' : 'AI Đọc câu hỏi & đáp án'}</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleReadQuizQuestion(false)}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95 ${
+              isSpeakingQuiz
+                ? 'bg-rose-500 text-white animate-pulse'
+                : 'bg-amber-500 hover:bg-amber-600 text-white'
+            }`}
+          >
+            <i className={`fas ${isSpeakingQuiz ? 'fa-stop-circle' : 'fa-volume-high'} text-sm`}></i>
+            <span>{isSpeakingQuiz ? 'Dừng đọc' : 'AI Đọc câu hỏi & đáp án'}</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setAutoReadQuiz(!autoReadQuiz)}
-          className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
-            autoReadQuiz
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-white text-slate-400 border-slate-200'
-          }`}
-        >
-          <i className={`fas ${autoReadQuiz ? 'fa-check-circle' : 'fa-circle-pause'}`}></i>
-          <span>Tự động đọc: {autoReadQuiz ? 'Bật' : 'Tắt'}</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setAutoReadQuiz(!autoReadQuiz)}
+            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+              autoReadQuiz
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-white text-slate-400 border-slate-200'
+            }`}
+          >
+            <i className={`fas ${autoReadQuiz ? 'fa-check-circle' : 'fa-circle-pause'}`}></i>
+            <span>Tự đọc: {autoReadQuiz ? 'Bật' : 'Tắt'}</span>
+          </button>
 
-        <select
-          value={quizVoice}
-          onChange={(e) => setQuizVoice(e.target.value as any)}
-          className="bg-white text-indigo-700 border border-indigo-200 rounded-xl px-3 py-1.5 text-[11px] font-black outline-none cursor-pointer"
-        >
-          <option value="Puck">👩‍🏫 Giọng Cô giáo</option>
-          <option value="Kore">👨‍🏫 Giọng Thầy giáo</option>
-          <option value="Girl">👧 Giọng Bé gái</option>
-          <option value="Boy">👦 Giọng Bé trai</option>
-        </select>
+          <select
+            value={quizVoice}
+            onChange={(e) => setQuizVoice(e.target.value as any)}
+            className="bg-white text-indigo-700 border border-indigo-200 rounded-xl px-3 py-1.5 text-[11px] font-black outline-none cursor-pointer"
+          >
+            <option value="Puck">👩‍🏫 Giọng Cô giáo</option>
+            <option value="Kore">👨‍🏫 Giọng Thầy giáo</option>
+            <option value="Girl">👧 Giọng Bé gái</option>
+            <option value="Boy">👦 Giọng Bé trai</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={currentIndex === 0}
+            onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 disabled:opacity-30"
+          >
+            <i className="fas fa-chevron-left mr-1"></i>Trước
+          </button>
+          <button
+            type="button"
+            disabled={currentIndex >= data.length - 1}
+            onClick={() => setCurrentIndex(prev => Math.min(data.length - 1, prev + 1))}
+            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 disabled:opacity-30"
+          >
+            Tiếp<i className="fas fa-chevron-right ml-1"></i>
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center">
+      {/* Khung câu hỏi chuẩn VioEdu */}
+      <div className="flex-1 flex flex-col justify-center bg-white rounded-3xl border border-slate-100 p-4 sm:p-6 shadow-sm">
         {displayImage && (
           displayImage.trim().startsWith('<svg') ? (
-            <div className="flex justify-center mb-6 p-4 bg-white rounded-xl shadow-sm border border-slate-200 [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-60" dangerouslySetInnerHTML={{ __html: displayImage }} />
+            <div className="flex justify-center sm:justify-start mb-4 p-3 bg-white rounded-2xl [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-56" dangerouslySetInnerHTML={{ __html: displayImage }} />
           ) : (
-            // Kiểm tra xem có phải là URL ảnh hoặc Base64 không
             /^(http|https|data:image)/i.test(displayImage.trim()) ? (
-              <div className="flex justify-center mb-6 relative group">
+              <div className="flex justify-center sm:justify-start mb-4 relative group">
                 <img
                   src={displayImage}
                   alt="Minh họa"
-                  className="max-h-[60vh] w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity"
+                  className="max-h-56 w-auto rounded-xl shadow-sm border border-slate-200 object-contain cursor-zoom-in hover:opacity-95 transition-opacity"
                   onClick={() => setZoomedImage(displayImage)}
                 />
                 {onCrop && currentQuestion.originalPageImage && (
@@ -655,116 +739,164 @@ const QuizPlayer: React.FC<{
                 )}
               </div>
             ) : (
-              // Trường hợp còn lại: Là mô tả văn bản (VD: [HÌNH ẢNH: ...]) -> Hiển thị khung text
-              <div className="flex justify-center mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md mx-auto shadow-sm animate-pulse">
-                <i className="fas fa-image text-2xl mb-2 block text-amber-400"></i>
+              <div className="flex justify-center mb-4 p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm font-medium italic text-center max-w-md">
+                <i className="fas fa-image text-xl mr-2 text-amber-400"></i>
                 {displayImage.replace(/[\[\]]/g, '').replace(/^(HÌNH ẢNH|IMAGE|IMG|HÌNH|CẮT ẢNH|CẮT ẢNH TỪ ĐỀ):/i, '').trim()}
-                <div className="text-[10px] mt-2 text-amber-600/70">(Không tìm thấy ảnh gốc của trang này)</div>
               </div>
             )
           )
         )}
-        <h3 className="text-xl font-bold text-slate-800 mb-8 text-center leading-relaxed">{displayQuestion}</h3>
 
-        <div className="grid grid-cols-1 gap-3">
-          {(!currentQuestion.type || currentQuestion.type === 'Trắc nghiệm') && questionOptions.length > 0 ? (
-            questionOptions.map((option: any, index: number) => {
-              const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
-              const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
-              const isSelected = selectedOption === option;
-              const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
-              const letter = String.fromCharCode(65 + index);
+        <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 leading-relaxed font-serif">{displayQuestion}</h3>
 
-              let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden cursor-pointer ";
-              if (isSelected) {
-                btnClass += isCorrectAnswer
-                  ? "bg-emerald-100 border-emerald-500 text-emerald-800"
-                  : "bg-rose-100 border-rose-500 text-rose-800";
-              } else if (selectedOption && isCorrectAnswer) {
-                btnClass += "bg-emerald-50 border-emerald-300 text-emerald-700";
-              } else {
-                btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700";
-              }
-
-              return (
-                <div
-                  key={index}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => !selectedOption && handleAnswerClick(option, index)}
-                  className={btnClass}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="mr-1 font-black opacity-60">{letter}.</span>
-                    <div className="flex-1">
-                      {optText.trim().startsWith('<svg') ? (
-                        <div className="inline-block align-middle [&>svg]:h-12 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
-                      ) : (
-                        <span className="text-[15px] font-bold">{optText}</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => handleReadQuizOption(e, letter, optText)}
-                      className="w-9 h-9 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 transition-all z-10"
-                      title={`Nghe đáp án ${letter}`}
-                    >
-                      <i className="fas fa-volume-high text-xs"></i>
-                    </button>
-                  </div>
-
-                  {optImg && (
-                    <div className="mt-3">
-                      {optImg.trim().startsWith('<svg') ? (
-                        <div className="inline-block align-middle [&>svg]:h-20 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
-                      ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
-                        <div className="relative inline-block group">
-                          <img src={optImg} alt="Option" className="max-h-40 w-auto object-contain rounded-lg cursor-zoom-in hover:opacity-95 transition-opacity" onClick={(e) => {
-                            e.stopPropagation();
-                            setZoomedImage(optImg);
-                          }} onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }} />
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {isSelected && (
-                    <span className="mt-2 inline-block">
-                      {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
-                    </span>
-                  )}
-                </div>
-              );
-            })
-          ) : (
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nhập câu trả lời (Câu hỏi Tự luận)..."
-                  className="flex-1 p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400 transition-all"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAnswerClick('ESSAY_ANSWER', -1);
-                  }}
-                />
-                <button
-                  onClick={() => handleAnswerClick('ESSAY_ANSWER', -1)}
-                  className="px-6 py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg"
-                >
-                  Xác nhận
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Đây là câu hỏi Tự luận, học sinh sẽ nhập kết quả trực tiếp.</p>
+        {isCurrentMcq ? (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs italic text-slate-500 font-medium">Hãy chọn 1 đáp án đúng</span>
+              <button
+                type="button"
+                disabled={pendingOptionIndex === null || selectedOption !== null}
+                onClick={handleConfirmCurrentAnswer}
+                className={`px-7 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                  pendingOptionIndex !== null && selectedOption === null
+                    ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700 active:scale-95'
+                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                Xác nhận
+              </button>
             </div>
-          )}
-        </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {questionOptions.map((option: any, index: number) => {
+                const optText = toSafeText(typeof option === 'string' || typeof option === 'number' ? option : (option?.text || option?.label || option?.content || ''));
+                const optImg = toSafeText(typeof option === 'string' || typeof option === 'number' ? '' : (option?.image || ''));
+                const isPending = pendingOptionIndex === index && selectedOption === null;
+                const isConfirmedSelected = selectedOption === option;
+                const isCorrectAnswer = checkCorrectness(currentQuestion, option, index);
+                const letter = String.fromCharCode(65 + index);
+
+                let btnClass = "p-4 rounded-xl border-2 text-left font-medium transition-all relative overflow-hidden cursor-pointer flex flex-col justify-between min-h-[84px] ";
+                if (isConfirmedSelected) {
+                  btnClass += isCorrectAnswer
+                    ? "bg-emerald-50 border-emerald-500 text-emerald-900 shadow-md"
+                    : "bg-rose-50 border-rose-500 text-rose-900 shadow-md";
+                } else if (selectedOption !== null && isCorrectAnswer) {
+                  btnClass += "bg-emerald-50/70 border-emerald-400 text-emerald-800";
+                } else if (isPending) {
+                  btnClass += "bg-indigo-50/80 border-indigo-600 text-indigo-900 ring-2 ring-indigo-200 shadow-md";
+                } else {
+                  btnClass += "bg-white border-slate-200 hover:border-indigo-400 hover:bg-slate-50/60 text-slate-800";
+                }
+
+                return (
+                  <div
+                    key={index}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (selectedOption !== null) return;
+                      setPendingOptionIndex(index);
+                    }}
+                    onDoubleClick={() => {
+                      if (selectedOption !== null) return;
+                      handleAnswerClick(option, index);
+                    }}
+                    className={btnClass}
+                  >
+                    <div className="flex items-start justify-between gap-2 w-full">
+                      <div className="flex-1 min-w-0">
+                        {optImg && (
+                          <div className="mb-2">
+                            {optImg.trim().startsWith('<svg') ? (
+                              <div className="inline-block align-middle [&>svg]:max-h-24 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optImg }} />
+                            ) : /^(http|https|data:image)/i.test(optImg.trim()) ? (
+                              <img
+                                src={optImg}
+                                alt="Option"
+                                className="max-h-28 w-auto object-contain rounded-lg cursor-zoom-in"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setZoomedImage(optImg);
+                                }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                        )}
+                        {optText.trim().startsWith('<svg') ? (
+                          <div className="inline-block align-middle [&>svg]:h-16 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: optText }} />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {!optImg && <span className="text-xs font-black text-slate-400">{letter}.</span>}
+                            <span className={`${optImg ? 'text-xs text-slate-500 font-semibold' : 'text-lg font-bold text-slate-800'}`}>{optText}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isConfirmedSelected && (
+                          <span>
+                            {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleReadQuizOption(e, letter, optText)}
+                          className="w-8 h-8 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 transition-all z-10"
+                          title={`Nghe đáp án ${letter}`}
+                        >
+                          <i className="fas fa-volume-high text-xs"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="space-y-3 mt-4">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <input
+                type="text"
+                value={essayInput}
+                disabled={selectedOption !== null}
+                onChange={(e) => setEssayInput(e.target.value)}
+                placeholder="Đáp án của bạn..."
+                className="w-full sm:w-72 px-4 py-3 bg-white border-2 border-slate-300 rounded-lg font-bold text-slate-800 outline-none focus:border-sky-500 transition-all text-base"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && essayInput.trim()) {
+                    handleConfirmCurrentAnswer();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={!essayInput.trim() || selectedOption !== null}
+                onClick={handleConfirmCurrentAnswer}
+                className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${
+                  essayInput.trim() && selectedOption === null
+                    ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'
+                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                Xác nhận
+              </button>
+            </div>
+            <p className="text-xs italic text-slate-600">
+              Lưu ý: Đối với các môn toán và khoa học tự nhiên học sinh chỉ được nhập số và các loại dấu sau: . , ; / - + &gt; &lt; =
+            </p>
+          </div>
+        )}
       </div>
 
-      {selectedOption && currentQuestion.explanation && (
-        <div className="mt-4 p-3 bg-blue-50 text-blue-800 text-sm rounded-lg animate-in fade-in slide-in-from-bottom-2">
-          <i className="fas fa-info-circle mr-2"></i>{currentQuestion.explanation}
+      {selectedOption !== null && currentQuestion.explanation && (
+        <div className="mt-3 p-3.5 bg-blue-50 border border-blue-100 text-blue-800 text-xs sm:text-sm rounded-2xl animate-in fade-in slide-in-from-bottom-2">
+          <i className="fas fa-info-circle mr-2"></i>
+          <b>Giải thích:</b> {currentQuestion.explanation}
         </div>
       )}
 
@@ -785,6 +917,7 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [subject, setSubject] = useState('Toán');
   const [gameType, setGameType] = useState<'idea' | 'crossword' | 'quiz'>('idea');
   const [quizMode, setQuizMode] = useState<'topic' | 'file'>('topic');
+  const [quizStyle, setQuizStyle] = useState<'vioedu' | 'standard'>('vioedu');
   const [quizFile, setQuizFile] = useState<File | null>(null);
   const [grade, setGrade] = useState('Lớp 1');
   const [topic, setTopic] = useState('');
@@ -1173,54 +1306,89 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
     setResult(null);
     setAudioUrl(null);
 
-    const controller = new AbortController();
-
     try {
-      // Nâng cấp: Sử dụng generateExamQuestionsStructured để đảm bảo định dạng JSON chuẩn và chất lượng tốt hơn
-      const prompt = `Bạn là giáo viên giỏi. Hãy soạn bộ câu hỏi trắc nghiệm (Quiz) về chủ đề: "${topic}".
-      - Số lượng: ${quizCount} câu.
+      const batchSize = quizStyle === 'vioedu' ? 6 : 10;
+      const totalBatches = Math.ceil(quizCount / batchSize);
+      const allRawQuestions: any[] = [];
+
+      for (let b = 0; b < totalBatches; b++) {
+        if (forceStopRef.current) throw new Error("Đã dừng.");
+        const countForBatch = Math.min(batchSize, quizCount - allRawQuestions.length);
+        if (countForBatch <= 0) break;
+
+        const vioeduInstruction = quizStyle === 'vioedu'
+          ? `PHONG CÁCH ĐỀ THI: Chuẩn VioEdu / Violympic / Trạng Nguyên trực quan sinh động dành cho học sinh ${grade} môn ${subject}:
+      1. KẾT HỢP 2 DẠNG CÂU HỎI:
+         - Khoảng 70% câu hỏi là "Trắc nghiệm" (4 đáp án hiển thị dạng thẻ 2x2).
+         - Khoảng 30% câu hỏi là "Tự luận" (Dạng điền số hoặc từ ngắn vào ô trống / dấu hỏi chấm "?", ví dụ: "Số cần điền vào dấu hỏi chấm là ...", "Hình trên có ... hình vuông", "5 + ? = 5", với "options": [] và "answer" chỉ là con số hoặc kết quả ngắn gọn như "7", "9", "0").
+      2. BẮT BUỘC VẼ HÌNH MINH HỌA TRỰC QUAN BẰNG MÃ <svg> CHO HẦU HẾT CÁC CÂU HỎI:
+         - Ở trường "image" của câu hỏi (hoặc trường "image" của từng đáp án trong "options"), hãy tự thiết kế mã <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" width="300" height="110">...</svg> màu sắc tươi sáng, rõ nét theo đúng các dạng bài VioEdu:
+           + Dạng đếm đồ vật / con vật / quả cam / hộp quà.
+           + Dạng nhận biết hình phẳng (hình tròn, hình vuông, hình tam giác, hình chữ nhật), robot ghép từ các hình học, hình nằm bên trong hình khác, hoặc tìm bóng của hình.
+           + Dạng quy luật dãy hình màu sắc (hình tiếp theo ở dấu ? là hình gì - vẽ <svg> cho cả câu hỏi và 4 đáp án).
+           + Dạng sơ đồ tách - gộp số, tia số / thanh đếm thêm (+2, +3...), phép tính bằng hình ảnh (🐶 = 1, 🐱 = 2), so sánh không cần tính (7 + 0 ⬜ 2 + 0), hoặc bất đẳng thức (5 + 2 < [?]).
+         - Lưu ý: Mã <svg> phải viết trên 1 dòng gọn gàng, dùng dấu nháy đơn ' cho thuộc tính bên trong SVG (ví dụ: <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 280 100' width='260' height='95'>...</svg>) để không làm lỗi chuỗi JSON!`
+          : `Soạn bộ câu hỏi trắc nghiệm bám sát chương trình chuẩn.`;
+
+        const prompt = `Bạn là chuyên gia ra đề thi VioEdu & Giáo viên giỏi. Hãy soạn ${countForBatch} câu hỏi (Phần ${b + 1}/${totalBatches}) về chủ đề: "${topic}".
       - Môn: ${subject}
       - Lớp: ${grade}
       ${additionalPrompt ? `- Yêu cầu thêm: ${additionalPrompt}` : ''}
-      
+      ${vioeduInstruction}
+
       YÊU CẦU ĐỊNH DẠNG JSON CHÍNH XÁC:
       {
         "questions": [
           {
-            "type": "Trắc nghiệm",
-            "question": "Nội dung câu hỏi...",
-            "options": [{"text": "A..."}, {"text": "B..."}],
-            "answer": "Đáp án đúng (VD: A)",
-            "explanation": "Giải thích chi tiết..."
+            "type": "Trắc nghiệm" | "Tự luận",
+            "question": "Nội dung câu hỏi ngắn gọn, rõ ràng...",
+            "image": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 110' width='280' height='100'>...</svg> (hoặc để trống nếu hình nằm ở 4 đáp án)",
+            "options": [
+              {"text": "Nội dung đáp án A", "image": "<svg ...>...</svg> (hoặc chuỗi rỗng)"},
+              {"text": "Nội dung đáp án B", "image": ""},
+              {"text": "Nội dung đáp án C", "image": ""},
+              {"text": "Nội dung đáp án D", "image": ""}
+            ],
+            "answer": "Đáp án đúng (VD: 'A' nếu là Trắc nghiệm, hoặc '7' nếu là Tự luận điền số)",
+            "explanation": "Giải thích ngắn gọn, dễ hiểu cho học sinh..."
           }
         ]
       }`;
 
-      const quizContent = await geminiService.generateExamQuestionsStructured(prompt);
-      if (forceStopRef.current) throw new Error("Đã dừng.");
+        const quizContent = await geminiService.generateExamQuestionsStructured(prompt);
+        if (forceStopRef.current) throw new Error("Đã dừng.");
 
-      let rawQuestions = [];
-      if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
-        rawQuestions = quizContent.questions;
-      } else if (Array.isArray(quizContent)) {
-        rawQuestions = quizContent;
+        let batchQuestions: any[] = [];
+        if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
+          batchQuestions = quizContent.questions;
+        } else if (Array.isArray(quizContent)) {
+          batchQuestions = quizContent;
+        }
+        allRawQuestions.push(...batchQuestions);
       }
 
-      if (rawQuestions.length > 0) {
-        const formattedQuestions = rawQuestions.map((q: any, i: number) => {
-          const isMcq = !q.type || q.type === 'Trắc nghiệm' || String(q.type).toLowerCase().includes('trắc nghiệm');
-          const normalizedOptions = (isMcq && Array.isArray(q.options))
-            ? q.options.map((opt: any) => {
-              if (typeof opt === 'string') return { text: opt, image: '' };
-              return { text: opt.text || '', image: opt.image || '' };
-            }) : [];
+      if (allRawQuestions.length > 0) {
+        const formattedQuestions = allRawQuestions.map((q: any, i: number) => {
+          const rawOpts = Array.isArray(q.options) ? q.options : [];
+          const isEssayType =
+            q.type === 'Tự luận' ||
+            String(q.type || '').toLowerCase().includes('tự luận') ||
+            String(q.type || '').toLowerCase().includes('điền') ||
+            rawOpts.length === 0;
+          const isMcq = !isEssayType;
+          const normalizedOptions = isMcq
+            ? rawOpts.map((opt: any) => {
+                if (typeof opt === 'string' || typeof opt === 'number') return { text: String(opt), image: '' };
+                return { text: String(opt?.text ?? opt?.label ?? ''), image: String(opt?.image ?? '') };
+              })
+            : [];
           return {
             id: q.id || `quiz-topic-${Date.now()}-${i}`,
             type: isMcq ? 'Trắc nghiệm' : 'Tự luận',
-            question: q.question?.replace(/\[IMAGE\]/g, '').trim() || q.content?.trim() || '',
+            question: (q.question || q.content || '').replace(/\[IMAGE\]/g, '').trim(),
             image: q.image || '',
             options: normalizedOptions,
-            answer: q.answer || '',
+            answer: String(q.answer ?? '').trim(),
             explanation: q.explanation || '',
           };
         }).filter((q: any) => q.question.trim() !== '' || q.image.trim() !== '');
@@ -1334,9 +1502,9 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
           const imageParts: any[] = [];
           const pageImages: string[] = [];
 
-          const maxPages = Math.min(pdf.numPages, 10); // Giảm xuống 10 trang để tránh lỗi 429/Payload Too Large
-          let scale = 1.0; // Giảm độ nét xuống 1.0 (đủ để AI đọc)
-          let quality = 0.6; // Giảm chất lượng ảnh xuống 0.6 để nhẹ hơn
+          const maxPages = Math.min(pdf.numPages, 35); // Hỗ trợ đề VioEdu lên tới 35 trang (30 câu/đề)
+          let scale = 1.0;
+          let quality = 0.6;
 
           for (let i = 1; i <= maxPages; i++) {
             if (forceStopRef.current) throw new Error("Dừng xử lý PDF.");
@@ -1397,50 +1565,62 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
 
       if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
 
-      const prompt = `Trích xuất TOÀN BỘ câu hỏi từ đề thi. 
+      const prompt = `Trích xuất TOÀN BỘ câu hỏi từ các trang đề thi (đặc biệt hỗ trợ đề thi VioEdu / Violympic / Trạng Nguyên mỗi trang 1 câu hỏi).
       
       YÊU CẦU QUAN TRỌNG (BẮT BUỘC):
-      1. TRÍCH XUẤT 100%: Phải trích xuất đầy đủ tất cả câu hỏi trong đề.
-      2. TỰ ĐỘNG CẮT ẢNH (BẮT BUỘC): Với MỐI CÂU HỎI, bạn PHẢI cung cấp trường 'bbox' [ymin, xmin, ymax, xmax]. Đây là tọa độ bao quanh vùng không gian của câu hỏi đó trên trang giấy (bao gồm cả văn bản và hình minh họa nếu có). Hệ thống sẽ dùng bbox này để tự động cắt ảnh cho từng câu.
-      3. TOÁN HỌC: Trích xuất bằng văn bản/Latex nhưng vẫn phải có 'bbox' vùng câu hỏi.
+      1. TRÍCH XUẤT 100%: Phải trích xuất đầy đủ tất cả câu hỏi có trong các trang ảnh được gửi.
+      2. PHÂN LOẠI ĐÚNG:
+         - Nếu câu hỏi có các thẻ lựa chọn đáp án -> "type": "Trắc nghiệm", trích xuất đủ các phương án vào "options". Nếu phương án trả lời là HÌNH ẢNH (ví dụ 4 hình vẽ, 4 nhóm quả cam, 4 hình bóng), hãy trả về tọa độ "bbox": [ymin, xmin, ymax, xmax] cho từng option trong "options": [{"text": "Hình A", "bbox": [ymin, xmin, ymax, xmax]}] để hệ thống tự cắt ảnh từng đáp án!
+         - Nếu câu hỏi có ô trống "Đáp án của bạn..." hoặc yêu cầu điền số vào dấu "?" -> "type": "Tự luận", "options": [], và tự giải toán để điền đáp án chính xác vào trường "answer" (ví dụ: "7", "9", "0").
+      3. TỰ ĐỘNG CẮT ẢNH CÂU HỎI (BẮT BUỘC): Nếu câu hỏi có hình minh họa, sơ đồ, phép tính hình ảnh, bạn PHẢI cung cấp trường "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa 0-1000) chỉ bao quanh phần HÌNH MINH HỌA của câu hỏi (không lấy thanh tiêu đề trình duyệt hay khung đáp án bên dưới).
       
-       JSON Format: {
+      JSON Format: {
         "questions": [
           {
             "type": "Trắc nghiệm" | "Tự luận",
-            "question": "Nội dung câu hỏi (văn bản)",
-            "options": [{"text": "...", "image": ""}],
-            "answer": "...",
+            "question": "Nội dung chữ của câu hỏi",
+            "options": [{"text": "...", "image": "", "bbox": [ymin, xmin, ymax, xmax]}],
+            "answer": "Đáp án đúng (A/B/C/D hoặc số điền vào ô trống)",
+            "explanation": "Giải thích ngắn gọn cách tìm ra đáp án",
             "bbox": [ymin, xmin, ymax, xmax],
             "page_index": 0
           }
         ]
-      }
-      Lưu ý: Luôn trả về 'bbox' cho từng câu để hệ thống tự động cắt ảnh minh họa. Nếu không có bbox, hệ thống sẽ không hiển thị được hình ảnh câu hỏi.`;
+      }`;
 
-      const runGenerateQuiz = async () => geminiService.generateExamQuestionsStructured(prompt, finalFileParts);
-      let json;
-      try {
-        json = await runGenerateQuiz();
-      } catch (firstError: any) {
+      // Xử lý theo từng lô 6 trang để đọc trọn vẹn đề PDF 30 trang mà không bị quá tải token/payload
+      const BATCH_PAGES = 6;
+      const rawQuestions: any[] = [];
+      for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
         if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-        const firstMessage = String(firstError?.message || '');
-        const isTransientNetwork = /failed to fetch|networkerror|network request failed|load failed|err_network|cors/i.test(firstMessage);
-        if (!isTransientNetwork) throw firstError;
-        await new Promise((resolve) => setTimeout(resolve, 1800));
-        if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
-        json = await runGenerateQuiz();
-      }
+        const batchParts = finalFileParts.slice(startIdx, startIdx + BATCH_PAGES);
+        const runBatch = async () => geminiService.generateExamQuestionsStructured(prompt, batchParts);
+        let batchJson: any;
+        try {
+          batchJson = await runBatch();
+        } catch (firstError: any) {
+          if (forceStopRef.current) throw new Error("Yêu cầu đã bị dừng.");
+          await new Promise((resolve) => setTimeout(resolve, 1800));
+          batchJson = await runBatch();
+        }
 
-      let rawQuestions = [];
-      if (json && json.questions && Array.isArray(json.questions)) {
-        rawQuestions = json.questions;
-      } else if (Array.isArray(json)) {
-        rawQuestions = json; // AI có thể trả về một mảng câu hỏi trực tiếp
-      } else if (json && typeof json === 'object') {
-        // Fallback: tìm key nào là mảng
-        const key = Object.keys(json).find(k => Array.isArray(json[k]));
-        if (key) rawQuestions = json[key];
+        let batchList: any[] = [];
+        if (batchJson && Array.isArray(batchJson.questions)) {
+          batchList = batchJson.questions;
+        } else if (Array.isArray(batchJson)) {
+          batchList = batchJson;
+        } else if (batchJson && typeof batchJson === 'object') {
+          const key = Object.keys(batchJson).find(k => Array.isArray(batchJson[k]));
+          if (key) batchList = batchJson[key];
+        }
+
+        batchList.forEach((q: any, localIdx: number) => {
+          const localPage = typeof q.page_index === 'number' ? q.page_index : localIdx;
+          rawQuestions.push({
+            ...q,
+            page_index: startIdx + Math.min(Math.max(0, localPage), batchParts.length - 1)
+          });
+        });
       }
 
       if (rawQuestions.length > 0) {
@@ -3723,34 +3903,96 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                           </div>
 
                           {quizMode === 'topic' ? (
-                            <>
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
-                              <div className="flex items-center space-x-2 mt-1">
-                                {[5, 10, 15].map(num => (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Kiểu đề Quiz</label>
+                                <div className="grid grid-cols-1 gap-1.5 mt-1">
                                   <button
-                                    key={num}
-                                    onClick={() => setQuizCount(num)}
-                                    className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                                    type="button"
+                                    onClick={() => setQuizStyle('vioedu')}
+                                    className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider border text-left flex items-center justify-between transition-all ${
+                                      quizStyle === 'vioedu'
+                                        ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-purple-200'
+                                    }`}
                                   >
-                                    {num} câu
+                                    <span>🎯 Dạng VioEdu / Violympic (Hình SVG + Điền số)</span>
+                                    {quizStyle === 'vioedu' && <i className="fas fa-check-circle"></i>}
                                   </button>
-                                ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => setQuizStyle('standard')}
+                                    className={`py-2 px-3 rounded-xl text-[10px] font-bold uppercase tracking-wider border text-left flex items-center justify-between transition-all ${
+                                      quizStyle === 'standard'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-indigo-200'
+                                    }`}
+                                  >
+                                    <span>📝 Trắc nghiệm chuẩn SGK</span>
+                                    {quizStyle === 'standard' && <i className="fas fa-check-circle"></i>}
+                                  </button>
+                                </div>
                               </div>
-                            </>
-                          ) : (
-                            <div>
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Chọn nhiều file)</label>
-                              <input
-                                type="file"
-                                multiple
-                                accept="image/*,.pdf"
-                                onChange={(e) => {
-                                  if (e.target.files) {
-                                    handleFileChange(e as any);
-                                  }
+
+                              <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Số lượng câu hỏi</label>
+                                <div className="grid grid-cols-5 gap-1.5 mt-1">
+                                  {[5, 10, 15, 20, 30].map(num => (
+                                    <button
+                                      key={num}
+                                      type="button"
+                                      onClick={() => setQuizCount(num)}
+                                      className={`py-2 rounded-xl text-[10px] font-black border transition-all ${quizCount === num ? 'bg-indigo-50 text-indigo-600 border-indigo-300 shadow-sm' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-100'}`}
+                                    >
+                                      {num} câu
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSubject('Toán');
+                                  setGrade('Lớp 1');
+                                  setTopic('Đề thi VioEdu Toán Lớp 1 (Đếm, Phép cộng trong phạm vi 10, Hình phẳng & Quy luật)');
+                                  setResult(VIOEDU_GRADE1_SAMPLE_30);
                                 }}
-                                className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                              />
+                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
+                              >
+                                <i className="fas fa-star"></i>
+                                <span>Mở bộ đề VioEdu 30 câu (từ file PDF mẫu)</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tải lên đề thi (Ảnh/PDF - Hỗ trợ tới 35 trang)</label>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    if (e.target.files) {
+                                      handleFileChange(e as any);
+                                    }
+                                  }}
+                                  className="mt-1 block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSubject('Toán');
+                                  setGrade('Lớp 1');
+                                  setTopic('Đề thi VioEdu Toán Lớp 1 (30 câu từ file PDF)');
+                                  setResult(VIOEDU_GRADE1_SAMPLE_30);
+                                }}
+                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
+                              >
+                                <i className="fas fa-file-circle-check"></i>
+                                <span>Mở ngay 30 câu từ file PDF VioEdu vừa gửi</span>
+                              </button>
                             </div>
                           )}
                         </div>

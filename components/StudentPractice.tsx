@@ -519,14 +519,14 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
               </div>
             </div>
 
+            {renderQuestionImage(currentQuestion.image)}
+
             <p className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed relative z-10">
               {currentQuestion.content}
             </p>
 
-            {renderQuestionImage(currentQuestion.image)}
-
             {currentQuestion.type === 'Trắc nghiệm' && currentQuestion.options && currentQuestion.options.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 relative z-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 relative z-10">
                 {currentQuestion.options?.map((opt, i) => {
                   const label = ['A', 'B', 'C', 'D', 'E', 'F'][i];
                   const isSelected = answers[currentQuestion.id] === label;
@@ -573,8 +573,8 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
                     type="text"
                     value={answers[currentQuestion.id] || ''}
                     onChange={(e) => handleTextChange(e.target.value)}
-                    placeholder="Nhập câu trả lời của em tại đây..."
-                    className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-[16px] font-bold text-slate-700 focus:bg-white focus:border-indigo-400 outline-none transition-all"
+                    placeholder="Đáp án của bạn..."
+                    className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-4 text-[16px] font-bold text-slate-700 focus:bg-white focus:border-indigo-400 outline-none transition-all"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && answers[currentQuestion.id]?.trim()) {
                         if (currentIdx < questions.length - 1) {
