@@ -988,35 +988,40 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       let stripImages = false;
       let currentData = prepareData(false);
       let finalCode = await compressData(currentData) || await encodeData(currentData);
-      const buildExamUrl = (code: string) =>
-        code.length <= 3800
-          ? `${window.location.origin}${window.location.pathname}?exam=${code}`
-          : `${window.location.origin}${window.location.pathname}#exam=${code}`;
-      let url = buildExamUrl(finalCode);
-
-      if (viewMode === 'link' && url.length > 60000) {
-        console.warn(`Link qua dai (${url.length} ky tu), dang thu bo anh...`);
-        stripImages = true;
-        currentData = prepareData(true);
-        finalCode = await compressData(currentData) || await encodeData(currentData);
-        url = buildExamUrl(finalCode);
-      }
-
-      if (viewMode === 'link' && url.length > 60000) {
-        alert("Đề thi quá dài. Vui lòng sử dụng tính năng 'Copy Mã Đề'.");
-        return;
-      }
 
       if (viewMode === 'code') {
-        // Che do copy ma de: luon dung ban day du
-        const fullBase64 = await compressData(prepareData(false)) || await encodeData(prepareData(false));
-        await navigator.clipboard.writeText(fullBase64);
-        alert(`Da sao chep MA DE THI (Bao gom ca hinh anh).\n\nHuong dan: Gui ma nay cho hoc sinh qua Zalo/Mess. Hoc sinh vao ung dung, chon "Nhap De Cu" -> "Dan Ma De" de lam bai.`);
+        await navigator.clipboard.writeText(finalCode);
+        alert(`Đã sao chép MÃ ĐỀ THI (Bao gồm đầy đủ hình ảnh).\n\nHướng dẫn: Gửi mã này cho học sinh qua Zalo/Mess.`);
         return;
+      }
+
+      let url = '';
+      try {
+        const res = await fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: finalCode }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            url = `${window.location.origin}${window.location.pathname}?s=${encodeURIComponent(data.id)}`;
+          }
+        }
+      } catch (e) {
+        console.warn('[ExamCreator] Cloud short link fallback:', e);
+      }
+
+      if (!url) {
+        url =
+          finalCode.length <= 3800
+            ? `${window.location.origin}${window.location.pathname}?exam=${finalCode}`
+            : `${window.location.origin}${window.location.pathname}#exam=${finalCode}`;
       }
 
       await navigator.clipboard.writeText(url);
-      alert(`Link da duoc sao chep!\n\n${stripImages ? 'Canh bao: Link nay KHONG chua hinh anh (da bi bo de dam bao link hoat dong).' : ''}\n\nGui ngay cho hoc sinh de bat dau luyen tap.`);
+      alert(`✅ Đã tạo & sao chép Link đề thi ĐẦY ĐỦ 100% HÌNH ẢNH!\n\n${url.length < 120 ? `Link rút gọn: ${url}\n\n` : ''}Gửi ngay cho học sinh để bắt đầu luyện tập.`);
+      return;
 
     } catch (e: any) {
       console.error("Link generation error:", e);

@@ -95,7 +95,7 @@
     <script>
         (function () {
             const urlParams = new URLSearchParams(window.location.search);
-            const hasSearchExam = urlParams.has('exam');
+            const hasSearchExam = urlParams.has('exam') || urlParams.has('s');
             const hasHashExam = window.location.hash && window.location.hash.includes('exam=');
             if (hasSearchExam || hasHashExam) {
                 window.ai_status = "Đang mở đề thi từ Link chia sẻ...";

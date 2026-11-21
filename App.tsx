@@ -51,7 +51,8 @@ const App: React.FC = () => {
 
   // State để kiểm tra link chia sẻ ngay khi vào app
   const [isCheckingLink, setIsCheckingLink] = useState(() => {
-    const hasSearch = new URLSearchParams(window.location.search).has('exam');
+    const sp = new URLSearchParams(window.location.search);
+    const hasSearch = sp.has('exam') || sp.has('s');
     const hasHash = Boolean(window.location.hash && window.location.hash.includes('exam='));
     return hasSearch || hasHash || !!localStorage.getItem('shared_exam_data');
   });
@@ -283,13 +284,30 @@ const App: React.FC = () => {
     };
 
     const checkSharedExam = async () => {
-      const sharedExam = extractSharedExamParam();
+      const urlParams = new URLSearchParams(window.location.search);
+      const shortShareId = urlParams.get('s');
+      let sharedExam = extractSharedExamParam();
       const localSharedData = localStorage.getItem('shared_exam_data');
 
-      if (sharedExam || localSharedData) {
+      if (shortShareId || sharedExam || localSharedData) {
         setIsCheckingLink(true);
         try {
           let data: any = null;
+
+          // Ưu tiên 0: Tải đề đầy đủ hình ảnh từ Link rút gọn (?s=...)
+          if (shortShareId) {
+            const shareRes = await fetch(`/api/share?id=${encodeURIComponent(shortShareId.trim())}`);
+            if (!shareRes.ok) {
+              const errBody = await shareRes.json().catch(() => ({}));
+              throw new Error(errBody?.error || 'Không thể tải đề thi từ Link chia sẻ rút gọn.');
+            }
+            const shareJson = await shareRes.json();
+            if (shareJson?.payload && typeof shareJson.payload === 'string') {
+              sharedExam = shareJson.payload;
+            } else {
+              throw new Error('Dữ liệu từ Link chia sẻ không hợp lệ.');
+            }
+          }
 
           // Ưu tiên 1: Lấy từ localStorage nếu có
           if (localSharedData) {

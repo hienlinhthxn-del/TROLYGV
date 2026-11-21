@@ -1662,12 +1662,11 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       return imgStr;
     };
 
-    const compressDataImage = async (dataUrl: string): Promise<string> => {
+    const compressDataImage = async (dataUrl: string, maxWidth = 560, quality = 0.72): Promise<string> => {
       return new Promise((resolve) => {
         try {
           const img = new Image();
           img.onload = () => {
-            const maxWidth = 320;
             const scale = img.width > maxWidth ? (maxWidth / img.width) : 1;
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1680,7 +1679,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.45));
+            resolve(canvas.toDataURL('image/jpeg', quality));
           };
           img.onerror = () => resolve(dataUrl);
           img.src = dataUrl;
@@ -1690,69 +1689,56 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
       });
     };
 
-    const normalizeSharedImage = async (value: unknown, forceStrip: boolean): Promise<string> => {
+    const normalizeSharedImage = async (value: unknown, isOption = false): Promise<string> => {
       if (typeof value !== 'string') return '';
       const trimmed = value.trim();
       if (!trimmed) return '';
 
-      // Tham chiếu nhanh tới ngân hàng hình SVG chuẩn VioEdu (chỉ tốn 7 ký tự, không bao giờ bị lược bỏ)
       const vioRef = encodeVioEduImageRef(trimmed);
       if (vioRef.startsWith('@vio:')) {
         return vioRef;
       }
 
-      if (forceStrip) return '';
-
-      // Giữ nguyên hình vẽ Vector SVG (nén Gzip cực nhẹ)
       if (trimmed.startsWith('<svg')) {
-        return trimmed.length > 35000 ? '' : trimmed;
+        return trimmed;
       }
 
       if (!trimmed.startsWith('data:image')) {
-        return trimmed.length > 2000 ? '' : trimmed;
+        return trimmed;
       }
 
-      const compressed = await compressDataImage(trimmed);
-      return compressed.length > 30000 ? '' : compressed;
+      return await compressDataImage(trimmed, isOption ? 300 : 560, isOption ? 0.7 : 0.74);
     };
 
     try {
-      const generatePayload = async (stripImages: boolean) => {
-        let droppedCount = 0;
-        const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
-          const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
-          const finalQuestionImage = await normalizeSharedImage(originalQuestionImage, stripImages);
+      const normalizedQuestions = await Promise.all(result.map(async (q: any) => {
+        const originalQuestionImage = typeof q?.image === 'string' ? q.image.trim() : '';
+        const finalQuestionImage = await normalizeSharedImage(originalQuestionImage, false);
 
-          if (originalQuestionImage && !finalQuestionImage) droppedCount++;
+        const rawOptions = Array.isArray(q?.options) ? q.options : [];
+        const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
+          const isSimple = typeof opt === 'string' || typeof opt === 'number';
+          const optionText = isSimple ? String(opt) : (opt?.text || '');
+          const optionImageRaw = isSimple ? '' : (typeof opt?.image === 'string' ? opt.image.trim() : '');
+          const optionImageFinal = await normalizeSharedImage(optionImageRaw, true);
 
-          const rawOptions = Array.isArray(q?.options) ? q.options : [];
-          const normalizedOptions = await Promise.all(rawOptions.map(async (opt: any) => {
-            const isSimple = typeof opt === 'string' || typeof opt === 'number';
-            const optionText = isSimple ? String(opt) : (opt?.text || '');
-            const optionImageRaw = isSimple ? '' : (typeof opt?.image === 'string' ? opt.image.trim() : '');
-            const optionImageFinal = await normalizeSharedImage(optionImageRaw, stripImages);
-            if (optionImageRaw && !optionImageFinal) droppedCount++;
-
-            return [optionText, optionImageFinal];
-          }));
-
-          const isEssay = q?.type === 'Tự luận' || normalizedOptions.length === 0;
-
-          return ([
-            isEssay ? 2 : 1, // 1: Trắc nghiệm, 2: Tự luận / Điền số
-            q?.question || q?.content || '',
-            normalizedOptions,
-            q?.answer || '',
-            q?.explanation || '',
-            finalQuestionImage
-          ]);
+          return [optionText, optionImageFinal];
         }));
-        return { q: normalizedQuestions, dropped: droppedCount };
-      };
 
-      let payloadData = await generatePayload(false);
-      let quizData = { s: subject, g: grade, q: payloadData.q };
-      let json = JSON.stringify(quizData);
+        const isEssay = q?.type === 'Tự luận' || normalizedOptions.length === 0;
+
+        return ([
+          isEssay ? 2 : 1, // 1: Trắc nghiệm, 2: Tự luận / Điền số
+          q?.question || q?.content || '',
+          normalizedOptions,
+          q?.answer || '',
+          q?.explanation || '',
+          finalQuestionImage
+        ]);
+      }));
+
+      const quizData = { s: subject, g: grade, q: normalizedQuestions };
+      const json = JSON.stringify(quizData);
 
       const blobToBase64 = (blob: Blob): Promise<string> => {
         return new Promise((resolve) => {
@@ -1780,56 +1766,36 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         }
       };
 
-      let finalCode = await encodePayloadToCode(json);
-      // Nếu mã ngắn (<= 3800 ký tự) dùng ?exam=..., nếu mã dài (chứa nhiều ảnh cắt từ PDF) dùng #exam=... để Server Vercel không bao giờ báo lỗi 414 URI Too Long
-      const buildShareUrl = (code: string) =>
-        code.length <= 3800
-          ? `${window.location.origin}${window.location.pathname}?exam=${code}`
-          : `${window.location.origin}${window.location.pathname}#exam=${code}`;
+      const finalCode = await encodePayloadToCode(json);
 
-      let url = buildShareUrl(finalCode);
-
-      if (url.length > 60000) {
-        let currentQuestions = [...payloadData.q];
-        let hasImageQuestions = currentQuestions
-          .map((q, idx) => ({
-            idx,
-            hasImg:
-              (!!q[5] && !String(q[5]).startsWith('@vio:') && !String(q[5]).startsWith('<svg')) ||
-              (Array.isArray(q[2]) && q[2].some((o: any) => !!o[1] && !String(o[1]).startsWith('@vio:') && !String(o[1]).startsWith('<svg')))
-          }))
-          .filter(item => item.hasImg);
-
-        while (url.length > 60000 && hasImageQuestions.length > 0) {
-          const toStrip = hasImageQuestions.pop();
-          if (toStrip) {
-            const qIdx = toStrip.idx;
-            const q = currentQuestions[qIdx];
-            if (q[5] && !String(q[5]).startsWith('@vio:') && !String(q[5]).startsWith('<svg')) {
-              q[5] = '';
-              payloadData.dropped++;
-            }
-            if (Array.isArray(q[2])) {
-              q[2] = q[2].map((o: any) => {
-                if (Array.isArray(o) && o[1] && !String(o[1]).startsWith('@vio:') && !String(o[1]).startsWith('<svg')) {
-                  payloadData.dropped++;
-                  return [o[0], ''];
-                }
-                return o;
-              });
-            }
-
-            quizData = { s: subject, g: grade, q: currentQuestions };
-            json = JSON.stringify(quizData);
-            finalCode = await encodePayloadToCode(json);
-            url = buildShareUrl(finalCode);
+      // Ưu tiên 1: Lưu toàn bộ đề + 100% hình ảnh lên đám mây qua /api/share để tạo Link siêu ngắn gửi Zalo/Messenger
+      let shareUrl = '';
+      try {
+        const res = await fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: finalCode }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            shareUrl = `${window.location.origin}${window.location.pathname}?s=${encodeURIComponent(data.id)}`;
           }
         }
+      } catch (cloudErr) {
+        console.warn('[handleShareQuiz] Cloud short-link fallback:', cloudErr);
       }
 
-      await navigator.clipboard.writeText(url);
-      const note = payloadData.dropped > 0 ? `\n\n(Lưu ý: Đã lược bỏ ${payloadData.dropped} ảnh dung lượng quá lớn để tối ưu Link)` : '';
-      alert(`✅ Đã sao chép Link Quiz đầy đủ hình ảnh!${note}\n\nGửi ngay cho học sinh để luyện tập.`);
+      // Ưu tiên 2 (dự phòng khi không có kết nối đám mây): Dùng link trực tiếp giữ nguyên 100% hình ảnh (không lược bỏ ảnh nào)
+      if (!shareUrl) {
+        shareUrl =
+          finalCode.length <= 3800
+            ? `${window.location.origin}${window.location.pathname}?exam=${finalCode}`
+            : `${window.location.origin}${window.location.pathname}#exam=${finalCode}`;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      alert(`✅ Đã tạo & sao chép Link Quiz ĐẦY ĐỦ 100% HÌNH ẢNH!\n\n${shareUrl.length < 120 ? `Link rút gọn: ${shareUrl}\n\n` : ''}Gửi ngay qua Zalo / Messenger cho học sinh làm bài nhé!`);
     } catch (e) {
       console.error("Share error", e);
       alert("Lỗi khi tạo link chia sẻ.");
