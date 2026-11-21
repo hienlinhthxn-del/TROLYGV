@@ -542,7 +542,9 @@ CẤU TRÚC JSON BẮT BUỘC:
             image: typeof q?.image === 'string' && q.image ? q.image : (typeof q?.svg === 'string' ? q.svg : ''),
             options: normOpts,
             answer: typeof q?.answer === 'string' ? q.answer : String(q?.answer?.text ?? q?.answer ?? ''),
+            correct_option_text: typeof q?.correct_option_text === 'string' ? q.correct_option_text : '',
             explanation: typeof q?.explanation === 'string' ? q.explanation : String(q?.explanation ?? ''),
+            ...(typeof q?.has_image === 'boolean' ? { has_image: q.has_image } : {}),
             ...(Array.isArray(q?.bbox) && q.bbox.length === 4 ? { bbox: q.bbox.map(Number) } : {}),
             ...(q?.page_index !== undefined || q?.page !== undefined || q?.pageNumber !== undefined
               ? { page_index: Number(q?.page_index ?? q?.page ?? q?.pageNumber ?? 0) }
@@ -1787,7 +1789,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           pageTexts.push(extractedPageText);
 
           const unscaled = page.getViewport({ scale: 1.0 });
-          const targetScale = unscaled.width > 0 ? Math.min(1.35, Math.max(0.85, 920 / unscaled.width)) : 1.0;
+          const targetScale = unscaled.width > 0 ? Math.min(1.8, Math.max(1.0, 1280 / unscaled.width)) : 1.3;
           const viewport = page.getViewport({ scale: targetScale });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
@@ -1795,7 +1797,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           canvas.width = Math.round(viewport.width);
           await page.render({ canvasContext: context!, viewport }).promise;
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.68);
+          const imgData = canvas.toDataURL('image/jpeg', 0.84);
           pageImages.push(imgData);
           imageParts.push({
             inlineData: {
@@ -1814,20 +1816,113 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
       }
     };
 
-    const cropImageFromBbox = (base64Image: string, bbox: number[]): Promise<string> => {
+    const trimWhitespaceFromCanvas = (sourceCanvas: HTMLCanvasElement, pad = 14): HTMLCanvasElement | null => {
+      const ctx = sourceCanvas.getContext('2d');
+      if (!ctx || sourceCanvas.width === 0 || sourceCanvas.height === 0) return sourceCanvas;
+      const { width, height } = sourceCanvas;
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const { data } = imgData;
+
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = data[idx + 3];
+          // Điểm ảnh không phải màu nền trắng hoặc xám nhạt viền trang (#f4f3ef)
+          if (a > 20 && (r < 236 || g < 236 || b < 232)) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX < minX || maxY < minY || maxX - minX < 8 || maxY - minY < 8) {
+        return null;
+      }
+
+      const cropW = maxX - minX + 1;
+      const cropH = maxY - minY + 1;
+      const out = document.createElement('canvas');
+      out.width = cropW + pad * 2;
+      out.height = cropH + pad * 2;
+      const outCtx = out.getContext('2d');
+      if (!outCtx) return sourceCanvas;
+      outCtx.fillStyle = '#ffffff';
+      outCtx.fillRect(0, 0, out.width, out.height);
+      outCtx.drawImage(sourceCanvas, minX, minY, cropW, cropH, pad, pad, cropW, cropH);
+      return out;
+    };
+
+    const detectSafeQuestionTopNormY = (img: HTMLImageElement): number => {
+      try {
+        const probeW = 200;
+        const probeH = 100;
+        const c = document.createElement('canvas');
+        c.width = probeW;
+        c.height = probeH;
+        const ctx = c.getContext('2d');
+        if (!ctx) return 25;
+        ctx.drawImage(img, 0, 0, img.width, Math.round(img.height * 0.22), 0, 0, probeW, probeH);
+        const data = ctx.getImageData(0, 0, probeW, probeH).data;
+
+        let lastHeaderRow = -1;
+        for (let y = 0; y < probeH; y++) {
+          let coloredCount = 0;
+          // Chỉ xét vùng giữa trang (từ 15% đến 85% chiều ngang) để tránh viền xám 2 bên
+          for (let x = 30; x < 170; x++) {
+            const idx = (y * probeW + x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            if (r < 230 || g < 230 || b < 230) {
+              coloredCount++;
+            }
+          }
+          // Thanh tiêu đề đỏ VioEdu hoặc thanh tab trình duyệt thường phủ > 65% chiều ngang ở phía trên cùng (y < 65)
+          if (y < 65 && coloredCount > 95) {
+            lastHeaderRow = y;
+          }
+        }
+
+        if (lastHeaderRow >= 0) {
+          // Quy đổi từ probeH (tương ứng 22% chiều cao ảnh) sang hệ 0..1000
+          const normY = Math.round(((lastHeaderRow + 4) / probeH) * 220);
+          return Math.min(145, Math.max(20, normY));
+        }
+        return 20;
+      } catch {
+        return 25;
+      }
+    };
+
+    const cropImageFromBbox = (
+      base64Image: string,
+      bbox: number[],
+      mode: 'question' | 'option' = 'question',
+      optionIndex?: number
+    ): Promise<string> => {
       return new Promise((resolve) => {
         if (!base64Image || !Array.isArray(bbox) || bbox.length !== 4) {
           resolve('');
           return;
         }
-        const [ymin, xmin, ymax, xmax] = bbox.map(Number);
+        let [ymin, xmin, ymax, xmax] = bbox.map(Number);
         if (
           !Number.isFinite(ymin) ||
           !Number.isFinite(xmin) ||
           !Number.isFinite(ymax) ||
           !Number.isFinite(xmax) ||
-          ymax <= ymin + 12 ||
-          xmax <= xmin + 12
+          ymax <= ymin + 8 ||
+          xmax <= xmin + 8
         ) {
           resolve('');
           return;
@@ -1840,6 +1935,44 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
             return;
           }
           const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+          const isWidescreen = img.width > img.height * 1.25;
+
+          if (mode === 'question') {
+            const safeTop = detectSafeQuestionTopNormY(img);
+            // Nếu bbox nằm ở nửa trên trang đề (ymin < 320), tự động mở rộng lên safeTop để KHÔNG BAO GIỜ cắt mất dòng phép tính/hình vẽ phía trên câu hỏi (như 6 O 3 O 2 = 7)
+            if (ymin < 320) {
+              ymin = Math.min(ymin, safeTop);
+            } else {
+              ymin = Math.max(safeTop, ymin - 35);
+            }
+            xmin = isWidescreen ? Math.min(xmin, 58) : Math.max(15, xmin - 30);
+            ymax = Math.min(isWidescreen ? 435 : 960, ymax + 28);
+            if (isWidescreen && xmax < 750) {
+              xmax = Math.min(735, Math.max(xmax + 30, 650));
+            } else {
+              xmax = Math.min(940, xmax + 25);
+            }
+          } else if (mode === 'option') {
+            // Mở rộng nhẹ vùng cắt bên trong ô đáp án để không bị cụt icon dấu +, -, hình vẽ ở sát mép trái
+            if (isWidescreen && typeof optionIndex === 'number') {
+              const isLeftCol = optionIndex % 2 === 0;
+              if (isLeftCol) {
+                xmin = Math.max(68, Math.min(xmin, 74));
+                xmax = Math.min(484, Math.max(xmax + 20, 260));
+              } else {
+                xmin = Math.max(508, Math.min(xmin, 514));
+                xmax = Math.min(922, Math.max(xmax + 20, 700));
+              }
+              ymin = Math.max(400, ymin - 14);
+              ymax = Math.min(920, ymax + 14);
+            } else {
+              ymin = Math.max(0, ymin - 12);
+              xmin = Math.max(0, xmin - 16);
+              ymax = Math.min(1000, ymax + 12);
+              xmax = Math.min(1000, xmax + 16);
+            }
+          }
+
           const y1 = clamp((ymin / 1000) * img.height, 0, img.height - 1);
           const x1 = clamp((xmin / 1000) * img.width, 0, img.width - 1);
           const y2 = clamp((ymax / 1000) * img.height, y1 + 1, img.height);
@@ -1852,9 +1985,8 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           }
 
           const canvas = document.createElement('canvas');
-          const pad = 6;
-          canvas.width = w + pad * 2;
-          canvas.height = h + pad * 2;
+          canvas.width = w;
+          canvas.height = h;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
             resolve('');
@@ -1862,8 +1994,24 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           }
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, x1, y1, w, h, pad, pad, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.86));
+          ctx.drawImage(img, x1, y1, w, h, 0, 0, w, h);
+
+          // Nếu là màn hình ngang VioEdu và cắt vùng câu hỏi, xóa vùng nút "Xác nhận" (x: 745..945, y: 245..345) và dòng "Hãy chọn 1 đáp án đúng" (y > 390) nếu lỡ dính vào
+          if (mode === 'question' && isWidescreen) {
+            const btnX1 = Math.round((745 / 1000) * img.width - x1);
+            const btnY1 = Math.round((240 / 1000) * img.height - y1);
+            const btnW = Math.round((210 / 1000) * img.width);
+            const btnH = Math.round((115 / 1000) * img.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(btnX1, btnY1, btnW, btnH);
+          }
+
+          const trimmed = trimWhitespaceFromCanvas(canvas, mode === 'question' ? 16 : 10);
+          if (!trimmed) {
+            resolve('');
+            return;
+          }
+          resolve(trimmed.toDataURL('image/jpeg', 0.88));
         };
         img.onerror = () => resolve('');
         img.src = base64Image;
@@ -1967,27 +2115,34 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
       throw new Error('Không tìm thấy trang tài liệu hợp lệ để số hóa.');
     }
 
-    const digitizePrompt = `Bạn là hệ thống SỐ HÓA ĐỀ THI chuyên nghiệp.
-Nhiệm vụ: Đọc kỹ các trang tài liệu đính kèm và trích xuất TOÀN BỘ các câu hỏi có trong tài liệu thành dữ liệu Quiz tương tác.
+    const digitizePrompt = `Bạn là hệ thống SỐ HÓA ĐỀ THI & GIẢI TOÁN chuyên nghiệp.
+Nhiệm vụ: Đọc kỹ các trang tài liệu đính kèm và trích xuất TOÀN BỘ các câu hỏi có trong tài liệu thành dữ liệu Quiz tương tác chính xác 100%.
 
 QUY TẮC BẮT BUỘC:
 1. SỐ HÓA ĐÚNG NỘI DUNG TÀI LIỆU TẢI LÊN:
    - Trích xuất toàn bộ các câu hỏi có trên từng trang (gán đúng "page_index" từ 0 đến N-1 tương ứng với trang trong lô gửi lên).
-   - Nếu 1 trang có nhiều câu hỏi (đề kiểm tra A4) thì trích xuất đủ tất cả các câu trên trang đó. Nếu 1 trang là 1 màn hình câu hỏi (VioEdu/Violympic) thì trích xuất đúng câu hỏi của trang đó.
+   - Nếu phía trên câu hỏi có phép tính, dãy số hoặc biểu thức (ví dụ: "6 ⚪ 3 ⚪ 2 = 7", "5 + ? = 9"): BẮT BUỘC ghi cả biểu thức đó vào đầu trường "question" (VD: "6 ⚪ 3 ⚪ 2 = 7. Chọn dấu phép tính phù hợp để hoàn thành phép tính trên:") ĐỒNG THỜI đặt "has_image": true và trả về "bbox" bao trọn cả biểu thức lẫn hình minh họa đó.
 2. LỌC BỎ NHIỄU GIAO DIỆN CHỤP MÀN HÌNH (nếu có):
    - Không lấy các dòng cảnh báo trình duyệt như: "Vui lòng bật chế độ toàn màn hình (F11)...", "Tên đăng nhập: ...", "Bạn đã trả lời sai!", "Bạn đã trả lời đúng!", "Hãy chọn 1 đáp án đúng", "Xác nhận".
-3. PHÂN LOẠI CÂU HỎI CHÍNH XÁC:
-   - Nếu câu hỏi có các phương án lựa chọn (A, B, C, D hoặc 4 ô lựa chọn 2x2) -> "type": "Trắc nghiệm".
-   - Nếu câu hỏi yêu cầu điền số/từ vào chỗ trống hoặc ô nhập "Đáp án của bạn..." mà không có các phương án lựa chọn -> "type": "Tự luận", "options": [].
-4. CẮT HÌNH MINH HỌA CÂU HỎI ("bbox") TỪ TRANG TÀI LIỆU:
-   - Nếu câu hỏi có hình vẽ minh họa, sơ đồ, bảng, đồ vật, con vật, phép tính hình ảnh: BẮT BUỘC trả về "has_image": true và "bbox": [ymin, xmin, ymax, xmax] (tọa độ chuẩn hóa từ 0 đến 1000 trên trang đó) bao quanh ĐÚNG vùng hình minh họa của câu hỏi.
-   - Nếu câu hỏi chỉ có chữ thuần túy: trả về "has_image": false, "bbox": null.
-5. CẮT HÌNH MINH HỌA TRONG TỪNG ĐÁP ÁN ("options"):
-   - Với mỗi đáp án A, B, C, D:
-     + Nếu phương án là HÌNH VẼ: đặt "has_image": true và trả về "bbox": [ymin, xmin, ymax, xmax] (hệ 0-1000) bao quanh hình vẽ bên trong ô đáp án đó, đồng thời điền "text" mô tả ngắn gọn.
-     + Nếu phương án chỉ là chữ hoặc số: điền nội dung vào "text" (không kèm tiền tố A., B., C., D.), "has_image": false, "bbox": null.
-6. GIẢI ĐỀ CHÍNH XÁC 100%:
-   - Quan sát kỹ đề và điền đáp án ĐÚNG vào "answer" ("A", "B", "C", hoặc "D" nếu là Trắc nghiệm; hoặc kết quả cần điền nếu là Tự luận).
+3. THỨ TỰ ĐỌC CÁC Ô ĐÁP ÁN TRẮC NGHIỆM (CỰC KỲ QUAN TRỌNG):
+   - Với giao diện lưới 2 cột (2x2): BẮT BUỘC đọc theo từng hàng ngang TỪ TRÁI SANG PHẢI, TỪ TRÊN XUỐNG DƯỚI:
+     + Phương án A = Ô TRÁI - TRÊN (Hàng 1, Cột Trái: ymin khoảng 460-630, xmin khoảng 60-495)
+     + Phương án B = Ô PHẢI - TRÊN (Hàng 1, Cột Phải: ymin khoảng 460-630, xmin khoảng 500-935)
+     + Phương án C = Ô TRÁI - DƯỚI (Hàng 2, Cột Trái: ymin khoảng 640-815, xmin khoảng 60-495)
+     + Phương án D = Ô PHẢI - DƯỚI (Hàng 2, Cột Phải: ymin khoảng 640-815, xmin khoảng 500-935). Lưu ý: Nếu đề chỉ có 3 ô đáp án (Trái-Trên, Phải-Trên, Trái-Dưới) thì mảng "options" chỉ trả về đúng 3 phần tử A, B, C (TUYỆT ĐỐI KHÔNG đọc theo cột dọc!).
+   - Nếu trang có ô nhập "Đáp án của bạn..." hoặc yêu cầu điền số/chữ mà không có các ô lựa chọn -> "type": "Tự luận", "options": [].
+4. CẮT HÌNH MINH HỌA CÂU HỎI ("bbox") ĐẦY ĐỦ, KHÔNG BỊ CẮT CỤT PHÍA TRÊN:
+   - Nếu câu hỏi có phép tính hình ảnh (như "6 ⚪ 3 ⚪ 2 = 7"), hình vẽ minh họa, sơ đồ, bảng, đồ vật, con vật: BẮT BUỘC trả về "has_image": true và "bbox": [ymin, xmin, ymax, xmax] (hệ 0-1000).
+   - LƯU Ý TỌA ĐỘ "ymin": Phải lấy "ymin" từ PHÍA TRÊN CÙNG của phép tính hoặc hình vẽ (ví dụ ymin = 30..70), TUYỆT ĐỐI KHÔNG đặt ymin quá thấp làm cắt mất dòng phép tính hoặc phần đầu của hình vẽ!
+5. ĐỌC VÀ CẮT HÌNH TRONG TỪNG Ô ĐÁP ÁN ("options"):
+   - Nếu trong ô đáp án là các biểu tượng dấu phép tính trong vòng tròn màu (ví dụ: dấu "-" và "+", dấu "+" và "-", dấu "-" và "-"):
+     + BẮT BUỘC ghi rõ dấu vào trường "text" theo đúng thứ tự trái sang phải trong ô đó (ví dụ: "- và +", "+ và -", "- và -").
+     + ĐỒNG THỜI đặt "has_image": true và trả về "bbox": [ymin, xmin, ymax, xmax] bao quanh các biểu tượng bên trong ô đáp án đó.
+   - Nếu trong ô đáp án là hình vẽ (đồ vật, con vật, hình học, vạch màu): đặt "has_image": true, trả về "bbox" bao quanh hình vẽ trong ô đó, và điền "text" mô tả ngắn.
+   - Nếu trong ô đáp án chỉ là chữ hoặc số thông thường: điền vào "text", đặt "has_image": false, "bbox": null.
+6. GIẢI TOÁN TỪNG BƯỚC TRƯỚC KHI CHỌN ĐÁP ÁN ("explanation" -> "correct_option_text" -> "answer"):
+   - BẮT BUỘC viết lời giải vào "explanation" TRƯỚC: Thay từng phương án A (Trái-Trên), B (Phải-Trên), C (Trái-Dưới), D (Phải-Dưới) vào đề bài để kiểm tra phép tính đúng hay sai (Ví dụ với "6 ⚪ 3 ⚪ 2 = 7": Thử A (- và +): 6 - 3 + 2 = 5 ≠ 7 (Sai); Thử B (+ và -): 6 + 3 - 2 = 7 (Đúng); Thử C (- và -): 6 - 3 - 2 = 1 ≠ 7 (Sai) -> Vậy phương án đúng là B: "+ và -").
+   - Điền chính xác nội dung của phương án đúng vào "correct_option_text" (VD: "+ và -") và chữ cái tương ứng ("A", "B", "C", hoặc "D") vào "answer".
 
 TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 {
@@ -1995,17 +2150,18 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
     {
       "page_index": 0,
       "type": "Trắc nghiệm",
-      "question": "Nội dung câu hỏi",
+      "question": "Nội dung câu hỏi (kèm biểu thức phía trên nếu có)",
       "has_image": true,
       "bbox": [ymin, xmin, ymax, xmax],
       "options": [
-        {"text": "Nội dung A", "has_image": false, "bbox": null},
-        {"text": "Nội dung B", "has_image": false, "bbox": null},
-        {"text": "Nội dung C", "has_image": false, "bbox": null},
-        {"text": "Nội dung D", "has_image": false, "bbox": null}
+        {"text": "Nội dung ô Trái-Trên (A)", "has_image": false, "bbox": null},
+        {"text": "Nội dung ô Phải-Trên (B)", "has_image": false, "bbox": null},
+        {"text": "Nội dung ô Trái-Dưới (C)", "has_image": false, "bbox": null},
+        {"text": "Nội dung ô Phải-Dưới (D)", "has_image": false, "bbox": null}
       ],
-      "answer": "A",
-      "explanation": "Giải thích chi tiết cách làm"
+      "explanation": "Thử từng phương án A, B, C, D để tìm kết quả đúng...",
+      "correct_option_text": "Nội dung chính xác của phương án đúng",
+      "answer": "B"
     }
   ]
 }`;
@@ -2013,10 +2169,10 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
     const BATCH_PAGES = 2;
     const digitizedQuestions: any[] = [];
     const defaultVioEduOptionBboxes = [
-      [555, 185, 675, 490], // A: Trái trên
-      [555, 510, 675, 815], // B: Phải trên
-      [700, 185, 820, 490], // C: Trái dưới
-      [700, 510, 820, 815], // D: Phải dưới
+      [482, 70, 620, 482],  // A: Trái trên
+      [482, 510, 620, 920], // B: Phải trên
+      [656, 70, 798, 482],  // C: Trái dưới
+      [656, 510, 798, 920], // D: Phải dưới
     ];
 
     for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
@@ -2101,15 +2257,15 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 
         let questionCroppedImg = '';
         if (Array.isArray(q.bbox) && q.bbox.length === 4 && pageImage) {
-          questionCroppedImg = await cropImageFromBbox(pageImage, q.bbox);
+          questionCroppedImg = await cropImageFromBbox(pageImage, q.bbox, 'question');
         } else if (typeof q.image === 'string' && (q.image.startsWith('<svg') || q.image.startsWith('data:image'))) {
           questionCroppedImg = q.image;
         }
 
-        // Fallback cắt vùng hình minh họa trung tâm từ trang đề gốc nếu câu hỏi có nhắc tới hình mà AI quên trả về tọa độ bbox
-        const mentionsVisual = /hình trên|hình dưới|hình bên|hình sau|hình vẽ|quan sát hình|bông hoa trên/i.test(cleanedQText);
+        // Fallback cắt vùng hình minh họa / biểu thức phía trên câu hỏi từ trang đề gốc nếu câu hỏi có nhắc tới hình/phép tính trên mà AI quên trả về tọa độ bbox
+        const mentionsVisual = /hình trên|hình dưới|hình bên|hình sau|hình vẽ|quan sát hình|bông hoa trên|phép tính trên|dãy hình|sơ đồ/i.test(cleanedQText);
         if (!questionCroppedImg && (q.has_image || mentionsVisual) && pageImage) {
-          questionCroppedImg = await cropImageFromBbox(pageImage, [135, 145, 515, 855]);
+          questionCroppedImg = await cropImageFromBbox(pageImage, [25, 55, 385, 735], 'question');
         }
 
         const rawOpts = Array.isArray(q.options) ? q.options : [];
@@ -2123,10 +2279,10 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
               ? opt.image
               : '';
             if (!optImg && Array.isArray(opt?.bbox) && opt.bbox.length === 4 && pageImage) {
-              optImg = await cropImageFromBbox(pageImage, opt.bbox);
+              optImg = await cropImageFromBbox(pageImage, opt.bbox, 'option', oIdx);
             }
             if (!optImg && opt?.has_image && pageImage && defaultVioEduOptionBboxes[oIdx]) {
-              optImg = await cropImageFromBbox(pageImage, defaultVioEduOptionBboxes[oIdx]);
+              optImg = await cropImageFromBbox(pageImage, defaultVioEduOptionBboxes[oIdx], 'option', oIdx);
             }
             return {
               text: optText || (optImg ? `Phương án ${String.fromCharCode(65 + oIdx)}` : ''),
@@ -2141,6 +2297,17 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           String(q.type || '').toLowerCase().includes('điền') ||
           validOptions.length < 2;
 
+        let finalAnswer = String(q.answer ?? '').trim();
+        const correctOptText = String(q.correct_option_text ?? '').trim().toLowerCase();
+        if (!isEssay && correctOptText && validOptions.length > 0) {
+          const matchedOptIdx = validOptions.findIndex(
+            o => o.text.trim().toLowerCase() === correctOptText
+          );
+          if (matchedOptIdx !== -1) {
+            finalAnswer = String.fromCharCode(65 + matchedOptIdx);
+          }
+        }
+
         digitizedQuestions.push({
           id: `digitized-${Date.now()}-${digitizedQuestions.length}`,
           type: isEssay ? 'Tự luận' : 'Trắc nghiệm',
@@ -2148,7 +2315,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           content: cleanedQText,
           image: questionCroppedImg,
           options: isEssay ? [] : validOptions,
-          answer: String(q.answer ?? '').trim(),
+          answer: finalAnswer,
           explanation: String(q.explanation ?? '').trim(),
           originalPageImage: pageImage
         });
