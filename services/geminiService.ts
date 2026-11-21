@@ -1789,7 +1789,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           pageTexts.push(extractedPageText);
 
           const unscaled = page.getViewport({ scale: 1.0 });
-          const targetScale = unscaled.width > 0 ? Math.min(1.8, Math.max(1.0, 1280 / unscaled.width)) : 1.3;
+          const targetScale = unscaled.width > 0 ? Math.min(1.55, Math.max(0.95, 1050 / unscaled.width)) : 1.15;
           const viewport = page.getViewport({ scale: targetScale });
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
@@ -1797,7 +1797,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
           canvas.width = Math.round(viewport.width);
           await page.render({ canvasContext: context!, viewport }).promise;
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.84);
+          const imgData = canvas.toDataURL('image/jpeg', 0.78);
           pageImages.push(imgData);
           imageParts.push({
             inlineData: {
@@ -1877,8 +1877,9 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
         let lastHeaderRow = -1;
         for (let y = 0; y < probeH; y++) {
           let coloredCount = 0;
-          // Chỉ xét vùng giữa trang (từ 15% đến 85% chiều ngang) để tránh viền xám 2 bên
-          for (let x = 30; x < 170; x++) {
+          let redTextCount = 0;
+          // Chỉ xét vùng giữa trang (từ 10% đến 90% chiều ngang) để tránh viền xám 2 bên
+          for (let x = 20; x < 180; x++) {
             const idx = (y * probeW + x) * 4;
             const r = data[idx];
             const g = data[idx + 1];
@@ -1886,9 +1887,13 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
             if (r < 230 || g < 230 || b < 230) {
               coloredCount++;
             }
+            // Dòng cảnh báo chữ đỏ VioEdu: "Vui lòng bật chế độ toàn màn hình (F11)..." / "Bạn đã trả lời sai!"
+            if (r > 155 && g < 115 && b < 115) {
+              redTextCount++;
+            }
           }
-          // Thanh tiêu đề đỏ VioEdu hoặc thanh tab trình duyệt thường phủ > 65% chiều ngang ở phía trên cùng (y < 65)
-          if (y < 65 && coloredCount > 95) {
+          // Thanh tiêu đề đỏ/xám phủ > 60% chiều ngang HOẶC dòng cảnh báo chữ đỏ ở phía trên cùng (y < 72, tương ứng 16% đầu trang)
+          if (y < 72 && (coloredCount > 95 || redTextCount >= 4)) {
             lastHeaderRow = y;
           }
         }
@@ -1896,7 +1901,7 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
         if (lastHeaderRow >= 0) {
           // Quy đổi từ probeH (tương ứng 22% chiều cao ảnh) sang hệ 0..1000
           const normY = Math.round(((lastHeaderRow + 4) / probeH) * 220);
-          return Math.min(145, Math.max(20, normY));
+          return Math.min(165, Math.max(20, normY));
         }
         return 20;
       } catch {
@@ -2166,7 +2171,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
   ]
 }`;
 
-    const BATCH_PAGES = 2;
+    const BATCH_PAGES = 5;
     const digitizedQuestions: any[] = [];
     const defaultVioEduOptionBboxes = [
       [482, 70, 620, 482],  // A: Trái trên
@@ -2175,8 +2180,21 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       [656, 510, 798, 920], // D: Phải dưới
     ];
 
+    const withTimeout = <T,>(promise: Promise<T>, ms: number, label = 'Timeout'): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(label)), ms);
+        promise.then(
+          (val) => { clearTimeout(timer); resolve(val); },
+          (err) => { clearTimeout(timer); reject(err); }
+        );
+      });
+    };
+
     for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
       if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+      if (startIdx > 0) {
+        await new Promise(r => setTimeout(r, 600));
+      }
       const endPage = Math.min(startIdx + BATCH_PAGES, finalFileParts.length);
       onProgress?.(`Đang dùng AI đọc câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length} câu)...`);
 
@@ -2201,7 +2219,11 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       };
 
       try {
-        const batchResult = await this.generateExamQuestionsStructured(promptForBatch, batchParts);
+        const batchResult = await withTimeout(
+          this.generateExamQuestionsStructured(promptForBatch, batchParts),
+          38000,
+          'AI batch timeout'
+        );
         rawBatchList = extractListFromRes(batchResult);
         if (rawBatchList.length === 0) {
           throw new Error(batchResult?.error || 'Batch empty');
@@ -2209,17 +2231,22 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       } catch (firstErr: any) {
         if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
 
-        // Thử lại từng trang một (1 trang/lần) để giảm tải cho AI
+        // Thử lại từng trang một (1 trang/lần với timeout 22s) để không bao giờ bị treo
         rawBatchList = [];
         for (let pIdx = 0; pIdx < batchParts.length; pIdx++) {
           if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
-          await new Promise(r => setTimeout(r, 900));
+          onProgress?.(`Đang xử lý chi tiết trang ${startIdx + pIdx + 1} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length + rawBatchList.length} câu)...`);
+          await new Promise(r => setTimeout(r, 500));
           const singleText = pageTextList[startIdx + pIdx] || '';
           const singlePrompt = singleText
             ? `${digitizePrompt}\n\nVĂN BẢN GỐC TRANG 0:\n${singleText}`
             : digitizePrompt;
           try {
-            const singleRes = await this.generateExamQuestionsStructured(singlePrompt, [batchParts[pIdx]]);
+            const singleRes = await withTimeout(
+              this.generateExamQuestionsStructured(singlePrompt, [batchParts[pIdx]]),
+              22000,
+              'Single page timeout'
+            );
             const singleList = extractListFromRes(singleRes);
             if (singleList.length > 0) {
               for (const item of singleList) {
