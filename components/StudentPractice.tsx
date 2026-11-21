@@ -116,8 +116,10 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
     setEndTime(Date.now());
 
-    // Lọc câu hỏi tự luận để chấm bằng AI
-    const essayQuestions = questions.filter(q => q.type !== 'Trắc nghiệm' || !q.options || q.options.length === 0);
+    // Chỉ gọi AI chấm với các câu tự luận dài (> 15 ký tự); các câu điền số / điền dấu VioEdu chấm trực tiếp tức thì
+    const essayQuestions = questions.filter(
+      q => (q.type !== 'Trắc nghiệm' || !q.options || q.options.length === 0) && String(q.answer || '').trim().length > 15
+    );
     const hasEssayAnswers = essayQuestions.some(q => answers[q.id]?.trim());
 
     if (essayQuestions.length > 0 && hasEssayAnswers) {
@@ -176,29 +178,36 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
           return { id: q.id, isCorrect, correctAnswer: q.answer, userAnswer: answers[q.id], feedback };
         }
 
-        // Logic chấm điểm Tự luận theo từ khóa
-        const userAnswer = (answers[q.id] || '').trim();
-        const correctAnswer = (q.answer || '').trim();
+        // Logic chấm điểm Điền số / Điền dấu / Tự luận
+        const userAnswer = String(answers[q.id] || '').trim();
+        const correctAnswer = String(q.answer || '').trim();
         let isCorrect = false;
 
         if (userAnswer && correctAnswer) {
-          const normalize = (str: string) => str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s{2,}/g, " ").trim();
-          const normUser = normalize(userAnswer);
-          const normCorrect = normalize(correctAnswer);
-
-          // 1. Khớp chính xác hoặc chứa đựng toàn bộ đáp án mẫu
-          if (normUser === normCorrect || normUser.includes(normCorrect)) {
+          if (userAnswer.toLowerCase() === correctAnswer.toLowerCase()) {
             isCorrect = true;
-          } else {
-            // 2. Khớp theo từ khóa/ý chính (tách bởi dấu phẩy/chấm phẩy hoặc khoảng trắng)
-            const keywords = (correctAnswer.includes(',') || correctAnswer.includes(';'))
-              ? correctAnswer.split(/[,;]/).map(k => normalize(k)).filter(k => k.length > 0)
-              : normCorrect.split(' ').filter(w => w.length > 1);
+          } else if (
+            !Number.isNaN(Number(userAnswer)) &&
+            !Number.isNaN(Number(correctAnswer)) &&
+            Number(userAnswer) === Number(correctAnswer)
+          ) {
+            isCorrect = true;
+          } else if (correctAnswer.length > 3) {
+            const normalize = (str: string) => str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s{2,}/g, " ").trim();
+            const normUser = normalize(userAnswer);
+            const normCorrect = normalize(correctAnswer);
 
-            if (keywords.length > 0) {
-              const matchCount = keywords.filter(k => normUser.includes(k)).length;
-              // Nếu khớp >= 50% số từ khóa/ý -> Chấp nhận đúng
-              if (matchCount / keywords.length >= 0.5) isCorrect = true;
+            if (normUser === normCorrect || (normCorrect.length > 4 && normUser.includes(normCorrect))) {
+              isCorrect = true;
+            } else {
+              const keywords = (correctAnswer.includes(',') || correctAnswer.includes(';'))
+                ? correctAnswer.split(/[,;]/).map(k => normalize(k)).filter(k => k.length > 0)
+                : normCorrect.split(' ').filter(w => w.length > 1);
+
+              if (keywords.length > 0) {
+                const matchCount = keywords.filter(k => normUser.includes(k)).length;
+                if (matchCount / keywords.length >= 0.5) isCorrect = true;
+              }
             }
           }
         }
@@ -209,31 +218,28 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
 
       // Lấy câu trả lời của người dùng ('A', 'B', 'C', 'D')
       const userAnswerLabel = (answers[q.id] || '').trim().toUpperCase();
+      const rawAns = String(q.answer || '').trim();
 
-      // --- Logic chấm điểm mới, mạnh mẽ hơn ---
-
-      // 1. Tìm index của đáp án đúng trong q.options
-      // Đáp án đúng 'q.answer' có thể là nhãn (A.) hoặc nội dung text của đáp án
       let correctOptionIndex = -1;
-
-      const answerTextOnly = q.answer.replace(/^[A-E][\.\:]\s*/i, '').trim().toLowerCase();
-      const answerLabelOnly = q.answer.match(/^[A-E][\.\:]/i)?.[0].toUpperCase().replace(/[\.\:]/, '') || '';
+      const answerTextOnly = rawAns.replace(/^[A-F][\.\:\)]\s*/i, '').trim().toLowerCase();
+      const labelMatch = rawAns.match(/^([A-F])(?=[\.\:\)\s]|$)/i);
+      const answerLabelOnly = labelMatch ? labelMatch[1].toUpperCase() : '';
 
       correctOptionIndex = q.options.findIndex((opt, i) => {
-        const optText = (typeof opt === 'string' ? opt : opt.text).trim().toLowerCase();
+        const optText = (typeof opt === 'string' ? opt : opt.text || '').replace(/^[A-F][\.\:\)]\s*/i, '').trim().toLowerCase();
         const optLabel = String.fromCharCode('A'.charCodeAt(0) + i);
 
-        // So khớp nhãn hoặc so khớp nội dung
-        return optLabel === answerLabelOnly || optText === answerTextOnly;
+        return optLabel === answerLabelOnly || (optText !== '' && optText === answerTextOnly);
       });
 
-      // 3. So sánh câu trả lời của người dùng với vị trí đáp án đúng
       let isCorrect = false;
       if (correctOptionIndex !== -1) {
         const correctLabel = String.fromCharCode('A'.charCodeAt(0) + correctOptionIndex);
         if (userAnswerLabel === correctLabel) {
           isCorrect = true;
         }
+      } else if (answerLabelOnly && userAnswerLabel === answerLabelOnly) {
+        isCorrect = true;
       }
 
       if (isCorrect) correctCount++;
@@ -248,7 +254,7 @@ const StudentPractice: React.FC<StudentPracticeProps> = ({ subject, grade, quest
     const trimmedSrc = imageSrc.trim();
     if (trimmedSrc.startsWith('<svg')) {
       return (
-        <div className="my-6 p-6 bg-white rounded-[32px] border border-slate-100 flex justify-center shadow-inner" dangerouslySetInnerHTML={{ __html: trimmedSrc }} />
+        <div className="my-4 p-4 bg-white rounded-3xl border border-slate-100 flex justify-center shadow-inner [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:max-h-56" dangerouslySetInnerHTML={{ __html: trimmedSrc }} />
       );
     }
     // Hỗ trợ hiển thị ảnh từ URL hoặc Base64 (ảnh tải lên)

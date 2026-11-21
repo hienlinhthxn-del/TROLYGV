@@ -91,67 +91,14 @@
         console.log("%c EduAssist AI Turbo Diagnostic ", "background: #4f46e5; color: white; font-weight: bold; padding: 4px; border-radius: 4px;");
     </script>
 
-    <!-- Script xử lý Link chia sẻ đề thi (Decode Base64 UTF-8) -->
+    <!-- Script nhận diện Link chia sẻ đề thi (?exam=... hoặc #exam=...) -->
     <script>
-        (async function () {
-            // Tự động kiểm tra URL xem có mã đề thi không (tham số ?exam=...)
+        (function () {
             const urlParams = new URLSearchParams(window.location.search);
-            const sharedCode = urlParams.get('exam');
-
-            if (sharedCode) {
-                console.log("%c Đang xử lý link chia sẻ... ", "background: #eab308; color: black; font-weight: bold;");
-                try {
-                    let examData;
-
-                    // KIỂM TRA PHIÊN BẢN: Nếu bắt đầu bằng 'v2_', dùng giải nén Gzip (Mới)
-                    if (sharedCode.startsWith('v2_') && window.DecompressionStream) {
-                        const base64 = sharedCode.substring(3).replace(/-/g, '+').replace(/_/g, '/');
-                        // Thêm padding nếu cần
-                        const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
-
-                        const binaryString = atob(padded);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-
-                        const stream = new Blob([bytes]).stream();
-                        const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
-                        const response = new Response(decompressed);
-                        examData = await response.json();
-                        console.log("✅ Đã giải nén Gzip thành công");
-                    } else {
-                        // PHƯƠNG PHÁP CŨ (Base64 thuần)
-                        let cleanBase64 = sharedCode.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-                        while (cleanBase64.length % 4 !== 0) {
-                            cleanBase64 += '=';
-                        }
-
-                        const binaryString = atob(cleanBase64);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-
-                        const decoder = new TextDecoder('utf-8');
-                        const jsonString = decoder.decode(bytes);
-                        examData = JSON.parse(jsonString);
-                    }
-
-                    // Lưu vào localStorage để React App đọc
-                    localStorage.setItem('shared_exam_data', JSON.stringify(examData));
-                    console.log("✅ Đã giải mã đề thi thành công:", examData);
-
-                    // Cập nhật trạng thái debug
-                    window.ai_status = "Đã nhận đề thi từ Link!";
-
-                    // Xóa param trên URL để nhìn gọn hơn (tuỳ chọn)
-                    window.history.replaceState({}, document.title, window.location.pathname);
-
-                } catch (e) {
-                    console.error("❌ Lỗi giải mã link đề thi:", e);
-                    alert("Link đề thi bị lỗi hoặc không đúng định dạng!");
-                }
+            const hasSearchExam = urlParams.has('exam');
+            const hasHashExam = window.location.hash && window.location.hash.includes('exam=');
+            if (hasSearchExam || hasHashExam) {
+                window.ai_status = "Đang mở đề thi từ Link chia sẻ...";
             }
         })();
     </script>

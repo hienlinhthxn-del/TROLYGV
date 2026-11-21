@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { Message, TeacherPersona, GroundingSource, Classroom, CloudDocument, Attachment, ViewType, ExamQuestion, Assignment } from './types';
 import { PERSONAS, INITIAL_GREETING, QUICK_PROMPTS, DEFAULT_STUDENTS } from './constants';
+import { VIOEDU_GRADE1_SAMPLE_30 } from './vioeduQuizData';
 import { geminiService, FilePart } from './services/geminiService';
 import ChatMessage from './components/ChatMessage';
 import ApiKeySettings from './components/ApiKeySettings';
@@ -50,7 +51,9 @@ const App: React.FC = () => {
 
   // State để kiểm tra link chia sẻ ngay khi vào app
   const [isCheckingLink, setIsCheckingLink] = useState(() => {
-    return new URLSearchParams(window.location.search).has('exam') || !!localStorage.getItem('shared_exam_data');
+    const hasSearch = new URLSearchParams(window.location.search).has('exam');
+    const hasHash = Boolean(window.location.hash && window.location.hash.includes('exam='));
+    return hasSearch || hasHash || !!localStorage.getItem('shared_exam_data');
   });
 
   const [practiceData, setPracticeData] = useState<{ subject: string, grade: string, questions: ExamQuestion[], assignmentId: string | null } | null>(null);
@@ -244,182 +247,199 @@ const App: React.FC = () => {
       }
     }
 
-    const checkSharedExam = async () => {
+    const resolveVioEduImageRef = (imgVal: unknown): string => {
+      if (typeof imgVal !== 'string') return '';
+      const trimmed = imgVal.trim();
+      if (!trimmed.startsWith('@vio:')) return trimmed;
+      const parts = trimmed.substring(5).split(':');
+      const qIdx = Number(parts[0]);
+      if (!Number.isFinite(qIdx) || qIdx < 0 || qIdx >= VIOEDU_GRADE1_SAMPLE_30.length) return '';
+      const sample = VIOEDU_GRADE1_SAMPLE_30[qIdx];
+      if (parts.length === 1) {
+        return sample.image || '';
+      }
+      const optIdx = Number(parts[1]);
+      if (Array.isArray(sample.options) && Number.isFinite(optIdx) && optIdx >= 0 && optIdx < sample.options.length) {
+        const opt: any = sample.options[optIdx];
+        return (opt && typeof opt === 'object' && opt.image) ? opt.image : '';
+      }
+      return '';
+    };
+
+    const extractSharedExamParam = (): string | null => {
       const urlParams = new URLSearchParams(window.location.search);
-      const sharedExam = urlParams.get('exam');
+      const fromSearch = urlParams.get('exam');
+      if (fromSearch) return fromSearch;
+      const hash = window.location.hash || '';
+      if (hash.includes('exam=')) {
+        const raw = hash.split('exam=')[1]?.split('&')[0] || '';
+        try {
+          return decodeURIComponent(raw.trim());
+        } catch {
+          return raw.trim();
+        }
+      }
+      return null;
+    };
+
+    const checkSharedExam = async () => {
+      const sharedExam = extractSharedExamParam();
       const localSharedData = localStorage.getItem('shared_exam_data');
 
       if (sharedExam || localSharedData) {
         setIsCheckingLink(true);
         try {
-          // Đợi một chút để UI ổn định
-          await new Promise(resolve => setTimeout(resolve, 300));
-
           let data: any = null;
 
-          // Ưu tiên 1: Lấy từ localStorage (do index.html đã xử lý trước)
+          // Ưu tiên 1: Lấy từ localStorage nếu có
           if (localSharedData) {
             try {
               data = JSON.parse(localSharedData);
-              localStorage.removeItem('shared_exam_data'); // Xóa sau khi đọc
-              console.log("✅ Loaded exam from localStorage (pre-decoded)");
+              localStorage.removeItem('shared_exam_data');
             } catch (e) {
-              console.error("Error parsing local shared data", e);
+              localStorage.removeItem('shared_exam_data');
             }
           }
 
-          // Ưu tiên 2: Nếu không có trong storage thì tự decode từ URL
+          // Ưu tiên 2: Giải mã trực tiếp từ URL (?exam=... hoặc #exam=...)
           if (!data && sharedExam) {
-            try {
-              if (sharedExam.startsWith('v2_') && 'DecompressionStream' in window) {
-                // --- GIẢI NÉN GZIP (MỚI) ---
-                const base64 = sharedExam.substring(3).replace(/-/g, '+').replace(/_/g, '/');
-                const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
-                const binaryString = atob(padded);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i);
-                }
-                const stream = new Blob([bytes]).stream();
-                // @ts-ignore
-                const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
-                const response = new Response(decompressed);
-                data = await response.json();
-              } else {
-                // --- GIẢI MÃ CŨ (Base64) ---
-                let cleanBase64 = sharedExam.trim()
-                  .replace(/\s/g, '')
-                  .replace(/-/g, '+')
-                  .replace(/_/g, '/');
+            const cleanCode = sharedExam.trim().replace(/\s/g, '');
+            if (cleanCode.startsWith('v2_') && 'DecompressionStream' in window) {
+              const base64 = cleanCode.substring(3).replace(/-/g, '+').replace(/_/g, '/');
+              const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+              const binaryString = atob(padded);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              const stream = new Blob([bytes]).stream();
+              // @ts-ignore
+              const decompressed = stream.pipeThrough(new DecompressionStream('gzip'));
+              const response = new Response(decompressed);
+              data = await response.json();
+            } else {
+              let cleanBase64 = (cleanCode.startsWith('v2_') ? cleanCode.substring(3) : cleanCode)
+                .replace(/-/g, '+')
+                .replace(/_/g, '/');
 
-                while (cleanBase64.length % 4 !== 0) {
-                  cleanBase64 += '=';
-                }
+              while (cleanBase64.length % 4 !== 0) {
+                cleanBase64 += '=';
+              }
 
-                const decodeData = (base64String: string): any => {
-                  try {
-                    const binaryString = atob(base64String);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let i = 0; i < binaryString.length; i++) {
-                      bytes[i] = binaryString.charCodeAt(i);
-                    }
-                    const decoder = new TextDecoder('utf-8');
-                    const jsonString = decoder.decode(bytes);
-                    return JSON.parse(jsonString);
-                  } catch (e) {
-                    // Fallback methods...
-                    try {
-                      const decoded = decodeURIComponent(escape(atob(base64String)));
-                      return JSON.parse(decoded);
-                    } catch (e2) {
-                      const rawDecoded = atob(base64String);
-                      return JSON.parse(rawDecoded);
-                    }
+              const decodeData = (base64String: string): any => {
+                try {
+                  const binaryString = atob(base64String);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
                   }
-                };
-                data = decodeData(cleanBase64);
-              }
-            } catch (innerError: any) {
-              // Xử lý lỗi decode ở dưới
-              throw innerError;
-            }
-          }
-
-          try {
-            if (data && (data.q || data.questions)) {
-              let inflatedQuestions: ExamQuestion[] = [];
-
-              if (data.q && Array.isArray(data.q)) {
-                // FORMAT RÚT GỌN (Minified)
-                inflatedQuestions = data.q.map((item: any, idx: number) => {
-                  const rawOptions = item[2] || [];
-                  const options = rawOptions.map((opt: any) => {
-                    // Nếu là array [text, image]
-                    if (Array.isArray(opt)) {
-                      return { text: opt[0] || '', image: opt[1] || '' };
-                    }
-                    // Nếu là object cũ {text, image}
-                    if (typeof opt === 'object' && opt !== null) {
-                      return { text: opt.text || opt.label || '', image: opt.image || '' };
-                    }
-                    // Nếu là string/number
-                    return { text: String(opt), image: '' };
-                  });
-
-                  return {
-                    id: `share-${Date.now()}-${idx}`,
-                    type: item[0] === 1 ? 'Trắc nghiệm' : 'Tự luận', // 1: Trắc nghiệm, 0 hoặc 2: Tự luận
-                    content: item[1] || '',
-                    options: options,
-                    answer: item[3] || '',
-                    explanation: item[4] || '',
-                    image: item[5] || '',
-                    level: 'Thông hiểu'
-                  };
-                });
-              } else {
-                // FORMAT ĐẦY ĐỦ (Legacy)
-                const sourceQuestions = data.q || data.questions || [];
-                inflatedQuestions = sourceQuestions.map((q: any, idx: number) => {
-                  const rawOptions = q.options || q[2] || [];
-                  const options = rawOptions.map((opt: any) => {
-                    if (Array.isArray(opt)) return { text: opt[0] || '', image: opt[1] || '' };
-                    if (typeof opt === 'object' && opt !== null) return { text: opt.text || opt.label || '', image: opt.image || '' };
-                    return { text: String(opt), image: '' };
-                  });
-
-                  return {
-                    ...q,
-                    id: q.id || `share-old-${idx}`,
-                    type: q.type || (q[0] === 1 ? 'Trắc nghiệm' : 'Tự luận'),
-                    content: q.content || q[1] || '',
-                    options: options,
-                    answer: q.answer || q[3] || '',
-                    explanation: q.explanation || q[4] || '',
-                    image: q.image || q[5] || ''
-                  };
-                });
-              }
-
-              setPracticeData({
-                subject: data.s || data.subject || 'Chưa rõ',
-                grade: data.g || data.grade || '?',
-                questions: inflatedQuestions,
-                assignmentId: data.aid || null
-              });
-
-              setView('practice');
-              console.log("✅ Successfully loaded shared exam:", inflatedQuestions.length, "questions");
-            } else {
-              throw new Error("Dữ liệu không đúng cấu trúc đề thi.");
-            }
-          } catch (innerError: any) {
-            console.error("❌ Decode/Parse error:", innerError);
-
-            let errorMsg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n";
-            if (sharedExam && sharedExam.length > 2500) {
-              errorMsg += "Lý do: Link này quá dài, dữ liệu đã bị các ứng dụng (Zalo/Messenger) cắt bớt khi gửi.\n\n";
-            } else {
-              errorMsg += `Lý do: ${innerError.message || 'Link bị lỗi định dạng hoặc copy thiếu ký tự.'}\n\n`;
-            }
-
-            errorMsg += "💡 GIẢI PHÁP:\n1. Copy lại toàn bộ link một lần nữa.\n2. Yêu cầu giáo viên gửi 'MÃ ĐỀ THI' (chuỗi ký tự dài).\n3. Thử mở trên máy tính.";
-
-            if (confirm(errorMsg + "\n\n❓ Bạn có muốn thử nhập thủ công MÃ ĐỀ không?")) {
-              const manualInput = prompt("Dán Mã Đề (hoặc Link) vào đây:");
-              if (manualInput) {
-                // Tách lấy param exam nếu user dán cả link
-                let codeOnly = manualInput;
-                if (manualInput.includes('exam=')) {
-                  codeOnly = manualInput.split('exam=')[1].split('&')[0];
+                  const decoder = new TextDecoder('utf-8');
+                  const jsonString = decoder.decode(bytes);
+                  return JSON.parse(jsonString);
+                } catch (e) {
+                  try {
+                    const decoded = decodeURIComponent(escape(atob(base64String)));
+                    return JSON.parse(decoded);
+                  } catch (e2) {
+                    const rawDecoded = atob(base64String);
+                    return JSON.parse(rawDecoded);
+                  }
                 }
-                // Reload location với code mới (đơn giản nhất)
-                window.location.href = `${window.location.origin}${window.location.pathname}?exam=${codeOnly}`;
-              }
+              };
+              data = decodeData(cleanBase64);
             }
           }
-        } catch (e) {
-          console.error("Critical link check error:", e);
+
+          if (data && (data.q || data.questions)) {
+            let inflatedQuestions: ExamQuestion[] = [];
+
+            if (data.q && Array.isArray(data.q)) {
+              // FORMAT RÚT GỌN (Minified)
+              inflatedQuestions = data.q.map((item: any, idx: number) => {
+                const rawOptions = Array.isArray(item[2]) ? item[2] : [];
+                const options = rawOptions.map((opt: any) => {
+                  if (Array.isArray(opt)) {
+                    return { text: opt[0] || '', image: resolveVioEduImageRef(opt[1]) };
+                  }
+                  if (typeof opt === 'object' && opt !== null) {
+                    return { text: opt.text || opt.label || '', image: resolveVioEduImageRef(opt.image) };
+                  }
+                  return { text: String(opt), image: '' };
+                });
+
+                const isMcq = item[0] === 1 && options.length > 0;
+
+                return {
+                  id: `share-${Date.now()}-${idx}`,
+                  type: isMcq ? 'Trắc nghiệm' : 'Tự luận',
+                  content: item[1] || '',
+                  options: isMcq ? options : [],
+                  answer: String(item[3] ?? ''),
+                  explanation: item[4] || '',
+                  image: resolveVioEduImageRef(item[5]),
+                  level: 'Thông hiểu'
+                };
+              });
+            } else {
+              // FORMAT ĐẦY ĐỦ (Legacy)
+              const sourceQuestions = data.q || data.questions || [];
+              inflatedQuestions = sourceQuestions.map((q: any, idx: number) => {
+                const rawOptions = Array.isArray(q.options || q[2]) ? (q.options || q[2]) : [];
+                const options = rawOptions.map((opt: any) => {
+                  if (Array.isArray(opt)) return { text: opt[0] || '', image: resolveVioEduImageRef(opt[1]) };
+                  if (typeof opt === 'object' && opt !== null) return { text: opt.text || opt.label || '', image: resolveVioEduImageRef(opt.image) };
+                  return { text: String(opt), image: '' };
+                });
+
+                return {
+                  ...q,
+                  id: q.id || `share-old-${idx}`,
+                  type: q.type || (q[0] === 1 && options.length > 0 ? 'Trắc nghiệm' : 'Tự luận'),
+                  content: q.content || q.question || q[1] || '',
+                  options: options,
+                  answer: String(q.answer ?? q[3] ?? ''),
+                  explanation: q.explanation || q[4] || '',
+                  image: resolveVioEduImageRef(q.image || q[5])
+                };
+              });
+            }
+
+            setPracticeData({
+              subject: data.s || data.subject || 'Toán',
+              grade: data.g || data.grade || 'Lớp 1',
+              questions: inflatedQuestions,
+              assignmentId: data.aid || null
+            });
+
+            setView('practice');
+            window.history.replaceState({}, document.title, window.location.pathname);
+            console.log("✅ Successfully loaded shared exam:", inflatedQuestions.length, "questions");
+          } else {
+            throw new Error("Dữ liệu không đúng cấu trúc đề thi.");
+          }
+        } catch (innerError: any) {
+          console.error("❌ Decode/Parse error:", innerError);
+
+          let errorMsg = "⚠️ KHÔNG THỂ MỞ ĐỀ THI\n\n";
+          if (sharedExam && sharedExam.length > 4000) {
+            errorMsg += "Lý do: Link này quá dài, dữ liệu đã bị các ứng dụng (Zalo/Messenger) cắt bớt khi gửi.\n\n";
+          } else {
+            errorMsg += `Lý do: ${innerError.message || 'Link bị lỗi định dạng hoặc copy thiếu ký tự.'}\n\n`;
+          }
+
+          errorMsg += "💡 GIẢI PHÁP:\n1. Copy lại toàn bộ link một lần nữa.\n2. Yêu cầu giáo viên gửi 'MÃ ĐỀ THI'.\n3. Thử mở trên trình duyệt Chrome/Safari.";
+
+          if (confirm(errorMsg + "\n\n❓ Bạn có muốn thử nhập thủ công MÃ ĐỀ không?")) {
+            const manualInput = prompt("Dán Mã Đề (hoặc Link) vào đây:");
+            if (manualInput) {
+              let codeOnly = manualInput.trim();
+              if (codeOnly.includes('exam=')) {
+                codeOnly = codeOnly.split('exam=')[1].split('&')[0];
+              }
+              window.location.href = `${window.location.origin}${window.location.pathname}#exam=${codeOnly}`;
+              window.location.reload();
+            }
+          }
         } finally {
           setIsCheckingLink(false);
         }

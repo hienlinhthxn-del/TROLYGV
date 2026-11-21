@@ -988,20 +988,22 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
       let stripImages = false;
       let currentData = prepareData(false);
       let finalCode = await compressData(currentData) || await encodeData(currentData);
-      let url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+      const buildExamUrl = (code: string) =>
+        code.length <= 3800
+          ? `${window.location.origin}${window.location.pathname}?exam=${code}`
+          : `${window.location.origin}${window.location.pathname}#exam=${code}`;
+      let url = buildExamUrl(finalCode);
 
-      // Neu link van qua dai (>8000), thi bo anh
-      if (viewMode === 'link' && url.length > 8000) {
+      if (viewMode === 'link' && url.length > 60000) {
         console.warn(`Link qua dai (${url.length} ky tu), dang thu bo anh...`);
         stripImages = true;
         currentData = prepareData(true);
         finalCode = await compressData(currentData) || await encodeData(currentData);
-        url = `${window.location.origin}${window.location.pathname}?exam=${finalCode}`;
+        url = buildExamUrl(finalCode);
       }
 
-      // Neu van con qua dai, bao loi
-      if (viewMode === 'link' && url.length > 8000) {
-        alert("De thi qua dai (ke ca khi da bo anh). Vui long su dung tinh nang 'Copy Ma De'.");
+      if (viewMode === 'link' && url.length > 60000) {
+        alert("Đề thi quá dài. Vui lòng sử dụng tính năng 'Copy Mã Đề'.");
         return;
       }
 
