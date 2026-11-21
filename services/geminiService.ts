@@ -1899,9 +1899,9 @@ CHỈ TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG CẤU TRÚC SAU (KHÔNG MARKDOWN):
         }
 
         if (lastHeaderRow >= 0) {
-          // Quy đổi từ probeH (tương ứng 22% chiều cao ảnh) sang hệ 0..1000
-          const normY = Math.round(((lastHeaderRow + 4) / probeH) * 220);
-          return Math.min(165, Math.max(20, normY));
+          // Quy đổi từ probeH (tương ứng 22% chiều cao ảnh) sang hệ 0..1000, cộng thêm đệm để loại bỏ hẳn dòng "vi phạm quá 3 lần"
+          const normY = Math.round(((lastHeaderRow + 8) / probeH) * 220);
+          return Math.min(185, Math.max(20, normY));
         }
         return 20;
       } catch {
@@ -2171,7 +2171,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
   ]
 }`;
 
-    const BATCH_PAGES = 5;
+    const BATCH_PAGES = 3;
     const digitizedQuestions: any[] = [];
     const defaultVioEduOptionBboxes = [
       [482, 70, 620, 482],  // A: Trái trên
@@ -2193,7 +2193,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
     for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
       if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
       if (startIdx > 0) {
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 1200));
       }
       const endPage = Math.min(startIdx + BATCH_PAGES, finalFileParts.length);
       onProgress?.(`Đang dùng AI đọc câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length} câu)...`);
@@ -2221,7 +2221,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       try {
         const batchResult = await withTimeout(
           this.generateExamQuestionsStructured(promptForBatch, batchParts),
-          38000,
+          55000,
           'AI batch timeout'
         );
         rawBatchList = extractListFromRes(batchResult);
@@ -2231,12 +2231,12 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       } catch (firstErr: any) {
         if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
 
-        // Thử lại từng trang một (1 trang/lần với timeout 22s) để không bao giờ bị treo
+        // Thử lại từng trang một (1 trang/lần với timeout 30s) để không bỏ sót trang nào
         rawBatchList = [];
         for (let pIdx = 0; pIdx < batchParts.length; pIdx++) {
           if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
           onProgress?.(`Đang xử lý chi tiết trang ${startIdx + pIdx + 1} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length + rawBatchList.length} câu)...`);
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 900));
           const singleText = pageTextList[startIdx + pIdx] || '';
           const singlePrompt = singleText
             ? `${digitizePrompt}\n\nVĂN BẢN GỐC TRANG 0:\n${singleText}`
@@ -2244,7 +2244,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           try {
             const singleRes = await withTimeout(
               this.generateExamQuestionsStructured(singlePrompt, [batchParts[pIdx]]),
-              22000,
+              30000,
               'Single page timeout'
             );
             const singleList = extractListFromRes(singleRes);

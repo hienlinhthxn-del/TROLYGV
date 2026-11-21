@@ -228,10 +228,37 @@ const QuizPlayer: React.FC<{
   const [quizVoice, setQuizVoice] = useState<'Puck' | 'Kore' | 'Girl' | 'Boy'>('Puck');
   const [showOriginalPage, setShowOriginalPage] = useState(false);
   const [isQuickEditing, setIsQuickEditing] = useState(false);
+  const [isRedigitizingSingle, setIsRedigitizingSingle] = useState(false);
+
+  const handleRedigitizeCurrentPage = async () => {
+    const q = data[currentIndex];
+    if (!q?.originalPageImage || !onUpdateQuestion || isRedigitizingSingle) return;
+    setIsRedigitizingSingle(true);
+    try {
+      const dataUrl = String(q.originalPageImage);
+      const mimeMatch = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+      if (!mimeMatch) return;
+      const singlePart: FilePart = {
+        inlineData: { mimeType: mimeMatch[1] || 'image/jpeg', data: mimeMatch[2] }
+      };
+      const reExtracted = await geminiService.digitizeExamFromFiles([singlePart]);
+      if (reExtracted && reExtracted.length > 0) {
+        onUpdateQuestion(currentIndex, {
+          ...reExtracted[0],
+          originalPageImage: q.originalPageImage
+        });
+      }
+    } catch (e: any) {
+      alert(`Không thể đọc lại trang này: ${e?.message || 'Vui lòng thử lại sau vài giây.'}`);
+    } finally {
+      setIsRedigitizingSingle(false);
+    }
+  };
 
   const cleanDisplayMathText = (raw: string): string => {
     if (!raw) return '';
     return raw
+      .normalize('NFC')
       .replace(/\\\(\s*\\(?:square|Box|blacksquare|framebox\{[^}]*\})\s*\\\)/gi, '⬜')
       .replace(/\$\s*\\(?:square|Box|blacksquare)\s*\$/gi, '⬜')
       .replace(/\\(?:square|Box|blacksquare)\b/gi, '⬜')
@@ -922,17 +949,31 @@ const QuizPlayer: React.FC<{
                 </div>
               ) : (
                 <div className="flex items-start justify-between gap-2 mb-4">
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed font-serif flex-1">{displayQuestion}</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 leading-relaxed font-sans flex-1">{displayQuestion}</h3>
                   {onUpdateQuestion && (
-                    <button
-                      type="button"
-                      onClick={() => setIsQuickEditing(true)}
-                      className="shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 text-[11px] font-bold transition-all flex items-center gap-1"
-                      title="Sửa nhanh nội dung câu hỏi & đáp án này"
-                    >
-                      <i className="fas fa-pen text-[10px]"></i>
-                      <span>Sửa câu này</span>
-                    </button>
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      {currentQuestion.originalPageImage && (
+                        <button
+                          type="button"
+                          disabled={isRedigitizingSingle}
+                          onClick={handleRedigitizeCurrentPage}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[11px] font-bold transition-all flex items-center gap-1 disabled:opacity-50"
+                          title="Yêu cầu AI đọc lại riêng trang này"
+                        >
+                          <i className={`fas ${isRedigitizingSingle ? 'fa-spinner fa-spin' : 'fa-rotate-right'} text-[10px]`}></i>
+                          <span>{isRedigitizingSingle ? 'Đang đọc...' : 'AI đọc lại'}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsQuickEditing(true)}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 text-[11px] font-bold transition-all flex items-center gap-1"
+                        title="Sửa nhanh nội dung câu hỏi & đáp án này"
+                      >
+                        <i className="fas fa-pen text-[10px]"></i>
+                        <span>Sửa câu này</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
