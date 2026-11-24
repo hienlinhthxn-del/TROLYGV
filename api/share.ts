@@ -2,9 +2,19 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SAFE_KEY_RE = /^[a-zA-Z0-9_-]{3,48}$/;
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function uploadToBytebin(payload: string): Promise<string | null> {
   try {
-    const res = await fetch('https://bytebin.lucko.me/post', {
+    const res = await fetchWithTimeout('https://bytebin.lucko.me/post', {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
@@ -26,7 +36,7 @@ async function uploadToBytebin(payload: string): Promise<string | null> {
 
 async function uploadToPasteRs(payload: string): Promise<string | null> {
   try {
-    const res = await fetch('https://paste.rs/', {
+    const res = await fetchWithTimeout('https://paste.rs/', {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
@@ -52,7 +62,7 @@ async function uploadToDpaste(payload: string): Promise<string | null> {
     const body = new URLSearchParams();
     body.set('content', payload);
     body.set('expiry_days', '365');
-    const res = await fetch('https://dpaste.com/api/v2/', {
+    const res = await fetchWithTimeout('https://dpaste.com/api/v2/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -121,9 +131,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const id =
-        (await uploadToBytebin(rawPayload)) ||
         (await uploadToPasteRs(rawPayload)) ||
-        (await uploadToDpaste(rawPayload));
+        (await uploadToDpaste(rawPayload)) ||
+        (await uploadToBytebin(rawPayload));
 
       if (!id) {
         return res.status(502).json({ error: 'Không thể lưu trữ link rút gọn lên máy chủ đám mây.' });

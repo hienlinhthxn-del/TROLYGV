@@ -1217,6 +1217,13 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
   const [quizCount, setQuizCount] = useState(5);
   const [isProcessing, setIsProcessing] = useState(false);
   const [digitizeProgress, setDigitizeProgress] = useState<string>('');
+  const [shareModal, setShareModal] = useState<{ open: boolean; loading: boolean; url: string; copied: boolean; error: string }>({
+    open: false,
+    loading: false,
+    url: '',
+    copied: false,
+    error: ''
+  });
   const [isPlaying, setIsPlaying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -1878,8 +1885,36 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
     }
   };
 
+  const copyTextSafely = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // Fallback sang execCommand nếu trình duyệt hết hạn user gesture sau khi await fetch
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
   const handleShareQuiz = async () => {
     if (!result || !Array.isArray(result)) return;
+
+    setShareModal({ open: true, loading: true, url: '', copied: false, error: '' });
 
     const encodeVioEduImageRef = (imgStr: string): string => {
       if (!imgStr || !imgStr.startsWith('<svg')) return imgStr;
@@ -1945,7 +1980,7 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
         return trimmed;
       }
 
-      return await compressDataImage(trimmed, isOption ? 300 : 560, isOption ? 0.7 : 0.74);
+      return await compressDataImage(trimmed, isOption ? 240 : 440, isOption ? 0.62 : 0.65);
     };
 
     try {
@@ -2032,11 +2067,17 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
             : `${window.location.origin}${window.location.pathname}#exam=${finalCode}`;
       }
 
-      await navigator.clipboard.writeText(shareUrl);
-      alert(`✅ Đã tạo & sao chép Link Quiz ĐẦY ĐỦ 100% HÌNH ẢNH!\n\n${shareUrl.length < 120 ? `Link rút gọn: ${shareUrl}\n\n` : ''}Gửi ngay qua Zalo / Messenger cho học sinh làm bài nhé!`);
-    } catch (e) {
+      const copied = await copyTextSafely(shareUrl);
+      setShareModal({ open: true, loading: false, url: shareUrl, copied, error: '' });
+    } catch (e: any) {
       console.error("Share error", e);
-      alert("Lỗi khi tạo link chia sẻ.");
+      setShareModal({
+        open: true,
+        loading: false,
+        url: '',
+        copied: false,
+        error: e?.message || 'Không thể tạo link chia sẻ. Thầy/Cô vui lòng thử lại.'
+      });
     }
   };
 
@@ -4972,6 +5013,98 @@ Vui lòng vào Cài đặt (biểu tượng chìa khóa) để kiểm tra hoặc
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Chia sẻ Link Quiz rút gọn đầy đủ 100% hình ảnh */}
+      {shareModal.open && (
+        <div
+          className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => !shareModal.loading && setShareModal(prev => ({ ...prev, open: false }))}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <i className="fas fa-share-nodes text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Chia sẻ bài Quiz</h3>
+                  <p className="text-[11px] text-slate-400 font-semibold">Giữ nguyên 100% hình ảnh câu hỏi & đáp án</p>
+                </div>
+              </div>
+              {!shareModal.loading && (
+                <button
+                  type="button"
+                  onClick={() => setShareModal(prev => ({ ...prev, open: false }))}
+                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              )}
+            </div>
+
+            {shareModal.loading ? (
+              <div className="py-8 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-xs font-bold text-slate-600">Đang nén hình ảnh & tạo Link rút gọn...</p>
+                <p className="text-[10px] text-slate-400">Vui lòng đợi trong giây lát (2–5 giây)</p>
+              </div>
+            ) : shareModal.error ? (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-semibold">
+                <i className="fas fa-triangle-exclamation mr-1.5"></i>
+                {shareModal.error}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 flex items-center gap-2">
+                  <i className="fas fa-check-circle text-base"></i>
+                  <span>
+                    {shareModal.copied
+                      ? 'Đã tự động sao chép Link đầy đủ hình ảnh!'
+                      : 'Đã tạo Link đầy đủ hình ảnh! Bấm nút bên dưới để sao chép.'}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider ml-1">Đường dẫn gửi cho học sinh</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareModal.url}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="w-full mt-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await copyTextSafely(shareModal.url);
+                      setShareModal(prev => ({ ...prev, copied: ok }));
+                    }}
+                    className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  >
+                    <i className={`fas ${shareModal.copied ? 'fa-check' : 'fa-copy'}`}></i>
+                    <span>{shareModal.copied ? 'Đã sao chép!' : 'Sao chép Link'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(shareModal.url, '_blank')}
+                    className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all"
+                    title="Mở thử bài làm ở tab mới"
+                  >
+                    <i className="fas fa-up-right-from-square"></i>
+                    <span>Mở thử</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

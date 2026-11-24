@@ -1019,8 +1019,31 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ onExportToWorkspace, onStartP
             : `${window.location.origin}${window.location.pathname}#exam=${finalCode}`;
       }
 
-      await navigator.clipboard.writeText(url);
-      alert(`✅ Đã tạo & sao chép Link đề thi ĐẦY ĐỦ 100% HÌNH ẢNH!\n\n${url.length < 120 ? `Link rút gọn: ${url}\n\n` : ''}Gửi ngay cho học sinh để bắt đầu luyện tập.`);
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      } catch {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = url;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          copied = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch {
+          copied = false;
+        }
+      }
+
+      if (copied) {
+        alert(`✅ Đã tạo & sao chép Link đề thi ĐẦY ĐỦ 100% HÌNH ẢNH!\n\n${url.length < 120 ? `Link rút gọn: ${url}\n\n` : ''}Gửi ngay cho học sinh để bắt đầu luyện tập.`);
+      } else {
+        window.prompt('✅ Đã tạo Link đề thi ĐẦY ĐỦ HÌNH ẢNH! Thầy/Cô nhấn Ctrl+C để sao chép Link bên dưới:', url);
+      }
       return;
 
     } catch (e: any) {
