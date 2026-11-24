@@ -892,27 +892,72 @@ const QuizPlayer: React.FC<{
                   </div>
 
                   {questionOptions.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {questionOptions.map((opt: any, oIdx: number) => (
-                        <div key={oIdx} className="flex items-center gap-1.5">
-                          <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                            {String.fromCharCode(65 + oIdx)}
-                          </span>
-                          <input
-                            value={typeof opt === 'string' ? opt : (opt?.text || '')}
-                            onChange={(e) => {
-                              const nextOpts = [...questionOptions];
-                              if (typeof nextOpts[oIdx] === 'string') {
-                                nextOpts[oIdx] = { text: e.target.value, image: '' };
-                              } else {
-                                nextOpts[oIdx] = { ...nextOpts[oIdx], text: e.target.value };
-                              }
-                              onUpdateQuestion(currentIndex, { ...currentQuestion, options: nextOpts });
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {questionOptions.map((opt: any, oIdx: number) => {
+                        const optImgVal = typeof opt === 'string' || typeof opt === 'number' ? '' : (opt?.image || '');
+                        return (
+                          <div key={oIdx} className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                {String.fromCharCode(65 + oIdx)}
+                              </span>
+                              <input
+                                value={typeof opt === 'string' ? opt : (opt?.text || '')}
+                                onChange={(e) => {
+                                  const nextOpts = [...questionOptions];
+                                  if (typeof nextOpts[oIdx] === 'string') {
+                                    nextOpts[oIdx] = { text: e.target.value, image: '' };
+                                  } else {
+                                    nextOpts[oIdx] = { ...nextOpts[oIdx], text: e.target.value };
+                                  }
+                                  onUpdateQuestion(currentIndex, { ...currentQuestion, options: nextOpts });
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                              {onCrop && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const cropSource =
+                                      currentQuestion.originalPageImage ||
+                                      (typeof optImgVal === 'string' && optImgVal.startsWith('data:image') ? optImgVal : '') ||
+                                      (typeof currentQuestion.image === 'string' && currentQuestion.image.startsWith('data:image') ? currentQuestion.image : '');
+                                    onCrop(cropSource, 'option', currentIndex, oIdx);
+                                  }}
+                                  className="w-8 h-8 rounded-xl bg-white hover:bg-indigo-100 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 transition-all"
+                                  title={`Cắt ảnh cho đáp án ${String.fromCharCode(65 + oIdx)}`}
+                                >
+                                  <i className="fas fa-crop-simple text-xs"></i>
+                                </button>
+                              )}
+                            </div>
+                            {optImgVal && (
+                              <div className="ml-7 relative inline-block">
+                                {optImgVal.trim().startsWith('<svg') ? (
+                                  <div className="h-12 inline-block [&>svg]:h-12 [&>svg]:w-auto bg-white rounded-lg border border-indigo-100 p-1" dangerouslySetInnerHTML={{ __html: optImgVal }} />
+                                ) : (
+                                  <img src={optImgVal} alt={`Đáp án ${String.fromCharCode(65 + oIdx)}`} className="h-14 w-auto rounded-lg border border-indigo-100 bg-white object-contain" />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextOpts = [...questionOptions];
+                                    if (typeof nextOpts[oIdx] !== 'string') {
+                                      nextOpts[oIdx] = { ...nextOpts[oIdx], image: '' };
+                                      onUpdateQuestion(currentIndex, { ...currentQuestion, options: nextOpts });
+                                    }
+                                  }}
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] flex items-center justify-center shadow"
+                                  title="Xóa ảnh đáp án này"
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -1070,6 +1115,23 @@ const QuizPlayer: React.FC<{
                           <span>
                             {isCorrectAnswer ? <i className="fas fa-check-circle text-emerald-600 text-xl"></i> : <i className="fas fa-times-circle text-rose-600 text-xl"></i>}
                           </span>
+                        )}
+                        {onCrop && (currentQuestion.originalPageImage || optImg.startsWith('data:image') || displayImage.startsWith('data:image')) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const cropSrc =
+                                currentQuestion.originalPageImage ||
+                                (optImg.startsWith('data:image') ? optImg : '') ||
+                                (displayImage.startsWith('data:image') ? displayImage : '');
+                              onCrop(cropSrc, 'option', currentIndex, index);
+                            }}
+                            className="w-8 h-8 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 transition-all z-10"
+                            title={`Cắt lại ảnh cho đáp án ${letter} từ trang đề gốc`}
+                          >
+                            <i className="fas fa-crop-simple text-xs"></i>
+                          </button>
                         )}
                         <button
                           type="button"
