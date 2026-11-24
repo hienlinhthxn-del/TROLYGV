@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SAFE_KEY_RE = /^[a-zA-Z0-9_-]{3,48}$/;
+const CHUNK_SIZE = 140_000;
+const CHUNKED_PREFIX = '__CHUNKED__:';
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
@@ -111,6 +113,63 @@ async function fetchFromProvider(id: string): Promise<string | null> {
   return null;
 }
 
+async function uploadSingleChunk(chunk: string): Promise<string | null> {
+  return (
+    (await uploadToPasteRs(chunk)) ||
+    (await uploadToDpaste(chunk)) ||
+    (await uploadToBytebin(chunk))
+  );
+}
+
+async function uploadPayloadWithChunking(rawPayload: string): Promise<string | null> {
+  if (rawPayload.length <= CHUNK_SIZE) {
+    return await uploadSingleChunk(rawPayload);
+  }
+
+  const chunks: string[] = [];
+  for (let i = 0; i < rawPayload.length; i += CHUNK_SIZE) {
+    chunks.push(rawPayload.slice(i, i + CHUNK_SIZE));
+  }
+
+  const chunkIds: string[] = new Array(chunks.length);
+  const CONCURRENCY = 5;
+  for (let start = 0; start < chunks.length; start += CONCURRENCY) {
+    const slice = chunks.slice(start, start + CONCURRENCY);
+    const results = await Promise.all(slice.map((c) => uploadSingleChunk(c)));
+    for (let j = 0; j < results.length; j++) {
+      if (!results[j]) return null;
+      chunkIds[start + j] = results[j]!;
+    }
+  }
+
+  const manifest = `${CHUNKED_PREFIX}${JSON.stringify(chunkIds)}`;
+  return await uploadSingleChunk(manifest);
+}
+
+async function fetchPayloadWithChunking(id: string): Promise<string | null> {
+  const first = await fetchFromProvider(id);
+  if (!first) return null;
+
+  const trimmed = first.trim();
+  if (!trimmed.startsWith(CHUNKED_PREFIX)) {
+    return trimmed;
+  }
+
+  try {
+    const chunkIds: unknown = JSON.parse(trimmed.slice(CHUNKED_PREFIX.length));
+    if (!Array.isArray(chunkIds) || chunkIds.length === 0 || chunkIds.length > 40) {
+      return null;
+    }
+    const parts = await Promise.all(
+      chunkIds.map((cid) => (typeof cid === 'string' ? fetchFromProvider(cid) : Promise.resolve(null)))
+    );
+    if (parts.some((p) => p === null)) return null;
+    return parts.map((p) => (p || '').trim()).join('');
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -130,10 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(413).json({ error: 'Dung lượng bài Quiz vượt quá giới hạn 4MB.' });
       }
 
-      const id =
-        (await uploadToPasteRs(rawPayload)) ||
-        (await uploadToDpaste(rawPayload)) ||
-        (await uploadToBytebin(rawPayload));
+      const id = await uploadPayloadWithChunking(rawPayload);
 
       if (!id) {
         return res.status(502).json({ error: 'Không thể lưu trữ link rút gọn lên máy chủ đám mây.' });
@@ -153,7 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Mã link chia sẻ không hợp lệ.' });
       }
 
-      const payload = await fetchFromProvider(id);
+      const payload = await fetchPayloadWithChunking(id);
       if (!payload) {
         return res.status(404).json({ error: 'Không tìm thấy đề thi hoặc link chia sẻ đã hết hạn.' });
       }
