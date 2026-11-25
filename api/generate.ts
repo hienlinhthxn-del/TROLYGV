@@ -1,12 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
+export const config = {
+  maxDuration: 60,
+};
+
 const MODEL_CANDIDATES = [
   'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-2.5-pro',
-  'gemini-1.5-flash',
 ];
 
 function getServerApiKeys(): string[] {
@@ -42,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const { prompt, files, model: requestedModel } = req.body || {};
+  const { prompt, files, model: requestedModel, isJson } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ error: 'Thiếu nội dung prompt.' });
   }
@@ -65,12 +69,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? [requestedModel, ...MODEL_CANDIDATES]
     : [...MODEL_CANDIDATES];
 
+  const withPerModelTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Model timeout after ${ms}ms`)), ms);
+      promise.then(
+        (v) => { clearTimeout(timer); resolve(v); },
+        (e) => { clearTimeout(timer); reject(e); }
+      );
+    });
+
   let lastError: any = null;
+  const startTime = Date.now();
 
   for (const apiKey of keys) {
     const genAI = new GoogleGenerativeAI(apiKey);
     for (const modelName of modelsToTry) {
+      // Còn ít hơn 8s trước khi Vercel cắt 60s thì dừng sớm để trả lỗi rõ ràng
+      const remainingMs = 56000 - (Date.now() - startTime);
+      if (remainingMs < 8000) break;
+
       try {
+        const generationConfig: Record<string, any> = {
+          maxOutputTokens: 16384,
+        };
+        if (isJson && /^gemini-(2\.5|2\.0)-(flash|pro)/.test(modelName)) {
+          generationConfig.responseMimeType = 'application/json';
+        }
+
         const generativeModel = genAI.getGenerativeModel(
           {
             model: modelName,
@@ -80,11 +105,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
               { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
             ],
+            generationConfig,
           },
           { apiVersion: 'v1beta' }
         );
 
-        const result = await generativeModel.generateContent(parts);
+        const attemptTimeout = Math.min(28000, remainingMs - 1000);
+        const result = await withPerModelTimeout(generativeModel.generateContent(parts), attemptTimeout);
         const text = result.response.text();
         return res.status(200).json({ text, model: modelName });
       } catch (err: any) {

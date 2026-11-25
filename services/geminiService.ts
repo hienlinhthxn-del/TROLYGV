@@ -25,7 +25,6 @@ class GeminiService {
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
     'gemini-2.5-pro',
-    'gemini-1.5-flash',
   ];
 
   private allApiKeys: string[] = [];
@@ -584,7 +583,7 @@ CẤU TRÚC JSON BẮT BUỘC:
           ],
           generationConfig: {
             responseMimeType: "application/json",
-            maxOutputTokens: 8192,
+            maxOutputTokens: 16384,
           }
         }, { apiVersion: 'v1beta' });
 
@@ -863,8 +862,8 @@ CHỈ XUẤT JSON THUẦN TÚY.`;
         data: fp.inlineData.data,
         mimeType: fp.inlineData.mimeType
       }));
-      // Dùng model ổn định nhất của server
-      const result = await generateWithAI({ prompt, files, provider: 'gemini', model: 'gemini-2.5-flash' });
+      // Dùng model ổn định nhất của server, bật JSON mode khi cần cấu trúc Quiz/Đề thi
+      const result = await generateWithAI({ prompt, files, provider: 'gemini', model: 'gemini-2.5-flash', isJson });
       return result.text || '';
     } catch (error: any) {
       console.error("❌ [Fallback] Server also failed:", error);
@@ -2171,7 +2170,8 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
   ]
 }`;
 
-    const BATCH_PAGES = 3;
+    // Giảm lô xuống tối đa 2 trang (hoặc 1 trang nếu tài liệu ít trang) để tránh AI cắt cụt JSON / quá thời gian xử lý
+    const BATCH_PAGES = finalFileParts.length <= 3 ? 1 : 2;
     const digitizedQuestions: any[] = [];
     const defaultVioEduOptionBboxes = [
       [482, 70, 620, 482],  // A: Trái trên
@@ -2190,13 +2190,116 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
       });
     };
 
+    const isPlaceholderOptionText = (text: string): boolean => {
+      const t = text.trim();
+      return !t || /^(?:phương án|đáp án|lựa chọn|option)\s*[A-D]$/i.test(t) || /^[A-D][\.\:\)]?$/i.test(t);
+    };
+
+    const isWidescreenImage = (base64Image: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (!base64Image) { resolve(false); return; }
+        const img = new Image();
+        img.onload = () => resolve(img.width > img.height * 1.25);
+        img.onerror = () => resolve(false);
+        img.src = base64Image;
+      });
+    };
+
+    const cleanLatexSymbols = (raw: string) =>
+      raw
+        .replace(/\\\(\s*\\(?:square|Box|blacksquare|framebox\{[^}]*\})\s*\\\)/gi, '⬜')
+        .replace(/\$\s*\\(?:square|Box|blacksquare)\s*\$/gi, '⬜')
+        .replace(/\\(?:square|Box|blacksquare)\b/gi, '⬜')
+        .replace(/\\\(\s*\\(?:bigcirc|circ|odot)\s*\\\)/gi, '⚪')
+        .replace(/\$\s*\\(?:bigcirc|circ|odot)\s*\$/gi, '⚪')
+        .replace(/\\(?:bigcirc|circ)\b/gi, '⚪')
+        .replace(/\\times\b/gi, '×')
+        .replace(/\\div\b/gi, ':')
+        .replace(/\\leq?\b/gi, '≤')
+        .replace(/\\geq?\b/gi, '≥')
+        .replace(/\\neq?\b/gi, '≠')
+        .replace(/\\(?:dots|ldots|cdots)\b/gi, '...')
+        .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+        .replace(/\$([^$]{1,40})\$/g, '$1')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    const extractListFromRes = (res: any): any[] => {
+      if (!res) return [];
+      if (Array.isArray(res.questions)) return res.questions;
+      if (Array.isArray(res)) return res;
+      return [];
+    };
+
+    const isRawQuestionIncomplete = (q: any): boolean => {
+      if (!q || typeof q !== 'object') return true;
+      const qText = String(q.question || q.content || q.text || '').trim();
+      const rawType = String(q.type || '').toLowerCase();
+      const rawOpts = Array.isArray(q.options) ? q.options : [];
+      const isEssay = rawType.includes('tự luận') || rawType.includes('điền');
+      if (!qText && !q.has_image && !Array.isArray(q.bbox)) return true;
+      if (!isEssay && rawOpts.length > 0) {
+        const realOpts = rawOpts.filter((opt: any) => {
+          const t = typeof opt === 'string' || typeof opt === 'number'
+            ? String(opt).trim()
+            : String(opt?.text ?? opt?.label ?? opt?.content ?? '').trim();
+          const hasImg = Boolean(
+            opt?.has_image ||
+            (Array.isArray(opt?.bbox) && opt.bbox.length === 4) ||
+            (typeof opt?.image === 'string' && opt.image.trim().length > 10)
+          );
+          return !isPlaceholderOptionText(t) || hasImg;
+        });
+        if (realOpts.length < 2) return true;
+      }
+      return false;
+    };
+
+    const digitizeSinglePageWithRetry = async (
+      globalPageIdx: number,
+      localPageIdx: number,
+      part: FilePart
+    ): Promise<any[]> => {
+      const singleText = pageTextList[globalPageIdx] || '';
+      const singlePrompt = `${digitizePrompt}\n\nLƯU Ý QUAN TRỌNG: Đây là 1 trang duy nhất (page_index = 0). BẮT BUỘC đọc đầy đủ nội dung câu hỏi VÀ tất cả các phương án đáp án (nếu là trắc nghiệm, không được để trống hoặc ghi chung chung "Phương án A/B/C/D").${
+        singleText ? `\n\nVĂN BẢN GỐC TRANG 0:\n${singleText}` : ''
+      }`;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+        if (attempt > 0) {
+          onProgress?.(`Đang đọc lại lần ${attempt + 1} cho trang ${globalPageIdx + 1} / ${finalFileParts.length}...`);
+          await new Promise(r => setTimeout(r, 1800 * attempt));
+        }
+        try {
+          const singleRes = await withTimeout(
+            this.generateExamQuestionsStructured(singlePrompt, [part]),
+            45000,
+            'Single page timeout'
+          );
+          const singleList = extractListFromRes(singleRes);
+          const validSingleList = singleList.filter(item => !isRawQuestionIncomplete(item));
+          if (validSingleList.length > 0) {
+            return validSingleList.map(item => ({ ...item, page_index: localPageIdx }));
+          }
+          if (singleList.length > 0 && attempt === 1) {
+            return singleList.map(item => ({ ...item, page_index: localPageIdx }));
+          }
+        } catch (singleErr) {
+          console.warn(`[digitizeExamFromFiles] Retry single page ${globalPageIdx + 1} (attempt ${attempt + 1}) failed:`, singleErr);
+        }
+      }
+      return [];
+    };
+
     for (let startIdx = 0; startIdx < finalFileParts.length; startIdx += BATCH_PAGES) {
       if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
       if (startIdx > 0) {
-        await new Promise(r => setTimeout(r, 1200));
+        await new Promise(r => setTimeout(r, 900));
       }
       const endPage = Math.min(startIdx + BATCH_PAGES, finalFileParts.length);
-      onProgress?.(`Đang dùng AI đọc câu hỏi trang ${startIdx + 1} - ${endPage} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length} câu)...`);
+      const batchRangeLabel = startIdx + 1 === endPage ? `trang ${startIdx + 1}` : `trang ${startIdx + 1} - ${endPage}`;
+      onProgress?.(`Đang dùng AI đọc câu hỏi ${batchRangeLabel} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length} câu)...`);
 
       const batchParts = finalFileParts.slice(startIdx, endPage);
       const batchTexts = pageTextList
@@ -2211,52 +2314,70 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 
       let rawBatchList: any[] = [];
 
-      const extractListFromRes = (res: any): any[] => {
-        if (!res) return [];
-        if (Array.isArray(res.questions)) return res.questions;
-        if (Array.isArray(res)) return res;
-        return [];
-      };
-
-      try {
-        const batchResult = await withTimeout(
-          this.generateExamQuestionsStructured(promptForBatch, batchParts),
-          55000,
-          'AI batch timeout'
-        );
-        rawBatchList = extractListFromRes(batchResult);
-        if (rawBatchList.length === 0) {
-          throw new Error(batchResult?.error || 'Batch empty');
-        }
-      } catch (firstErr: any) {
-        if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
-
-        // Thử lại từng trang một (1 trang/lần với timeout 30s) để không bỏ sót trang nào
-        rawBatchList = [];
-        for (let pIdx = 0; pIdx < batchParts.length; pIdx++) {
+      if (batchParts.length === 1) {
+        rawBatchList = await digitizeSinglePageWithRetry(startIdx, 0, batchParts[0]);
+      } else {
+        try {
+          const batchResult = await withTimeout(
+            this.generateExamQuestionsStructured(promptForBatch, batchParts),
+            55000,
+            'AI batch timeout'
+          );
+          rawBatchList = extractListFromRes(batchResult);
+        } catch (firstErr: any) {
           if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
-          onProgress?.(`Đang xử lý chi tiết trang ${startIdx + pIdx + 1} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length + rawBatchList.length} câu)...`);
-          await new Promise(r => setTimeout(r, 900));
-          const singleText = pageTextList[startIdx + pIdx] || '';
-          const singlePrompt = singleText
-            ? `${digitizePrompt}\n\nVĂN BẢN GỐC TRANG 0:\n${singleText}`
-            : digitizePrompt;
-          try {
-            const singleRes = await withTimeout(
-              this.generateExamQuestionsStructured(singlePrompt, [batchParts[pIdx]]),
-              30000,
-              'Single page timeout'
-            );
-            const singleList = extractListFromRes(singleRes);
-            if (singleList.length > 0) {
-              for (const item of singleList) {
-                rawBatchList.push({ ...item, page_index: pIdx });
-              }
-            }
-          } catch (singleErr) {
-            console.warn(`[digitizeExamFromFiles] Retry single page ${startIdx + pIdx + 1} failed:`, singleErr);
+          console.warn(`[digitizeExamFromFiles] Batch ${batchRangeLabel} failed, switching to per-page:`, firstErr);
+          rawBatchList = [];
+        }
+
+        // Chuẩn hóa trường hợp AI đánh số page_index từ 1..N thay vì 0..N-1
+        if (rawBatchList.length > 0) {
+          const explicitIndices = rawBatchList
+            .map(item => Number(item?.page_index ?? item?.page))
+            .filter(n => Number.isFinite(n));
+          const looksOneBased =
+            explicitIndices.length > 0 &&
+            explicitIndices.every(n => n >= 1 && n <= batchParts.length) &&
+            !explicitIndices.includes(0);
+          if (looksOneBased) {
+            rawBatchList = rawBatchList.map(item => ({
+              ...item,
+              page_index: Number(item?.page_index ?? item?.page) - 1,
+            }));
           }
         }
+
+        // Kiểm tra TỪNG TRANG trong lô: nếu trang nào bị AI bỏ sót hoặc trả về thiếu đáp án/chưa đầy đủ -> tự động đọc lại riêng trang đó!
+        const goodPages = new Set<number>();
+        const filteredGoodItems: any[] = [];
+
+        rawBatchList.forEach((item, idx) => {
+          const rawLocal = Number(item?.page_index ?? item?.page ?? (idx < batchParts.length ? idx : 0));
+          const localIdx = Number.isFinite(rawLocal)
+            ? Math.min(Math.max(0, rawLocal), batchParts.length - 1)
+            : 0;
+          if (!isRawQuestionIncomplete(item)) {
+            goodPages.add(localIdx);
+            filteredGoodItems.push({ ...item, page_index: localIdx });
+          }
+        });
+
+        rawBatchList = filteredGoodItems;
+
+        for (let pIdx = 0; pIdx < batchParts.length; pIdx++) {
+          if (goodPages.has(pIdx)) continue;
+          if (shouldStop()) throw new Error('Yêu cầu đã bị dừng.');
+          const globalIdx = startIdx + pIdx;
+          onProgress?.(`Đang đọc bù chi tiết trang ${globalIdx + 1} / ${finalFileParts.length} (Đã trích xuất ${digitizedQuestions.length + rawBatchList.length} câu)...`);
+          await new Promise(r => setTimeout(r, 800));
+          const recovered = await digitizeSinglePageWithRetry(globalIdx, pIdx, batchParts[pIdx]);
+          if (recovered.length > 0) {
+            rawBatchList.push(...recovered);
+          }
+        }
+
+        // Sắp xếp lại theo đúng thứ tự trang trong lô
+        rawBatchList.sort((a, b) => Number(a.page_index ?? 0) - Number(b.page_index ?? 0));
       }
 
       // Đánh dấu những trang nào trong batch đã có câu hỏi do AI trả về
@@ -2274,25 +2395,7 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
 
         const globalPageIdx = startIdx + localPageIdx;
         const pageImage = pageImageUrls[globalPageIdx] || pageImageUrls[0] || '';
-
-        const cleanLatexSymbols = (raw: string) =>
-          raw
-            .replace(/\\\(\s*\\(?:square|Box|blacksquare|framebox\{[^}]*\})\s*\\\)/gi, '⬜')
-            .replace(/\$\s*\\(?:square|Box|blacksquare)\s*\$/gi, '⬜')
-            .replace(/\\(?:square|Box|blacksquare)\b/gi, '⬜')
-            .replace(/\\\(\s*\\(?:bigcirc|circ|odot)\s*\\\)/gi, '⚪')
-            .replace(/\$\s*\\(?:bigcirc|circ|odot)\s*\$/gi, '⚪')
-            .replace(/\\(?:bigcirc|circ)\b/gi, '⚪')
-            .replace(/\\times\b/gi, '×')
-            .replace(/\\div\b/gi, ':')
-            .replace(/\\leq?\b/gi, '≤')
-            .replace(/\\geq?\b/gi, '≥')
-            .replace(/\\neq?\b/gi, '≠')
-            .replace(/\\(?:dots|ldots|cdots)\b/gi, '...')
-            .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
-            .replace(/\$([^$]{1,40})\$/g, '$1')
-            .replace(/\s{2,}/g, ' ')
-            .trim();
+        const pageIsWidescreen = await isWidescreenImage(pageImage);
 
         const qTextRaw = String(q.question || q.content || q.text || '').trim();
         const cleanedQText = cleanLatexSymbols(
@@ -2320,7 +2423,12 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
         const processedOptions = await Promise.all(
           rawOpts.map(async (opt: any, oIdx: number) => {
             if (typeof opt === 'string' || typeof opt === 'number') {
-              return { text: String(opt).trim(), image: '' };
+              const s = String(opt).trim();
+              if (isPlaceholderOptionText(s) && pageIsWidescreen && pageImage && defaultVioEduOptionBboxes[oIdx]) {
+                const autoCropped = await cropImageFromBbox(pageImage, defaultVioEduOptionBboxes[oIdx], 'option', oIdx);
+                return { text: autoCropped ? '' : s, image: autoCropped };
+              }
+              return { text: s, image: '' };
             }
             const optText = String(opt?.text ?? opt?.label ?? opt?.content ?? '').trim();
             let optImg = typeof opt?.image === 'string' && (opt.image.startsWith('<svg') || opt.image.startsWith('data:image'))
@@ -2329,11 +2437,12 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
             if (!optImg && Array.isArray(opt?.bbox) && opt.bbox.length === 4 && pageImage) {
               optImg = await cropImageFromBbox(pageImage, opt.bbox, 'option', oIdx);
             }
-            if (!optImg && opt?.has_image && pageImage && defaultVioEduOptionBboxes[oIdx]) {
+            // Nếu AI đánh dấu có ảnh HOẶC trả về text rỗng/placeholder ("Phương án A") trên trang VioEdu ngang -> tự động cắt đúng ô đáp án từ đề gốc
+            if (!optImg && (opt?.has_image || (pageIsWidescreen && isPlaceholderOptionText(optText))) && pageImage && defaultVioEduOptionBboxes[oIdx]) {
               optImg = await cropImageFromBbox(pageImage, defaultVioEduOptionBboxes[oIdx], 'option', oIdx);
             }
             return {
-              text: optText || (optImg ? `Phương án ${String.fromCharCode(65 + oIdx)}` : ''),
+              text: isPlaceholderOptionText(optText) && optImg ? '' : (optText || (optImg ? '' : `Phương án ${String.fromCharCode(65 + oIdx)}`)),
               image: optImg
             };
           })
@@ -2365,11 +2474,12 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           options: isEssay ? [] : validOptions,
           answer: finalAnswer,
           explanation: String(q.explanation ?? '').trim(),
-          originalPageImage: pageImage
+          originalPageImage: pageImage,
+          isFallback: false
         });
       }
 
-      // Với những trang trong batch mà AI bị lỗi 429 không trả về được câu hỏi:
+      // Với những trang trong batch mà AI vẫn lỗi sau khi đã thử lại từng trang:
       for (let localPageIdx = 0; localPageIdx < batchParts.length; localPageIdx++) {
         if (pagesCoveredInBatch.has(localPageIdx)) continue;
         const globalPageIdx = startIdx + localPageIdx;
@@ -2383,24 +2493,41 @@ TRẢ VỀ JSON HỢP LỆ THEO CẤU TRÚC:
           continue;
         }
 
-        // Ưu tiên 2: Tạo thẻ câu hỏi kèm ảnh cắt trực tiếp từ đúng trang PDF của người dùng tải lên
+        // Ưu tiên 2: Tạo thẻ câu hỏi kèm ảnh cắt trực tiếp câu hỏi & 4 ô đáp án từ đúng trang PDF của người dùng tải lên
         if (pageImage) {
-          const fallbackCrop = (await cropImageFromBbox(pageImage, [120, 120, 540, 880])) || pageImage;
+          const pageIsWidescreen = await isWidescreenImage(pageImage);
+          const fallbackCrop = (await cropImageFromBbox(pageImage, pageIsWidescreen ? [35, 55, 430, 745] : [120, 120, 540, 880], 'question')) || pageImage;
+          let fallbackOptions: Array<{ text: string; image: string }> = [
+            { text: 'Phương án A', image: '' },
+            { text: 'Phương án B', image: '' },
+            { text: 'Phương án C', image: '' },
+            { text: 'Phương án D', image: '' }
+          ];
+          if (pageIsWidescreen) {
+            const autoCroppedOpts = await Promise.all(
+              defaultVioEduOptionBboxes.map(async (bbox, oIdx) => {
+                const cropped = await cropImageFromBbox(pageImage, bbox, 'option', oIdx);
+                return {
+                  text: cropped ? '' : `Phương án ${String.fromCharCode(65 + oIdx)}`,
+                  image: cropped
+                };
+              })
+            );
+            if (autoCroppedOpts.some(o => o.image)) {
+              fallbackOptions = autoCroppedOpts;
+            }
+          }
           digitizedQuestions.push({
             id: `digitized-page-${Date.now()}-${digitizedQuestions.length}`,
             type: 'Trắc nghiệm',
-            question: `Câu hỏi trang ${globalPageIdx + 1} (Bấm "Ảnh trang đề gốc" hoặc "Sửa đề & Cắt ảnh" để chỉnh sửa):`,
-            content: `Câu hỏi trang ${globalPageIdx + 1} (Bấm "Ảnh trang đề gốc" hoặc "Sửa đề & Cắt ảnh" để chỉnh sửa):`,
+            question: `Câu hỏi trang ${globalPageIdx + 1} (AI đang bận - bấm "AI đọc lại" để số hóa hoàn chỉnh):`,
+            content: `Câu hỏi trang ${globalPageIdx + 1} (AI đang bận - bấm "AI đọc lại" để số hóa hoàn chỉnh):`,
             image: fallbackCrop,
-            options: [
-              { text: 'Phương án A', image: '' },
-              { text: 'Phương án B', image: '' },
-              { text: 'Phương án C', image: '' },
-              { text: 'Phương án D', image: '' }
-            ],
+            options: fallbackOptions,
             answer: 'A',
             explanation: '',
-            originalPageImage: pageImage
+            originalPageImage: pageImage,
+            isFallback: true
           });
         }
       }

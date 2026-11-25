@@ -229,10 +229,33 @@ const QuizPlayer: React.FC<{
   const [showOriginalPage, setShowOriginalPage] = useState(false);
   const [isQuickEditing, setIsQuickEditing] = useState(false);
   const [isRedigitizingSingle, setIsRedigitizingSingle] = useState(false);
+  const [isRedigitizingAll, setIsRedigitizingAll] = useState(false);
+  const [redigitizeAllStatus, setRedigitizeAllStatus] = useState('');
+
+  const isQuestionIncompleteCard = (q: any): boolean => {
+    if (!q) return false;
+    if (q.isFallback) return true;
+    const qText = toSafeText(q.question || q.content);
+    if (/Câu hỏi trang \d+ \(|Bấm "Ảnh trang đề gốc"|AI đang bận - bấm "AI đọc lại"/i.test(qText)) return true;
+    const opts = Array.isArray(q.options) ? q.options : [];
+    if (opts.length >= 2) {
+      const allPlaceholder = opts.every((o: any) => {
+        const t = toSafeText(typeof o === 'string' ? o : (o?.text || o?.label || o?.content || '')).trim();
+        const img = toSafeText(typeof o === 'string' ? '' : (o?.image || '')).trim();
+        return !img && (/^(?:Phương án|Đáp án)\s*[A-D]$/i.test(t) || !t);
+      });
+      if (allPlaceholder) return true;
+    }
+    return false;
+  };
+
+  const incompleteIndices = data
+    .map((item, idx) => (item?.originalPageImage && isQuestionIncompleteCard(item) ? idx : -1))
+    .filter(idx => idx !== -1);
 
   const handleRedigitizeCurrentPage = async () => {
     const q = data[currentIndex];
-    if (!q?.originalPageImage || !onUpdateQuestion || isRedigitizingSingle) return;
+    if (!q?.originalPageImage || !onUpdateQuestion || isRedigitizingSingle || isRedigitizingAll) return;
     setIsRedigitizingSingle(true);
     try {
       const dataUrl = String(q.originalPageImage);
@@ -242,16 +265,59 @@ const QuizPlayer: React.FC<{
         inlineData: { mimeType: mimeMatch[1] || 'image/jpeg', data: mimeMatch[2] }
       };
       const reExtracted = await geminiService.digitizeExamFromFiles([singlePart]);
-      if (reExtracted && reExtracted.length > 0) {
+      if (reExtracted && reExtracted.length > 0 && !reExtracted[0].isFallback) {
         onUpdateQuestion(currentIndex, {
           ...reExtracted[0],
-          originalPageImage: q.originalPageImage
+          originalPageImage: q.originalPageImage,
+          isFallback: false
         });
+      } else {
+        alert('AI đang tạm bận hoặc hết hạn mức (429) nên chưa đọc được trang này. Thầy/Cô vui lòng chờ vài giây rồi bấm "AI đọc lại" hoặc kiểm tra API Key cá nhân (🔑).');
       }
     } catch (e: any) {
       alert(`Không thể đọc lại trang này: ${e?.message || 'Vui lòng thử lại sau vài giây.'}`);
     } finally {
       setIsRedigitizingSingle(false);
+    }
+  };
+
+  const handleRedigitizeAllIncomplete = async () => {
+    if (!onUpdateQuestion || isRedigitizingAll || incompleteIndices.length === 0) return;
+    setIsRedigitizingAll(true);
+    let recoveredCount = 0;
+    try {
+      for (let i = 0; i < incompleteIndices.length; i++) {
+        const idx = incompleteIndices[i];
+        const q = data[idx];
+        if (!q?.originalPageImage) continue;
+        setRedigitizeAllStatus(`Đang đọc lại câu ${idx + 1} (${i + 1}/${incompleteIndices.length})...`);
+        const dataUrl = String(q.originalPageImage);
+        const mimeMatch = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+        if (!mimeMatch) continue;
+        try {
+          if (i > 0) await new Promise(r => setTimeout(r, 1200));
+          const singlePart: FilePart = {
+            inlineData: { mimeType: mimeMatch[1] || 'image/jpeg', data: mimeMatch[2] }
+          };
+          const reExtracted = await geminiService.digitizeExamFromFiles([singlePart]);
+          if (reExtracted && reExtracted.length > 0 && !reExtracted[0].isFallback) {
+            onUpdateQuestion(idx, {
+              ...reExtracted[0],
+              originalPageImage: q.originalPageImage,
+              isFallback: false
+            });
+            recoveredCount++;
+          }
+        } catch (err) {
+          console.warn(`[RedigitizeAll] Câu ${idx + 1} lỗi:`, err);
+        }
+      }
+      if (recoveredCount === 0) {
+        alert('AI đang tạm quá tải (429). Thầy/Cô vui lòng đợi 30 giây rồi bấm thử lại hoặc nhập API Key cá nhân (🔑).');
+      }
+    } finally {
+      setIsRedigitizingAll(false);
+      setRedigitizeAllStatus('');
     }
   };
 
@@ -783,6 +849,29 @@ const QuizPlayer: React.FC<{
           </button>
         </div>
       </div>
+
+      {/* Cảnh báo & nút đọc bù nếu còn câu hỏi chưa số hóa đầy đủ */}
+      {onUpdateQuestion && incompleteIndices.length > 0 && (
+        <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-bold text-amber-800 flex items-center gap-2">
+            <i className="fas fa-triangle-exclamation text-amber-600"></i>
+            <span>
+              {isRedigitizingAll
+                ? redigitizeAllStatus
+                : `Có ${incompleteIndices.length} câu chưa đọc đầy đủ (${incompleteIndices.map(i => `Câu ${i + 1}`).join(', ')}).`}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={isRedigitizingAll || isRedigitizingSingle}
+            onClick={handleRedigitizeAllIncomplete}
+            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <i className={`fas ${isRedigitizingAll ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'}`}></i>
+            <span>{isRedigitizingAll ? 'Đang đọc bù...' : `AI đọc lại tất cả (${incompleteIndices.length} câu)`}</span>
+          </button>
+        </div>
+      )}
 
       {/* Khung câu hỏi chuẩn VioEdu */}
       <div className="flex-1 flex flex-col justify-center bg-white rounded-3xl border border-slate-100 p-4 sm:p-6 shadow-sm">
@@ -1666,14 +1755,21 @@ const UtilityKit: React.FC<UtilityKitProps> = ({ onSendToWorkspace, onSaveToLibr
         ]
       }`;
 
-        const quizContent = await geminiService.generateExamQuestionsStructured(prompt);
-        if (forceStopRef.current) throw new Error("Đã dừng.");
-
         let batchQuestions: any[] = [];
-        if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
-          batchQuestions = quizContent.questions;
-        } else if (Array.isArray(quizContent)) {
-          batchQuestions = quizContent;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (forceStopRef.current) throw new Error("Đã dừng.");
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1200));
+          const quizContent = await geminiService.generateExamQuestionsStructured(prompt);
+          if (forceStopRef.current) throw new Error("Đã dừng.");
+
+          if (quizContent && quizContent.questions && Array.isArray(quizContent.questions)) {
+            batchQuestions = quizContent.questions;
+          } else if (Array.isArray(quizContent)) {
+            batchQuestions = quizContent;
+          }
+          if (batchQuestions.length >= Math.max(1, countForBatch - 1)) {
+            break;
+          }
         }
         allRawQuestions.push(...batchQuestions);
       }

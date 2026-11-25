@@ -7,6 +7,7 @@ export type GenerateWithAIRequest = {
   model?: string;
   provider?: string;
   stream?: boolean;
+  isJson?: boolean;
 };
 
 export type GenerateWithAIResponse = {
