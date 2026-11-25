@@ -19,6 +19,32 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 8000
   }
 }
 
+async function uploadToPastesDev(payload: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      'https://api.pastes.dev/post',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'User-Agent': 'EduAssistAI/2.0',
+        },
+        body: payload,
+      },
+      15000
+    );
+    if (!res.ok) return null;
+    const json: any = await res.json();
+    if (json && typeof json.key === 'string' && SAFE_KEY_RE.test(json.key)) {
+      return `pd_${json.key}`;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[api/share] pastes.dev upload failed:', e);
+    return null;
+  }
+}
+
 async function uploadToBytebin(payload: string): Promise<string | null> {
   try {
     const res = await fetchWithTimeout('https://bytebin.lucko.me/post', {
@@ -93,6 +119,16 @@ async function uploadToDpaste(payload: string): Promise<string | null> {
 }
 
 async function fetchFromProvider(id: string): Promise<string | null> {
+  if (id.startsWith('pd_')) {
+    const key = id.slice(3);
+    if (!SAFE_KEY_RE.test(key)) return null;
+    const res = await fetchWithTimeout(
+      `https://api.pastes.dev/${key}`,
+      { headers: { 'User-Agent': 'EduAssistAI/2.0' } },
+      15000
+    );
+    return res.ok ? await res.text() : null;
+  }
   if (id.startsWith('bb_')) {
     const key = id.slice(3);
     if (!SAFE_KEY_RE.test(key)) return null;
@@ -135,24 +171,29 @@ async function uploadSingleChunk(chunk: string): Promise<string | null> {
 }
 
 async function uploadPayloadWithChunking(rawPayload: string): Promise<string | null> {
+  // Ưu tiên 1: api.pastes.dev hỗ trợ tới nhiều MB trong 1 request duy nhất, siêu nhanh và không bị giới hạn 64KB
+  const directPastesDev = await uploadToPastesDev(rawPayload);
+  if (directPastesDev) {
+    return directPastesDev;
+  }
+
+  // Ưu tiên 2: Nếu payload nhỏ, dùng trực tiếp các provider dự phòng
   if (rawPayload.length <= CHUNK_SIZE) {
     return await uploadSingleChunk(rawPayload);
   }
 
+  // Ưu tiên 3: Chia nhỏ 45KB và gửi tuần tự nhẹ (tránh bị paste.rs chặn rate-limit khi gửi song song)
   const chunks: string[] = [];
   for (let i = 0; i < rawPayload.length; i += CHUNK_SIZE) {
     chunks.push(rawPayload.slice(i, i + CHUNK_SIZE));
   }
 
   const chunkIds: string[] = new Array(chunks.length);
-  const CONCURRENCY = 5;
-  for (let start = 0; start < chunks.length; start += CONCURRENCY) {
-    const slice = chunks.slice(start, start + CONCURRENCY);
-    const results = await Promise.all(slice.map((c) => uploadSingleChunk(c)));
-    for (let j = 0; j < results.length; j++) {
-      if (!results[j]) return null;
-      chunkIds[start + j] = results[j]!;
-    }
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 250));
+    const cid = await uploadSingleChunk(chunks[i]);
+    if (!cid) return null;
+    chunkIds[i] = cid;
   }
 
   const manifest = `${CHUNKED_PREFIX}${JSON.stringify(chunkIds)}`;
