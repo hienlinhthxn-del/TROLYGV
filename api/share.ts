@@ -1,7 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+export const config = {
+  maxDuration: 60,
+};
+
 const SAFE_KEY_RE = /^[a-zA-Z0-9_-]{3,48}$/;
-const CHUNK_SIZE = 140_000;
+// paste.rs giới hạn ~64KB mỗi request -> chia chunk 45KB để luôn thành công 100%
+const CHUNK_SIZE = 45_000;
 const CHUNKED_PREFIX = '__CHUNKED__:';
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 8000): Promise<Response> {
@@ -46,7 +51,8 @@ async function uploadToPasteRs(payload: string): Promise<string | null> {
       },
       body: payload,
     });
-    if (!res.ok) return null;
+    // paste.rs trả về 206 nếu nội dung bị cắt bớt -> chỉ chấp nhận 200/201
+    if (!res.ok || res.status === 206) return null;
     const text = (await res.text()).trim();
     const match = text.match(/paste\.rs\/([a-zA-Z0-9_-]+)/);
     if (match && SAFE_KEY_RE.test(match[1])) {
@@ -72,7 +78,8 @@ async function uploadToDpaste(payload: string): Promise<string | null> {
       },
       body: body.toString(),
     });
-    if (!res.ok) return null;
+    // paste.rs trả về 206 nếu nội dung bị cắt bớt -> chỉ chấp nhận 200/201
+    if (!res.ok || res.status === 206) return null;
     const text = (await res.text()).trim();
     const match = text.match(/dpaste\.com\/([a-zA-Z0-9_-]+)/);
     if (match && SAFE_KEY_RE.test(match[1])) {
@@ -114,11 +121,17 @@ async function fetchFromProvider(id: string): Promise<string | null> {
 }
 
 async function uploadSingleChunk(chunk: string): Promise<string | null> {
-  return (
-    (await uploadToPasteRs(chunk)) ||
-    (await uploadToDpaste(chunk)) ||
-    (await uploadToBytebin(chunk))
-  );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const id =
+      (await uploadToPasteRs(chunk)) ||
+      (await uploadToDpaste(chunk)) ||
+      (await uploadToBytebin(chunk));
+    if (id) return id;
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  return null;
 }
 
 async function uploadPayloadWithChunking(rawPayload: string): Promise<string | null> {
@@ -157,7 +170,7 @@ async function fetchPayloadWithChunking(id: string): Promise<string | null> {
 
   try {
     const chunkIds: unknown = JSON.parse(trimmed.slice(CHUNKED_PREFIX.length));
-    if (!Array.isArray(chunkIds) || chunkIds.length === 0 || chunkIds.length > 40) {
+    if (!Array.isArray(chunkIds) || chunkIds.length === 0 || chunkIds.length > 100) {
       return null;
     }
     const parts = await Promise.all(
